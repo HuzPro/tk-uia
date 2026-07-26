@@ -42,7 +42,10 @@ and a package that costs an application nothing to install.
   is evidenced. What is missing is a run against NVDA with its speech captured
   (the `nvda_speech` log, or the NVDA Remote add-on), asserting that moving
   focus to the button announces "New Task button" rather than merely that the
-  tree says so. The README states the boundary; this is the item that moves it.
+  tree says so. **The README carries this as a checklist** — see *Not yet
+  verified: a real screen reader* — because the individual checks are the work,
+  and several of them (a value announced on focus, nothing announced twice) test
+  claims this library has no other way to falsify.
 - **Wire the Tk 9.1 native path.** `enable()` detects the `tk accessible`
   ensemble and defers to it — binding nothing and calling nothing, deliberately,
   because those commands have never been run here or anywhere else. Turning

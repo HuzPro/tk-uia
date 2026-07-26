@@ -332,6 +332,53 @@ client: a Tk window is served by the MSAA proxy but reports `FrameworkId`
 reports `'WinForm'`. That pair is how a test tool can tell a provider whose
 `Invoke` works from one whose `Invoke` lies.
 
+## Not yet verified: a real screen reader
+
+Everything above is read back through UI Automation. That is the API a screen
+reader consumes, which makes it the right boundary to have reached first — but
+**"NVDA can read this tree" and "NVDA says the right thing at the right moment"
+are different claims, and only the first is evidenced here.** Nothing in this
+repository has been heard out loud.
+
+The gap matters because the failures it would catch are ones a tree assertion
+cannot see: a name that is correct but announced at the wrong moment, a role
+that reads correctly to a client and awkwardly to a listener, a control that is
+announced twice, or focus that never moves at all. Closing it is the top item on
+the [ROADMAP](ROADMAP.md), and this is what it involves:
+
+- [ ] Install **NVDA** and a way to capture what it says — its own `nvda_speech`
+      debug log, or the **NVDA Remote** add-on for reading speech off-machine.
+- [ ] Confirm `check_screenreader()` reports `True` while NVDA is running, which
+      is currently the one part of this library that talks about screen readers
+      and has never met one.
+- [ ] **Focus announcement:** tab to an annotated `tk.Button` and assert the
+      speech contains its name *and* the word "button" — the role reaching a
+      listener, not just a client.
+- [ ] **Entry announcement:** tab to an annotated `tk.Entry` and assert both its
+      name and its current value are spoken. This is the case most likely to
+      disappoint: a value written through `PROPID_ACC_VALUE` reads correctly to
+      UIA, and whether NVDA announces it on focus is a separate question.
+- [ ] **Live updates:** change a bound `StringVar` and assert the new text is
+      announced without re-focusing, which is what `bind_text_variable` and
+      `bind_value_variable` exist to make possible.
+- [ ] **Nothing announced twice.** Annotation overlays properties on a window
+      that oleacc is already proxying; a duplicate announcement would be
+      invisible to every assertion in this repo.
+- [ ] **The control group:** run the same pass against a *bare* Tk window and
+      capture what NVDA says without this library, so the before/after is
+      evidence rather than assertion.
+- [ ] **A second screen reader.** TIP 733 notes NVDA works best on Windows
+      because it is MSAA-based, and that Narrator does not do as well. Since this
+      library uses the same MSAA route, that caveat probably applies here too —
+      worth confirming rather than repeating.
+- [ ] Decide what, if any, of this can be automated. Screen-reader speech is
+      timing-dependent and hard to assert on deterministically, so this may
+      honestly belong as a recorded manual pass in the README rather than as CI.
+
+Until those are ticked, the honest claim this project makes is the narrow one:
+**the accessibility tree tells the truth.** Whether a blind user has a good time
+is a claim it has not yet earned.
+
 ## Development
 
 ```powershell
