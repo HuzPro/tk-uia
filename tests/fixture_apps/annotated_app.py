@@ -50,6 +50,13 @@ ADVANCE_THE_STATUS = "advance"
 REVISE_THE_DRAFT = "revise"
 PRESS_THE_BUTTON = "press"
 DESTROY_THE_STATUS_LABEL = "destroy"
+WRITE_THE_DESCRIPTION = "describe"
+
+# What the description is left in, for a spec outside this process to read.
+THE_REPORT = "description.txt"
+THE_NAMES_IT_CLAIMS = "claimed-names.txt"
+
+_BETWEEN_A_PATH_AND_ITS_NAME = "\t"
 
 _HOW_OFTEN_TO_CHECK_FOR_A_COMMAND_MS = 50
 
@@ -213,6 +220,27 @@ def _destroy_the_status_label(widgets: Widgets) -> None:
     _report_what_is_still_traced(widgets)
 
 
+def _write_the_description(widgets: Widgets, commands: Path) -> None:
+    """Leave what tk-uia believes it wrote where a client outside can read it.
+
+    Two files, both the same description: the report a reader would print, and
+    the names it claims, as data. The second is what the spec comparing every
+    claimed name against the real UI Automation tree consumes — re-parsing a
+    table this process has just formatted would test the formatter twice and
+    the claim not at all.
+    """
+    description = tk_uia.describe(widgets.root)
+    (commands / THE_REPORT).write_text(str(description), encoding="utf-8")
+    (commands / THE_NAMES_IT_CLAIMS).write_text(
+        "\n".join(
+            f"{widget.path}{_BETWEEN_A_PATH_AND_ITS_NAME}{widget.name}"
+            for widget in description.widgets
+            if widget.name is not None
+        ),
+        encoding="utf-8",
+    )
+
+
 def _count_a_press(pressed: tk.StringVar) -> None:
     # The displayed tally is the count, rather than a second copy of it kept
     # alongside: two numbers that have to agree are one more thing to get wrong
@@ -234,6 +262,7 @@ def _watching_for_commands(widgets: Widgets, commands: Path) -> None:
         # stops "the counter never moved" being mistaken for "the counter could
         # never have moved".
         PRESS_THE_BUTTON: widgets.new_task.invoke,
+        WRITE_THE_DESCRIPTION: lambda: _write_the_description(widgets, commands),
     }
 
     def look() -> None:

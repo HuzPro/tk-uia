@@ -43,6 +43,11 @@ _TOP_LEVEL_WINDOWS = 1
 
 _SHUTDOWN_GRACE_SECONDS = 10.0
 
+# Tk gives its toplevel one container child, under which every widget lives.
+# Everything else directly under the window is chrome Windows drew: a title bar
+# with its own system menu and three real ButtonControls.
+_THE_TK_CONTAINER = "TkChild"
+
 # Deliberately `sys.executable`, which inside a virtual environment on Windows
 # is a copy of CPython's venvlauncher: it starts the real interpreter as a
 # *child* and waits for it, so the pid a launch reports owns no window and
@@ -70,6 +75,23 @@ class RunningApp:
         be asserting on the very thing it is trying to measure.
         """
         (self.commands / command).write_text("", encoding="utf-8")
+
+
+def the_widgets_the_application_shows(window: Any) -> list[Any]:
+    """Every control under Tk's own container, and none of Windows' chrome.
+
+    Here rather than in one spec module because two of them need it: the
+    annotations are read back this way, and so is the description's claim that
+    a client can see the names it says it wrote.
+    """
+    # Imported inside the function for the same reason the fixture below does
+    # it: this module is imported on platforms with no `uiautomation`.
+    import uiautomation as auto
+
+    container = auto.PaneControl(
+        searchFromControl=window, searchDepth=1, ClassName=_THE_TK_CONTAINER
+    )
+    return [control for control, _ in auto.WalkControl(container)]
 
 
 @pytest.fixture(autouse=True)

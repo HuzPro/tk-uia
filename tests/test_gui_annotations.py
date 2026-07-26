@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from tests.conftest import RunningApp
+from tests.conftest import RunningApp, the_widgets_the_application_shows
 from tests.fixture_apps.annotated_app import (
     ADVANCE_THE_STATUS,
     DESTROY_THE_STATUS_LABEL,
@@ -72,10 +72,6 @@ _ONCE = 1
 _ONE_BINDING = 1
 _NOTHING_STILL_LISTENING = 0
 
-# Tk gives its toplevel one container child, under which every widget lives.
-# Everything else directly under the window is chrome Windows drew: a title bar
-# with its own system menu and three real ButtonControls.
-_THE_TK_CONTAINER = "TkChild"
 
 pytestmark = [
     pytest.mark.gui,
@@ -86,21 +82,11 @@ pytestmark = [
 ]
 
 
-def _the_widgets_the_application_shows(window: Any) -> list[Any]:
-    """Every control under Tk's own container, and none of Windows' chrome."""
-    import uiautomation as auto
-
-    container = auto.PaneControl(
-        searchFromControl=window, searchDepth=1, ClassName=_THE_TK_CONTAINER
-    )
-    return [control for control, _ in auto.WalkControl(container)]
-
-
 def _what_the_application_shows(window: Any) -> list[tuple[str, str]]:
     """The application's widgets as a client reads them: what, and called what."""
     return [
         (control.ControlTypeName, control.Name)
-        for control in _the_widgets_the_application_shows(window)
+        for control in the_widgets_the_application_shows(window)
     ]
 
 
@@ -211,7 +197,7 @@ def test_a_widget_left_unannotated_still_looks_anonymous_to_a_client(
     # this package has no role for, and so the one widget it never touches
 
     # When every widget the application itself put on screen is listed
-    widgets = _the_widgets_the_application_shows(annotated_app.window)
+    widgets = the_widgets_the_application_shows(annotated_app.window)
 
     # Then exactly one of them is still what the bridge hands out for a window
     # it has been told nothing about: a pane with no name. Without this control
