@@ -129,6 +129,10 @@ class FakeWidget:
         """Stand in for Tk rebuilding a widget at the same path on a fresh HWND."""
         self._hwnd = hwnd
 
+    def says_something_else(self, text: str) -> None:
+        """Stand in for a plain `config(text=...)`, which never re-announces."""
+        self._options["text"] = text
+
     def __str__(self) -> str:
         return self._path
 

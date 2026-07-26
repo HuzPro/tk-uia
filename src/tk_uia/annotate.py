@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Protocol
 
@@ -34,7 +34,7 @@ _WHERE_A_WIDGET_KEEPS_ITS_WORDS = "text"
 # gets a correct accessible name from `wm title` for free, and overriding it
 # breaks resolving the window by its title, which is where every other query
 # starts. A caller supplying their own table must not be able to undo that.
-_WINDOWS_THAT_ALREADY_NAME_THEMSELVES = frozenset({"Tk", "Toplevel"})
+WINDOWS_THAT_ALREADY_NAME_THEMSELVES = frozenset({"Tk", "Toplevel"})
 
 _NEVER_SAID = object()
 
@@ -132,6 +132,121 @@ class TkVariable(Protocol):
 
 
 @dataclass(frozen=True)
+class OwningThread:
+    """The thread Tk and the COM apartment both belong to, and the rule about it.
+
+    A value object rather than a method on the annotator, because `describe`
+    needs the same rule and cannot get it from there: on a Tk that needs no
+    annotating the annotator is an :class:`InertAnnotator`, whose whole job is
+    to refuse nothing.
+    """
+
+    ident: int
+
+    @classmethod
+    def whichever_is_calling(cls) -> OwningThread:
+        return cls(threading.get_ident())
+
+    def refuse_any_other_caller(self) -> None:
+        caller = threading.get_ident()
+        if caller == self.ident:
+            return
+        # Both layers below here are thread-affine. Reading `winfo_id` off the
+        # Tk thread corrupts the interpreter, and a COM apartment belongs to the
+        # thread that entered it — an annotation made from the wrong one is
+        # written somewhere no client will ever look.
+        raise AnnotationRefused(
+            f"thread {caller} reached for widgets owned by thread {self.ident}; "
+            "Tk and the COM apartment both belong to the thread that called "
+            "enable(), so marshal the call back to it (root.after(0, ...)) "
+            "rather than making it from here"
+        )
+
+
+class Wrote(Enum):
+    """Where a written property came from, which decides whether it can go stale."""
+
+    INFERRED = auto()
+    SAID_ONCE = auto()
+    KEPT_IN_STEP = auto()
+
+
+@dataclass(frozen=True)
+class Written:
+    """One property, as it was written, and how it came to be written."""
+
+    value: str | int
+    source: Wrote
+
+
+def roles_in_force(roles: Mapping[str, Role] | None) -> Mapping[str, Role]:
+    """The role table an installation will really use, caller's additions and all.
+
+    Laid over the built-in table rather than replacing it: a caller who names
+    one class means "and this one too", not "forget the rest". Read by
+    `describe`, which would otherwise tell an application that has already
+    passed `roles=` to go and pass `roles=`.
+    """
+    return {**ROLE_FOR_TK_CLASS, **(roles or {})}
+
+
+class Ledger:
+    """What has been said about each window handle, so it is never said twice.
+
+    Two readers and one writer: the annotator asks whether a value is already in
+    place before paying for a COM call, and `describe` asks what is in place at
+    all. It is deliberately not thread-safe and does not need to be — every path
+    into it is already behind the annotator's owning-thread refusal.
+    """
+
+    def __init__(self) -> None:
+        self._said: dict[int, dict[PropId, Written]] = {}
+        # Kept against the widget's Tk path as well as its handle, so `forget`
+        # can still find it once `winfo_id` has started raising — which it does
+        # from the moment Tk begins tearing the widget down.
+        self._handles: dict[str, int] = {}
+        # Beside the properties rather than among them: an automation id goes
+        # into `GWLP_ID` and has no `PROPID_ACC_*` GUID at all, so a PropId
+        # member for it would be one `clear()` iterates over and cannot map.
+        self._automation_ids: dict[int, int] = {}
+
+    def already_says(self, hwnd: int, prop: PropId, value: str | int) -> bool:
+        written = self._said.get(hwnd, {}).get(prop)
+        return written is not None and written.value == value
+
+    def record(self, hwnd: int, prop: PropId, value: str | int, source: Wrote) -> None:
+        self._said.setdefault(hwnd, {})[prop] = Written(value, source)
+
+    def record_automation_id(self, hwnd: int, automation_id: int) -> None:
+        self._automation_ids[hwnd] = automation_id
+
+    def about(self, hwnd: int) -> Mapping[PropId, Written]:
+        return dict(self._said.get(hwnd, {}))
+
+    def automation_id_of(self, hwnd: int) -> int | None:
+        return self._automation_ids.get(hwnd)
+
+    def handle_of(self, path: str) -> int | None:
+        return self._handles.get(path)
+
+    def paths(self) -> Sequence[str]:
+        return tuple(self._handles)
+
+    def now_at(self, path: str, hwnd: int) -> None:
+        self._handles[path] = hwnd
+
+    def gone_from(self, path: str) -> None:
+        self._handles.pop(path, None)
+
+    def forget(self, hwnd: int) -> None:
+        self._said.pop(hwnd, None)
+        # Nothing in Win32 resets `GWLP_ID`, so the widget goes on carrying the
+        # id while the report stops claiming it. Reporting one this package can
+        # no longer account for would be the worse of the two.
+        self._automation_ids.pop(hwnd, None)
+
+
+@dataclass(frozen=True)
 class _WhatAVariableIsBoundTo:
     """One `trace_add` registration, kept so that it can be taken back off.
 
@@ -153,33 +268,41 @@ class Annotator:
     """Decides what each widget should say, and says it once."""
 
     def __init__(
-        self, store: AccessibilityStore, roles: Mapping[str, Role] | None = None
+        self,
+        store: AccessibilityStore,
+        roles: Mapping[str, Role] | None = None,
+        owner: OwningThread | None = None,
     ) -> None:
         self._store = store
-        # Laid over the built-in table rather than replacing it: a caller who
-        # names one class means "and this one too", not "forget the rest".
-        self._roles = {**ROLE_FOR_TK_CLASS, **(roles or {})}
-        self._said: dict[int, dict[PropId, str | int]] = {}
-        self._handles: dict[str, int] = {}
+        self.roles = roles_in_force(roles)
+        self.ledger = Ledger()
         self._bindings: dict[str, list[_WhatAVariableIsBoundTo]] = {}
-        self._widget_thread = threading.get_ident()
+        # Built here rather than defaulted in the signature, which would freeze
+        # whichever thread happened to import this module.
+        self._owner = (
+            owner if owner is not None else OwningThread.whichever_is_calling()
+        )
 
     def add(self, widget: TkWidget) -> None:
         # Before the first question is asked of the widget, rather than at the
         # store below: `winfo_class`, `keys` and `cget` each cross into the Tcl
         # interpreter, and doing that from a foreign thread corrupts it quietly
         # — where a misplaced COM write merely goes somewhere nobody reads.
-        self._refuse_a_caller_from_another_thread()
+        self._owner.refuse_any_other_caller()
         tk_class = widget.winfo_class()
-        if tk_class in _WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
+        if tk_class in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
             return
-        role = self._roles.get(tk_class)
+        role = self.roles.get(tk_class)
         if role is None:
             return
-        self.set_role(widget, role)
-        name = _words_the_widget_shows(widget)
+        # Written as inferred rather than through `set_role`/`set_name`, so that
+        # `describe` can tell a name this package read off the widget from one
+        # the application chose. Only the first can go stale; calling the second
+        # stale would fire on the pattern the README encourages.
+        self._write(widget, PropId.ROLE, role.value, Wrote.INFERRED)
+        name = words_the_widget_shows(widget)
         if name:
-            self.set_name(widget, name)
+            self._write(widget, PropId.NAME, name, Wrote.INFERRED)
 
     def set_role(self, widget: TkWidget, role: Role) -> None:
         self._write(widget, PropId.ROLE, role.value)
@@ -207,7 +330,9 @@ class Annotator:
         # whose entire job is to say what just happened is the one widget that
         # would otherwise say nothing.
         self._keep_in_step_with(
-            widget, variable, lambda words: self.set_name(widget, words)
+            widget,
+            variable,
+            lambda words: self._write(widget, PropId.NAME, words, Wrote.KEPT_IN_STEP),
         )
 
     def bind_value_variable(self, widget: TkWidget, variable: TkVariable) -> None:
@@ -216,11 +341,13 @@ class Annotator:
         # the property a client re-reads more than any other is the one nothing
         # here can keep true on its own.
         self._keep_in_step_with(
-            widget, variable, lambda contents: self.set_value(widget, contents)
+            widget,
+            variable,
+            lambda held: self._write(widget, PropId.VALUE, held, Wrote.KEPT_IN_STEP),
         )
 
     def set_automation_id(self, widget: TkWidget, automation_id: int) -> None:
-        self._refuse_a_caller_from_another_thread()
+        self._owner.refuse_any_other_caller()
         hwnd = self._handle_of(widget)
         in_use = self._store.control_id(hwnd)
         if in_use == automation_id:
@@ -233,11 +360,14 @@ class Annotator:
                 f"widget being painted. Refusing to write {automation_id}."
             )
         self._store.set_control_id(hwnd, automation_id)
+        self.ledger.record_automation_id(hwnd, automation_id)
 
     def forget(self, widget: TkWidget | str) -> None:
-        self._refuse_a_caller_from_another_thread()
-        self._stop_following_any_variable_bound_to(str(widget))
-        hwnd = self._handles.pop(str(widget), None)
+        self._owner.refuse_any_other_caller()
+        path = str(widget)
+        self._stop_following_any_variable_bound_to(path)
+        hwnd = self.ledger.handle_of(path)
+        self.ledger.gone_from(path)
         if hwnd is None:
             return
         self._take_it_all_back(hwnd)
@@ -277,17 +407,22 @@ class Annotator:
         for binding in self._bindings.pop(path, ()):
             binding.let_go()
 
-    def _write(self, widget: TkWidget, prop: PropId, value: str | int) -> None:
-        self._refuse_a_caller_from_another_thread()
+    def _write(
+        self,
+        widget: TkWidget,
+        prop: PropId,
+        value: str | int,
+        source: Wrote = Wrote.SAID_ONCE,
+    ) -> None:
+        self._owner.refuse_any_other_caller()
         self._refuse_a_window_that_already_names_itself(widget)
         hwnd = self._handle_of(widget)
-        if self._said.get(hwnd, {}).get(prop, _NEVER_SAID) == value:
+        if not self.ledger.already_says(hwnd, prop, value):
             # `<Map>` fires on every unhide, tab change and geometry shuffle.
             # Without this the cost of annotating a window is paid again on
             # every repaint, forever, for no change to what a client reads.
-            return
-        self._put(hwnd, prop, value)
-        self._said.setdefault(hwnd, {})[prop] = value
+            self._put(hwnd, prop, value)
+        self.ledger.record(hwnd, prop, value, source)
 
     def _put(self, hwnd: int, prop: PropId, value: str | int) -> None:
         # The one place the two kinds of property part company, because COM has
@@ -298,22 +433,19 @@ class Annotator:
             self._store.set_number(hwnd, prop, value)
 
     def _handle_of(self, widget: TkWidget) -> int:
-        # Kept against the widget's Tk path so `forget` can still find it once
-        # `winfo_id` has started raising, which it does from the moment Tk
-        # begins tearing the widget down — before `<Destroy>` reaches us.
         path = str(widget)
         hwnd = widget.winfo_id()
-        abandoned = self._handles.get(path)
+        abandoned = self.ledger.handle_of(path)
         if abandoned is not None and abandoned != hwnd:
             # Tk rebuilt the widget at the same path on a new window. The
             # `<Destroy>` that would have released the old handle is already
             # past, so nothing else is ever going to clear it.
             self._take_it_all_back(abandoned)
-        self._handles[path] = hwnd
+        self.ledger.now_at(path, hwnd)
         return hwnd
 
     def _refuse_a_window_that_already_names_itself(self, widget: TkWidget) -> None:
-        if widget.winfo_class() not in _WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
+        if widget.winfo_class() not in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
             return
         # `add()` has always skipped these, but the manual calls walked straight
         # past that rule — and this is the one case where doing as asked is
@@ -330,24 +462,9 @@ class Annotator:
             "annotate the widgets inside it."
         )
 
-    def _refuse_a_caller_from_another_thread(self) -> None:
-        caller = threading.get_ident()
-        if caller == self._widget_thread:
-            return
-        # Both layers below here are thread-affine. Reading `winfo_id` off the
-        # Tk thread corrupts the interpreter, and a COM apartment belongs to the
-        # thread that entered it — an annotation made from the wrong one is
-        # written somewhere no client will ever look.
-        raise AnnotationRefused(
-            f"thread {caller} tried to annotate widgets owned by thread "
-            f"{self._widget_thread}; Tk and the COM apartment both belong to "
-            "the thread that called enable(), so marshal the call back to it "
-            "(root.after(0, ...)) rather than annotating from here"
-        )
-
     def _take_it_all_back(self, hwnd: int) -> None:
         self._store.clear(hwnd)
-        self._said.pop(hwnd, None)
+        self.ledger.forget(hwnd)
 
 
 class InertAnnotator:
@@ -359,6 +476,16 @@ class InertAnnotator:
     repeating a platform check around every call it makes — which is the kind of
     thing that is only ever wrong on the platform the author is not using.
     """
+
+    def __init__(self, roles: Mapping[str, Role] | None = None) -> None:
+        # Carried rather than discarded so that `describe` can say what a widget
+        # class *would* have been announced as, on a platform where nothing was.
+        self.roles = roles_in_force(roles)
+        # An empty one, for the same reason this class exists at all: it keeps
+        # the "is there anything installed" branch out of `describe`, which
+        # would otherwise be the one branch only ever wrong on the platform its
+        # author is not using.
+        self.ledger = Ledger()
 
     def add(self, widget: TkWidget) -> None: ...
 
@@ -391,6 +518,9 @@ class Installation:
 
     strategy: Strategy
     annotator: Annotator | InertAnnotator
+    # Defaulted so that a spec can build one without naming it, and built at
+    # construction rather than at import so it is never the import thread.
+    owner: OwningThread = field(default_factory=OwningThread.whichever_is_calling)
 
 
 def install(
@@ -399,12 +529,13 @@ def install(
     roles: Mapping[str, Role] | None = None,
 ) -> Installation:
     strategy = strategy_for(root.tk)
+    owner = OwningThread.whichever_is_calling()
     if strategy is not Strategy.ANNOTATED:
-        return Installation(strategy, InertAnnotator())
-    annotator = Annotator(store, roles)
+        return Installation(strategy, InertAnnotator(roles), owner)
+    annotator = Annotator(store, roles, owner)
     _follow_every_widget_tk_maps_or_destroys(root, annotator)
     _annotate_everything_already_on_screen(root, annotator)
-    return Installation(strategy, annotator)
+    return Installation(strategy, annotator, owner)
 
 
 def _follow_every_widget_tk_maps_or_destroys(
@@ -427,15 +558,15 @@ def _annotate_everything_already_on_screen(
 ) -> None:
     # `<Map>` fires once, on the way up. Every widget showing at the moment
     # accessibility is switched on has already had its, and will not get another.
-    for widget in _every_widget_under(root):
+    for widget in every_widget_under(root):
         if widget.winfo_ismapped():
             annotator.add(widget)
 
 
-def _every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
+def every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
     for child in widget.winfo_children():
         yield child
-        yield from _every_widget_under(child)
+        yield from every_widget_under(child)
 
 
 def _annotate_if_there_is_still_a_widget(
@@ -452,7 +583,13 @@ def _whatever_the_variable_holds(variable: TkVariable) -> str:
     return str(variable.get())
 
 
-def _words_the_widget_shows(widget: TkWidget) -> str:
+def words_the_widget_shows(widget: TkWidget) -> str | None:
+    """Whatever is in the widget's `-text` right now, or None if it has no such option.
+
+    `None` rather than `""` because the two are different answers and `describe`
+    has to tell them apart: a widget showing nothing could have gone stale, and
+    one with nowhere to keep words never could.
+    """
     # Asked rather than attempted: an entry, a listbox and a canvas have no
     # `-text` option at all, and reading one raises. There is nothing else on a
     # widget that is a name — the path is an implementation detail and the
@@ -460,5 +597,5 @@ def _words_the_widget_shows(widget: TkWidget) -> str:
     # named something the application never wrote.
     options_this_widget_has = widget.keys()
     if _WHERE_A_WIDGET_KEEPS_ITS_WORDS not in options_this_widget_has:
-        return ""
+        return None
     return str(widget.cget(_WHERE_A_WIDGET_KEEPS_ITS_WORDS))

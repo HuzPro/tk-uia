@@ -9,12 +9,10 @@ decision at all.
 
 from __future__ import annotations
 
-import threading
-from collections.abc import Callable
-
 import pytest
 
 from tests.doubles import FakeVariable, FakeWidget, RecordingStore
+from tests.threads import the_failure_raised_on_another_thread
 from tk_uia.annotate import AnnotationRefused, Annotator, PropId
 from tk_uia.roles import Role
 
@@ -383,7 +381,7 @@ def test_annotating_from_a_thread_other_than_the_one_that_owns_the_widgets_is_re
 
     # When a background worker tries to annotate — the ordinary shape of a
     # thread that has just finished loading something and wants to say so
-    refusal = _the_failure_raised_on_another_thread(lambda: annotator.add(button))
+    refusal = the_failure_raised_on_another_thread(lambda: annotator.add(button))
 
     # Then it is stopped at the door, before a single Tk call. `add` asks the
     # widget its class, its options and its text, and each of those crosses into
@@ -519,20 +517,3 @@ def test_a_destroyed_widgets_variable_can_still_be_written_without_raising() -> 
         "a widget that no longer exists was annotated anyway: "
         f"{store.writes[len(while_it_was_alive) :]}"
     )
-
-
-def _the_failure_raised_on_another_thread(work: Callable[[], None]) -> BaseException:
-    caught: list[BaseException] = []
-
-    def run() -> None:
-        try:
-            work()
-        except BaseException as failure:  # noqa: BLE001 - reported, not handled
-            caught.append(failure)
-
-    worker = threading.Thread(target=run)
-    worker.start()
-    worker.join()
-
-    assert caught, "the call went through on a thread that does not own the widgets"
-    return caught[0]
