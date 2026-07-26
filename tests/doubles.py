@@ -8,6 +8,7 @@ suite runs on a machine with no Tk, no display and no Windows.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 
 from tk_uia.annotate import PropId
@@ -52,6 +53,13 @@ class FakeWidget:
     `cget` refuses an option the real widget would not have, and `winfo_id`
     refuses once destroyed, because both are how Tk behaves and both are
     failures the annotator has to survive rather than propagate.
+
+    Every method here goes through the Tcl interpreter in a real Tk, so every
+    method here refuses a caller from another thread. That is *stricter* than Tk
+    itself, deliberately: real Tk mostly answers, and corrupts the interpreter
+    quietly instead — a failure a spec could never see. The rule under test is
+    that the annotator turns a foreign caller away before touching Tk at all,
+    and a double that answered would let a guard that fires afterwards pass.
     """
 
     def __init__(
@@ -63,6 +71,7 @@ class FakeWidget:
         mapped: bool = True,
         children: Sequence[FakeWidget] = (),
     ) -> None:
+        self._owning_thread = threading.get_ident()
         self._tk_class = tk_class
         self._hwnd = hwnd
         self._options = {} if text is None else {"text": text}
@@ -72,26 +81,46 @@ class FakeWidget:
         self._destroyed = False
 
     def winfo_id(self) -> int:
+        self._only_from_the_thread_that_owns_tk()
         if self._destroyed:
             raise FakeTclError(f'bad window path name "{self._path}"')
         return self._hwnd
 
     def winfo_class(self) -> str:
+        self._only_from_the_thread_that_owns_tk()
         return self._tk_class
 
     def winfo_ismapped(self) -> bool:
+        self._only_from_the_thread_that_owns_tk()
         return self._mapped
 
+    def winfo_exists(self) -> bool:
+        # Answers rather than raises, as Tcl's `winfo exists` does for a path it
+        # no longer has — which is what makes it usable as a liveness check.
+        self._only_from_the_thread_that_owns_tk()
+        return not self._destroyed
+
     def winfo_children(self) -> Sequence[FakeWidget]:
+        self._only_from_the_thread_that_owns_tk()
         return tuple(self._children)
 
     def keys(self) -> Sequence[str]:
+        self._only_from_the_thread_that_owns_tk()
         return tuple(self._options)
 
     def cget(self, key: str) -> object:
+        self._only_from_the_thread_that_owns_tk()
         if key not in self._options:
             raise FakeTclError(f'unknown option "-{key}"')
         return self._options[key]
+
+    def _only_from_the_thread_that_owns_tk(self) -> None:
+        if threading.get_ident() == self._owning_thread:
+            return
+        raise FakeTclError(
+            f"thread {threading.get_ident()} reached into Tk, which belongs to "
+            f"thread {self._owning_thread}"
+        )
 
     def destroy(self) -> None:
         self._destroyed = True
@@ -109,23 +138,38 @@ class FakeTclError(Exception):
 
 
 class FakeVariable:
-    """A `tkinter.Variable` as the binding sees it: a value and write traces."""
+    """A `tkinter.Variable` as the binding sees it: a value and write traces.
+
+    Traces are held under the name `trace_add` hands back, as Tcl's are, because
+    a trace outlives the widget it was registered for and the name is the only
+    thing that can take it off again.
+    """
 
     def __init__(self, value: str) -> None:
         self._value = value
-        self._traces: list[object] = []
+        self._traces: dict[str, object] = {}
 
     def get(self) -> str:
         return self._value
 
     def set(self, value: str) -> None:
         self._value = value
-        for observer in self._traces:
+        for observer in list(self._traces.values()):
             observer(_A_TRACED_VARIABLE, _NO_INDEX, _A_WRITE)
 
-    def trace_add(self, mode: str, callback: object) -> None:
+    def trace_add(self, mode: str, callback: object) -> str:
         assert mode == "write", f"only writes need re-announcing, not {mode}"
-        self._traces.append(callback)
+        callback_name = f"{_HOW_TCL_NAMES_A_TRACE}{len(self._traces)}"
+        self._traces[callback_name] = callback
+        return callback_name
+
+    def trace_remove(self, mode: str, callback_name: str) -> None:
+        assert mode == "write", f"only writes need re-announcing, not {mode}"
+        del self._traces[callback_name]
+
+    def traces_left(self) -> int:
+        """How many registrations are still on the variable, leak and all."""
+        return len(self._traces)
 
 
 class FakeInterpreter:
@@ -211,6 +255,8 @@ class FakeEvent:
 _NO_CONTROL_ID = 0
 _A_ROOT_HANDLE = 1
 _A_TRACED_VARIABLE = "PY_VAR0"
+# What tkinter really calls the Tcl command it registers a trace under.
+_HOW_TCL_NAMES_A_TRACE = "0x1a2b3c4d5e6f"
 _NO_INDEX = ""
 _A_WRITE = "write"
 _THE_SCRIPT_RAISED = 1

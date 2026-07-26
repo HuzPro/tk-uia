@@ -19,6 +19,10 @@ from tk_uia.annotate import AnnotationRefused
 _A_LABEL_HANDLE = 0x000407A5
 _AN_ID_THE_APPLICATION_CHOSE = 4207
 
+_A_WIDGET_APPEARED = "<Map>"
+_A_WIDGET_DIED = "<Destroy>"
+_ALONGSIDE = "+"
+
 
 def test_switching_accessibility_on_where_there_is_none_says_so_and_stays_callable() -> (
     None
@@ -46,6 +50,34 @@ def test_switching_accessibility_on_where_there_is_none_says_so_and_stays_callab
     )
 
 
+def test_switching_accessibility_on_a_second_time_hands_back_the_installation_already_there() -> (
+    None
+):
+    # Given an application that has already switched accessibility on
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False))
+    the_first_time = tk_uia.enable(root)
+
+    # When something switches it on again — a library being defensive, a dialog
+    # module enabling for its own window, a restarted startup path
+    the_second_time = tk_uia.enable(root)
+
+    # Then Tk was told once. A second pair of bindings leaves a stale annotator
+    # auto-annotating widgets that `forget()` — which reaches only the newest —
+    # can no longer take back, and every call leaks an `IAccPropServices` that
+    # nothing ever releases. `bind_all` binds on the `all` bindtag, so the first
+    # installation already covers every window this application will open.
+    assert root.class_bindings == [
+        (_A_WIDGET_APPEARED, _ALONGSIDE),
+        (_A_WIDGET_DIED, _ALONGSIDE),
+    ], (
+        f"bound {root.class_bindings}; a repeat enable() stacked a second pair "
+        "of bindings over the first"
+    )
+    assert the_second_time is the_first_time, (
+        f"the second call reported {the_second_time}, the first {the_first_time}"
+    )
+
+
 def test_saying_something_before_accessibility_is_switched_on_is_refused() -> None:
     # Given an application that has not called `enable()` yet
     label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
@@ -60,6 +92,21 @@ def test_saying_something_before_accessibility_is_switched_on_is_refused() -> No
     assert "enable" in str(refusal.value), (
         f"the refusal has to say what was skipped: {refusal.value}"
     )
+
+
+def test_every_call_an_application_makes_says_what_it_does_when_asked() -> None:
+    # Given the names the package publishes as its whole public surface
+    published = [getattr(tk_uia, name) for name in tk_uia.__all__]
+
+    # When an editor's hover, or `help()`, asks each callable what it is for
+    silent = [
+        call.__name__ for call in published if callable(call) and not call.__doc__
+    ]
+
+    # Then every one of them answers. This surface is the only documentation
+    # most callers will ever see — a library about making things announce
+    # themselves cannot have a public API that says nothing about itself.
+    assert silent == [], f"no docstring on {silent}, so hover and help() show nothing"
 
 
 def test_importing_the_package_reaches_for_neither_tkinter_nor_windows() -> None:

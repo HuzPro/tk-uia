@@ -39,6 +39,7 @@ SCRATCH = "Scratch"
 READY = "ready"
 TASK_CREATED = "task created"
 PRESSES = "presses"
+TRACES = "traces"
 
 # Chosen by this application, never by the package: an id derived from a widget
 # path would make every repack a breaking change for whoever locates by it.
@@ -48,6 +49,7 @@ FORGET_THE_DISPOSABLE_WIDGETS = "forget"
 ADVANCE_THE_STATUS = "advance"
 REVISE_THE_DRAFT = "revise"
 PRESS_THE_BUTTON = "press"
+DESTROY_THE_STATUS_LABEL = "destroy"
 
 _HOW_OFTEN_TO_CHECK_FOR_A_COMMAND_MS = 50
 
@@ -57,6 +59,17 @@ _NEVER = 0
 def presses(count: int) -> str:
     """How the button's own tally reads, in the one place both sides agree."""
     return f"{PRESSES} {count}"
+
+
+def traces(count: int) -> str:
+    """How many write traces are still registered on the status variable.
+
+    Reported into the window rather than asserted in-process, because the whole
+    point of the gui specs is that the claim is read from outside. A trace is
+    registered on the *variable*, which outlives every widget that displays it,
+    so this is the number that says whether a destroyed widget let go.
+    """
+    return f"{TRACES} {count}"
 
 
 @dataclass(frozen=True)
@@ -71,6 +84,8 @@ class Widgets:
     title_entry: tk.Entry
     status: tk.StringVar
     status_label: tk.Label
+    still_traced: tk.StringVar
+    trace_tally: tk.Label
     disposable_label: tk.Label
     disposable_entry: tk.Entry
 
@@ -106,6 +121,10 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     status_label = tk.Label(root, textvariable=status)
     status_label.pack(pady=10)
 
+    still_traced = tk.StringVar(value=traces(_NEVER))
+    trace_tally = tk.Label(root, textvariable=still_traced)
+    trace_tally.pack()
+
     disposable_label = tk.Label(root, text=DISPOSABLE)
     disposable_label.pack()
     disposable_entry = tk.Entry(root, width=20)
@@ -128,6 +147,8 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
         title_entry=_an_entry_holding_a_draft(root, draft),
         status=status,
         status_label=status_label,
+        still_traced=still_traced,
+        trace_tally=trace_tally,
         disposable_label=disposable_label,
         disposable_entry=disposable_entry,
     )
@@ -167,10 +188,29 @@ def _the_things_no_widget_can_say_for_itself(widgets: Widgets) -> None:
     # would otherwise never say anything at all.
     tk_uia.bind_text_variable(widgets.status_label, widgets.status)
     tk_uia.bind_text_variable(widgets.tally, widgets.pressed)
+    tk_uia.bind_text_variable(widgets.trace_tally, widgets.still_traced)
+    _report_what_is_still_traced(widgets)
     # And what a client reads out of the entry is what is in the variable
     # behind it, from now on rather than only at startup.
     tk_uia.bind_value_variable(widgets.title_entry, widgets.draft)
     tk_uia.set_automation_id(widgets.new_task, NEW_TASK_NUMBER)
+
+
+def _report_what_is_still_traced(widgets: Widgets) -> None:
+    widgets.still_traced.set(traces(len(widgets.status.trace_info())))
+
+
+def _destroy_the_status_label(widgets: Widgets) -> None:
+    """Kill a bound widget, then write the variable it was following.
+
+    The order is the whole spec. If the binding did not let go, the write below
+    fires a trace at a window path Tk no longer has, and the `TclError` that
+    raises inside Tcl's own callback stops this handler before it can report —
+    so the count a client reads never moves, and the spec says why.
+    """
+    widgets.status_label.destroy()
+    widgets.status.set(TASK_CREATED)
+    _report_what_is_still_traced(widgets)
 
 
 def _count_a_press(pressed: tk.StringVar) -> None:
@@ -188,6 +228,7 @@ def _watching_for_commands(widgets: Widgets, commands: Path) -> None:
             widgets.disposable_label, widgets.disposable_entry
         ),
         ADVANCE_THE_STATUS: lambda: widgets.status.set(TASK_CREATED),
+        DESTROY_THE_STATUS_LABEL: lambda: _destroy_the_status_label(widgets),
         REVISE_THE_DRAFT: lambda: widgets.draft.set(REVISION),
         # Tk's own invoke, which really does run the command — the control that
         # stops "the counter never moved" being mistaken for "the counter could

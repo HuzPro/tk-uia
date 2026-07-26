@@ -23,7 +23,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from tk_uia.annotate import AnnotationRefused, Annotator, InertAnnotator
+from tk_uia.annotate import (
+    AnnotationRefused,
+    Annotator,
+    InertAnnotator,
+    Installation,
+)
 from tk_uia.roles import ROLE_FOR_TK_CLASS, Role
 from tk_uia.tkversion import Strategy
 
@@ -54,49 +59,91 @@ __all__ = [
     "set_automation_id",
 ]
 
-_installed: Annotator | InertAnnotator | None = None
+_installed: Installation | None = None
 
 
 def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> Strategy:
-    """Annotate this application's widgets, and say which way it went."""
+    """Annotate this application's widgets, and say which way it went.
+
+    Idempotent: a second call reports what the first one did and installs
+    nothing further. `bind_all` binds on the `all` bindtag, so one installation
+    already covers every window the application will ever open — where a second
+    would stack another pair of `<Map>`/`<Destroy>` bindings, leave a stale
+    annotator auto-annotating widgets that `forget()` can no longer reach, and
+    leak one more `IAccPropServices` that nothing releases.
+    """
     global _installed
+    if _installed is not None:
+        return _installed.strategy
     from tk_uia._accprop import AccPropServicesStore
     from tk_uia.annotate import install
 
-    installation = install(root, AccPropServicesStore(), roles)
-    _installed = installation.annotator
-    return installation.strategy
+    _installed = install(root, AccPropServicesStore(), roles)
+    return _installed.strategy
 
 
 def add_acc_object(widget: tkinter.Misc) -> None:
+    """Annotate one widget now, re-reading its class and its `-text`.
+
+    `enable()` already does this for everything Tk maps. Call it by hand after
+    changing a widget's `-text`, which otherwise leaves the accessible name
+    saying whatever the widget said when it was first mapped.
+    """
     _annotator().add(widget)
 
 
 def set_acc_role(widget: tkinter.Misc, role: Role) -> None:
+    """Say what kind of control this is, overriding the inferred role.
+
+    A role is not a label on an existing object: it decides which patterns the
+    MSAA-to-UIA bridge offers for the widget at all.
+    """
     _annotator().set_role(widget, role)
 
 
 def set_acc_name(widget: tkinter.Misc, name: str) -> None:
+    """Say what a screen reader should call this widget.
+
+    Needed for anything with no `-text` to infer a name from. Raises
+    `AnnotationRefused` for a toplevel, which is named by `wm title` instead.
+    """
     _annotator().set_name(widget, name)
 
 
 def set_acc_value(widget: tkinter.Misc, value: str) -> None:
+    """Say what a client reads out of this widget, as an edit control's contents.
+
+    Written once, where `bind_value_variable` keeps it true from then on.
+    """
     _annotator().set_value(widget, value)
 
 
 def set_acc_description(widget: tkinter.Misc, description: str) -> None:
+    """Say more about this widget than its name has room for."""
     _annotator().set_description(widget, description)
 
 
 def set_acc_action(widget: tkinter.Misc, action: str) -> None:
+    """Say what activating this widget would do, as a verb ("Press").
+
+    Advertising it does not make it activatable: `InvokePattern` on a Tk button
+    returns cleanly and presses nothing. See the README's central caveat.
+    """
     _annotator().set_action(widget, action)
 
 
 def set_acc_help(widget: tkinter.Misc, help_text: str) -> None:
+    """Say what a client should offer as this widget's help text."""
     _annotator().set_help(widget, help_text)
 
 
 def set_acc_state(widget: tkinter.Misc, state: int) -> None:
+    """Say what state this widget is in, as `oleacc.h`'s `STATE_SYSTEM_*` bits.
+
+    Written once and never tracked: nothing here notices a widget being
+    disabled or re-enabled, so an application that says this has to keep
+    saying it.
+    """
     _annotator().set_state(widget, state)
 
 
@@ -111,10 +158,21 @@ def bind_value_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> Non
 
 
 def set_automation_id(widget: tkinter.Misc, automation_id: int) -> None:
+    """Give this widget a stable id for a test suite to pin a locator to.
+
+    Explicit only, and never invented. Writes `GWLP_ID`, the control id Win32
+    puts in `WM_COMMAND.wParam` and `WM_DRAWITEM.idCtl`; a non-zero existing id
+    raises `AnnotationRefused` rather than being overwritten.
+    """
     _annotator().set_automation_id(widget, automation_id)
 
 
 def forget(widget: tkinter.Misc | str) -> None:
+    """Take every annotation back off a widget, and stop following its variables.
+
+    Takes the widget or its Tk path, since `<Destroy>` carries only the path
+    once the widget object has gone.
+    """
     _annotator().forget(widget)
 
 
@@ -132,4 +190,4 @@ def _annotator() -> Annotator | InertAnnotator:
             "annotate through; call it once after building the window and "
             "before saying anything about the widgets in it"
         )
-    return _installed
+    return _installed.annotator

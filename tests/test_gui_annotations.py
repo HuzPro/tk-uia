@@ -25,6 +25,7 @@ import pytest
 from tests.conftest import RunningApp
 from tests.fixture_apps.annotated_app import (
     ADVANCE_THE_STATUS,
+    DESTROY_THE_STATUS_LABEL,
     DISPOSABLE,
     DRAFT,
     FORGET_THE_DISPOSABLE_WIDGETS,
@@ -39,6 +40,7 @@ from tests.fixture_apps.annotated_app import (
     TASK_CREATED,
     TITLE,
     presses,
+    traces,
 )
 
 # What the MSAA bridge calls a window it has been told nothing about.
@@ -64,6 +66,11 @@ _LONG_ENOUGH_FOR_A_REACTION_THAT_WILL_NOT_COME_SECONDS = 1.0
 
 _NEVER = 0
 _ONCE = 1
+
+# What `bind_text_variable` registers on the status variable, and what is left
+# once the widget it was registered for has been destroyed.
+_ONE_BINDING = 1
+_NOTHING_STILL_LISTENING = 0
 
 # Tk gives its toplevel one container child, under which every widget lives.
 # Everything else directly under the window is chrome Windows drew: a title bar
@@ -110,10 +117,30 @@ def _eventually_stops_showing(
 def _eventually(settled: Callable[[], bool], complaint: str) -> None:
     """Wait for the application to react, which it does on its own event loop."""
     deadline = time.monotonic() + _A_REACTION_TIMEOUT_SECONDS
-    while not settled():
+    while not _settled_or_still_being_rebuilt(settled):
         if time.monotonic() >= deadline:
             pytest.fail(f"{complaint} (waited {_A_REACTION_TIMEOUT_SECONDS:.0f}s)")
         time.sleep(_HOW_OFTEN_TO_LOOK_AGAIN_SECONDS)
+
+
+def _settled_or_still_being_rebuilt(settled: Callable[[], bool]) -> bool:
+    """Read the tree, treating one caught mid-edit as "not yet" rather than as an error.
+
+    A spec that destroys a widget races every walk of the tree: the control is
+    enumerated, the application destroys it, and asking the handle for its type
+    raises `COMError`. That is the tree changing under a reader, which is the
+    ordinary condition of a live application and what every real client copes
+    with — so it means look again, not fail. It cannot hide a failure, because
+    only a complete, successful read can satisfy the caller's question; a tree
+    that stayed unreadable still runs out the deadline and reports the
+    complaint.
+    """
+    import comtypes
+
+    try:
+        return settled()
+    except comtypes.COMError:
+        return False
 
 
 def test_an_annotated_button_announces_its_name_to_a_client_in_another_process(
@@ -288,6 +315,38 @@ def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_
         lambda: entry.GetValuePattern().Value == REVISION,
         f"the entry still reads {DRAFT!r} rather than {REVISION!r}, so the "
         "binding never followed the variable it was bound to",
+    )
+
+
+def test_a_destroyed_widget_lets_go_of_the_variable_its_annotation_was_following(
+    annotated_app: RunningApp,
+) -> None:
+    # Given the status label, whose name follows a `StringVar` that the
+    # application owns and that will outlive it. The application reports how
+    # many write traces are registered on that variable, and starts at one.
+    _eventually_shows(
+        annotated_app.window,
+        (_TEXT, traces(_ONE_BINDING)),
+        "the application never reported a trace on its status variable, so it "
+        "cannot show one being released either and this spec proves nothing",
+    )
+
+    # When the application destroys that label and then writes the variable
+    annotated_app.ask_for(DESTROY_THE_STATUS_LABEL)
+
+    # Then the trace is off the variable. A trace lives on the variable, not on
+    # the widget, and nothing in Tk takes it off when the widget dies: left
+    # there it fires at a dead window path on every write, raising inside Tcl's
+    # own callback where the application has no call of its own to wrap — an
+    # unhandled traceback on stderr, forever. The write in that command is why
+    # this count can move at all: if the binding had not let go, the `TclError`
+    # would stop the command before it reported, and this stays at one.
+    _eventually_shows(
+        annotated_app.window,
+        (_TEXT, traces(_NOTHING_STILL_LISTENING)),
+        "the destroyed label's trace is still registered on the variable it was "
+        "following, so every further write fires it at a window path Tk no "
+        "longer has",
     )
 
 

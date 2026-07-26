@@ -59,6 +59,17 @@ _SPI_GETSCREENREADER = 0x0046
 
 _WINDOWS = "win32"
 
+# The HRESULT every one of these methods returns, taken as a plain number rather
+# than as `ctypes.HRESULT`. That type looks like the honest choice and is the
+# wrong one here: ctypes raises an `OSError` of its own on any negative HRESULT
+# *before* the caller sees the value, so `_checked` never runs and the message
+# an application gets is a bare "[WinError -2147024891] Access is denied" with
+# no way to tell which of eleven identical-looking annotation calls refused.
+# Read as a number, the code reaches `_checked`, which names the call — and
+# catches the positive non-`S_OK` answers `ctypes.HRESULT` lets through as
+# success.
+_HOWEVER_COM_ANSWERED = ctypes.c_long
+
 
 class _Guid(ctypes.Structure):
     _fields_ = (
@@ -129,10 +140,11 @@ class AccPropServicesStore:
         self._services: ctypes.c_void_p | None = None
 
     def set_string(self, hwnd: int, prop: PropId, value: str) -> None:
-        call = _method(self._reached(), _SLOT_SET_HWND_PROP_STR, _set_hwnd_prop_str())
+        services = self._reached()
+        call = _method(services, _SLOT_SET_HWND_PROP_STR, _set_hwnd_prop_str())
         _checked(
             call(
-                self._reached(),
+                services,
                 ctypes.c_void_p(hwnd),
                 _OBJID_CLIENT,
                 _CHILDID_SELF,
@@ -146,10 +158,11 @@ class AccPropServicesStore:
         holder = _Variant()
         holder.vt = _VT_I4
         holder.value = value
-        call = _method(self._reached(), _SLOT_SET_HWND_PROP, _set_hwnd_prop())
+        services = self._reached()
+        call = _method(services, _SLOT_SET_HWND_PROP, _set_hwnd_prop())
         _checked(
             call(
-                self._reached(),
+                services,
                 ctypes.c_void_p(hwnd),
                 _OBJID_CLIENT,
                 _CHILDID_SELF,
@@ -168,10 +181,11 @@ class AccPropServicesStore:
     def clear(self, hwnd: int) -> None:
         props = list(_GUID_FOR_PROP.values())
         everything = (_Guid * len(props))(*props)
-        call = _method(self._reached(), _SLOT_CLEAR_HWND_PROPS, _clear_hwnd_props())
+        services = self._reached()
+        call = _method(services, _SLOT_CLEAR_HWND_PROPS, _clear_hwnd_props())
         _checked(
             call(
-                self._reached(),
+                services,
                 ctypes.c_void_p(hwnd),
                 _OBJID_CLIENT,
                 _CHILDID_SELF,
@@ -233,7 +247,7 @@ def _checked(result: int, what: str) -> None:
 
 def _set_hwnd_prop() -> Any:
     return ctypes.WINFUNCTYPE(
-        ctypes.HRESULT,
+        _HOWEVER_COM_ANSWERED,
         ctypes.c_void_p,
         ctypes.c_void_p,
         ctypes.c_ulong,
@@ -245,7 +259,7 @@ def _set_hwnd_prop() -> Any:
 
 def _set_hwnd_prop_str() -> Any:
     return ctypes.WINFUNCTYPE(
-        ctypes.HRESULT,
+        _HOWEVER_COM_ANSWERED,
         ctypes.c_void_p,
         ctypes.c_void_p,
         ctypes.c_ulong,
@@ -257,7 +271,7 @@ def _set_hwnd_prop_str() -> Any:
 
 def _clear_hwnd_props() -> Any:
     return ctypes.WINFUNCTYPE(
-        ctypes.HRESULT,
+        _HOWEVER_COM_ANSWERED,
         ctypes.c_void_p,
         ctypes.c_void_p,
         ctypes.c_ulong,

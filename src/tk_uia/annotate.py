@@ -92,6 +92,10 @@ class TkWidget(Protocol):
 
     def winfo_ismapped(self) -> bool: ...
 
+    # Asked rather than inferred from a raise: `winfo exists` answers 0 for a
+    # path Tk no longer has, where every other `winfo` subcommand raises.
+    def winfo_exists(self) -> bool: ...
+
     def winfo_children(self) -> Sequence[TkWidget]: ...
 
     def keys(self) -> Sequence[str]: ...
@@ -120,7 +124,29 @@ class TkVariable(Protocol):
 
     def get(self) -> object: ...
 
-    def trace_add(self, mode: str, callback: Callable[..., object]) -> None: ...
+    # The name `trace_add` hands back is the only handle on the registration it
+    # made, and the only way to take it off again.
+    def trace_add(self, mode: str, callback: Callable[..., object]) -> str: ...
+
+    def trace_remove(self, mode: str, callback_name: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class _WhatAVariableIsBoundTo:
+    """One `trace_add` registration, kept so that it can be taken back off.
+
+    A trace lives on the *variable*, which routinely outlives the widget it was
+    bound for: without this the trace goes on firing at a dead window path
+    forever, one unhandled traceback on stderr per write, for the life of the
+    process — and a `forget()` that left it there would find the next write
+    quietly re-announcing the widget the caller had just taken back.
+    """
+
+    variable: TkVariable
+    callback_name: str
+
+    def let_go(self) -> None:
+        self.variable.trace_remove(_A_WRITE, self.callback_name)
 
 
 class Annotator:
@@ -135,9 +161,15 @@ class Annotator:
         self._roles = {**ROLE_FOR_TK_CLASS, **(roles or {})}
         self._said: dict[int, dict[PropId, str | int]] = {}
         self._handles: dict[str, int] = {}
+        self._bindings: dict[str, list[_WhatAVariableIsBoundTo]] = {}
         self._widget_thread = threading.get_ident()
 
     def add(self, widget: TkWidget) -> None:
+        # Before the first question is asked of the widget, rather than at the
+        # store below: `winfo_class`, `keys` and `cget` each cross into the Tcl
+        # interpreter, and doing that from a foreign thread corrupts it quietly
+        # — where a misplaced COM write merely goes somewhere nobody reads.
+        self._refuse_a_caller_from_another_thread()
         tk_class = widget.winfo_class()
         if tk_class in _WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
             return
@@ -174,14 +206,18 @@ class Annotator:
         # A `textvariable` widget has no `-text` to infer from, so the widget
         # whose entire job is to say what just happened is the one widget that
         # would otherwise say nothing.
-        _keep_in_step_with(variable, lambda words: self.set_name(widget, words))
+        self._keep_in_step_with(
+            widget, variable, lambda words: self.set_name(widget, words)
+        )
 
     def bind_value_variable(self, widget: TkWidget, variable: TkVariable) -> None:
         # The contents of an entry are not on the widget to be read back — they
         # are in the variable, and only the application knows when it moved. So
         # the property a client re-reads more than any other is the one nothing
         # here can keep true on its own.
-        _keep_in_step_with(variable, lambda contents: self.set_value(widget, contents))
+        self._keep_in_step_with(
+            widget, variable, lambda contents: self.set_value(widget, contents)
+        )
 
     def set_automation_id(self, widget: TkWidget, automation_id: int) -> None:
         self._refuse_a_caller_from_another_thread()
@@ -200,13 +236,50 @@ class Annotator:
 
     def forget(self, widget: TkWidget | str) -> None:
         self._refuse_a_caller_from_another_thread()
+        self._stop_following_any_variable_bound_to(str(widget))
         hwnd = self._handles.pop(str(widget), None)
         if hwnd is None:
             return
         self._take_it_all_back(hwnd)
 
+    def _keep_in_step_with(
+        self, widget: TkWidget, variable: TkVariable, announce: Callable[[str], None]
+    ) -> None:
+        # Said once here as well as on every write from now on: a trace fires on
+        # the *next* change and never for the one already made, so a binding that
+        # only traced would leave the widget announcing whatever it was annotated
+        # with before the variable existed — for most widgets, nothing at all.
+        callback_name = variable.trace_add(
+            _A_WRITE,
+            lambda *_: self._announce_unless_the_widget_has_gone(
+                widget, variable, announce
+            ),
+        )
+        self._bindings.setdefault(str(widget), []).append(
+            _WhatAVariableIsBoundTo(variable, callback_name)
+        )
+        announce(_whatever_the_variable_holds(variable))
+
+    def _announce_unless_the_widget_has_gone(
+        self, widget: TkWidget, variable: TkVariable, announce: Callable[[str], None]
+    ) -> None:
+        # Second line behind `forget`, which is what actually takes the trace
+        # off. A widget can still go away by a route that never reaches it — an
+        # annotator driven directly rather than through `enable()`, or an earlier
+        # `<Destroy>` handler that raised before ours ran — and the write that
+        # follows lands inside Tcl's own callback, where the application has no
+        # call of its own to wrap it in.
+        if not widget.winfo_exists():
+            return
+        announce(_whatever_the_variable_holds(variable))
+
+    def _stop_following_any_variable_bound_to(self, path: str) -> None:
+        for binding in self._bindings.pop(path, ()):
+            binding.let_go()
+
     def _write(self, widget: TkWidget, prop: PropId, value: str | int) -> None:
         self._refuse_a_caller_from_another_thread()
+        self._refuse_a_window_that_already_names_itself(widget)
         hwnd = self._handle_of(widget)
         if self._said.get(hwnd, {}).get(prop, _NEVER_SAID) == value:
             # `<Map>` fires on every unhide, tab change and geometry shuffle.
@@ -238,6 +311,24 @@ class Annotator:
             self._take_it_all_back(abandoned)
         self._handles[path] = hwnd
         return hwnd
+
+    def _refuse_a_window_that_already_names_itself(self, widget: TkWidget) -> None:
+        if widget.winfo_class() not in _WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
+            return
+        # `add()` has always skipped these, but the manual calls walked straight
+        # past that rule — and this is the one case where doing as asked is
+        # worse than refusing. `winfo_id()` on a toplevel answers with the
+        # container child Tk puts every widget under, not with the window, so
+        # the property lands on an inner pane: the window stays unnamed, and a
+        # client reading the pane finds a confident, wrong answer where before
+        # it found none.
+        raise AnnotationRefused(
+            f"{widget} is a window, and a window already has an accessible name "
+            "from `wm title` — which is what resolves it for every query that "
+            "follows. Annotating one writes to the container pane behind it "
+            "instead of to the window, so use `root.title(...)` to name it, and "
+            "annotate the widgets inside it."
+        )
 
     def _refuse_a_caller_from_another_thread(self) -> None:
         caller = threading.get_ident()
@@ -355,17 +446,6 @@ def _annotate_if_there_is_still_a_widget(
         # resolve one, and a path answers no question worth asking here.
         return
     annotator.add(widget)
-
-
-def _keep_in_step_with(variable: TkVariable, announce: Callable[[str], None]) -> None:
-    # Said once here as well as on every write from now on: a trace fires on the
-    # *next* change and never for the one already made, so a binding that only
-    # traced would leave the widget announcing whatever it was annotated with
-    # before the variable existed — for most widgets, nothing at all.
-    variable.trace_add(
-        _A_WRITE, lambda *_: announce(_whatever_the_variable_holds(variable))
-    )
-    announce(_whatever_the_variable_holds(variable))
 
 
 def _whatever_the_variable_holds(variable: TkVariable) -> str:

@@ -113,6 +113,38 @@ def test_a_toplevel_is_never_annotated_even_when_the_role_table_is_told_to() -> 
     )
 
 
+def test_annotating_a_window_by_hand_is_refused_rather_than_naming_the_pane_behind_it() -> (
+    None
+):
+    # Given an application holding its own root window, and a dialog
+    store = RecordingStore()
+    annotator = Annotator(store)
+    root = FakeWidget("Tk", _A_ROOT_HANDLE)
+    dialog = FakeWidget("Toplevel", _A_DIALOG_HANDLE)
+
+    # When it tries to say what the window is called, which is the obvious
+    # reading of a surface whose other calls all take a widget
+    with pytest.raises(AnnotationRefused) as refusal:
+        annotator.set_name(root, "Tasks")
+
+    # Then it is told, rather than the name landing somewhere that looks right
+    # and is not. `winfo_id()` on a Tk root returns the container child, not the
+    # toplevel — so the name would go on an inner pane, leaving the window
+    # itself unnamed while every assertion about it appeared to pass. The
+    # refusal has to say where a window's name really comes from.
+    assert store.writes == [], f"the window's pane was annotated anyway: {store.writes}"
+    assert "wm title" in str(refusal.value), (
+        f"the refusal must point at what already names a window: {refusal.value}"
+    )
+
+    # And the rule holds for every property and for both kinds of window: the
+    # automatic path has always skipped these, and the manual one walked past it.
+    with pytest.raises(AnnotationRefused):
+        annotator.set_value(dialog, "anything")
+    with pytest.raises(AnnotationRefused):
+        annotator.set_role(dialog, Role.GROUPING)
+
+
 def test_an_explicit_name_or_role_overrides_the_one_derived_from_the_widget() -> None:
     # Given a button the annotator has already made up its own mind about
     store = RecordingStore()
@@ -353,12 +385,15 @@ def test_annotating_from_a_thread_other_than_the_one_that_owns_the_widgets_is_re
     # thread that has just finished loading something and wants to say so
     refusal = _the_failure_raised_on_another_thread(lambda: annotator.add(button))
 
-    # Then it is stopped at the door and nothing is written. Both layers under
-    # this one are thread-affine: reading `winfo_id` off the Tk thread corrupts
-    # the interpreter, and COM apartments are per-thread, so an annotation made
-    # on the wrong one goes somewhere no client will ever read it.
+    # Then it is stopped at the door, before a single Tk call. `add` asks the
+    # widget its class, its options and its text, and each of those crosses into
+    # the Tcl interpreter — so a guard that only protected the store would have
+    # let the interpreter be poked from the wrong thread first, which is the
+    # half of this that corrupts rather than merely misplaces. The widget double
+    # refuses a foreign caller precisely so that reaching it fails this spec.
     assert isinstance(refusal, AnnotationRefused), (
-        f"a foreign thread got through with {refusal!r}"
+        f"a foreign thread got through to Tk with {refusal!r}; the guard must "
+        "refuse before winfo_class(), keys() or cget() is called"
     )
     assert store.writes == [], f"a foreign thread reached the store: {store.writes}"
     assert "thread" in str(refusal), (
@@ -431,6 +466,59 @@ def test_a_bound_value_follows_the_variable_when_the_application_changes_it() ->
     assert store.properties(_AN_ENTRY_HANDLE)[PropId.VALUE] == (
         "Write the quarterly report"
     ), "the value is stuck on whatever the entry held when it was bound"
+
+
+def test_a_forgotten_widget_stops_being_re_announced_when_its_variable_changes() -> (
+    None
+):
+    # Given a status label whose annotation follows a variable, which the
+    # application has since taken back
+    store = RecordingStore()
+    annotator = Annotator(store)
+    label = FakeWidget("Label", _A_LABEL_HANDLE)
+    status = FakeVariable("ready")
+    annotator.add(label)
+    annotator.bind_text_variable(label, status)
+    annotator.forget(label)
+
+    # When the variable moves on, as a running application's status variable does
+    status.set("task created")
+
+    # Then the widget stays forgotten. A trace that outlives `forget` puts the
+    # annotation back on the next write, so a caller who un-annotated a widget
+    # would find it re-announcing itself with no call of theirs in the traceback.
+    assert store.properties(_A_LABEL_HANDLE) == {}, (
+        f"forget() left the variable trace in place, so the next write "
+        f"re-announced the widget: {store.properties(_A_LABEL_HANDLE)}"
+    )
+
+
+def test_a_destroyed_widgets_variable_can_still_be_written_without_raising() -> None:
+    # Given a label bound to a variable, and destroyed without the annotator
+    # being told — a `<Destroy>` handler that raises, an application tearing a
+    # frame down before `enable()` ran, a widget whose parent went first
+    store = RecordingStore()
+    annotator = Annotator(store)
+    label = FakeWidget("Label", _A_LABEL_HANDLE)
+    status = FakeVariable("ready")
+    annotator.add(label)
+    annotator.bind_text_variable(label, status)
+    label.destroy()
+    while_it_was_alive = list(store.writes)
+
+    # When the variable goes on changing, as an application's variables do long
+    # after the widget that displayed them has gone
+    status.set("task created")
+    status.set("second task created")
+
+    # Then not one of those writes raises, and none of them reaches the store. A
+    # trace firing at a dead window path raises inside Tcl's own callback, where
+    # the application has no call of its own to wrap it in: it lands as an
+    # unhandled traceback on stderr, on every write, for the life of the process.
+    assert store.writes == while_it_was_alive, (
+        "a widget that no longer exists was annotated anyway: "
+        f"{store.writes[len(while_it_was_alive) :]}"
+    )
 
 
 def _the_failure_raised_on_another_thread(work: Callable[[], None]) -> BaseException:

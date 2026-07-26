@@ -8,12 +8,20 @@ never fire it again, and without the sweep those widgets stay anonymous forever.
 
 from __future__ import annotations
 
-from tests.doubles import FakeInterpreter, FakeRoot, FakeWidget, RecordingStore
+from tests.doubles import (
+    FakeInterpreter,
+    FakeRoot,
+    FakeVariable,
+    FakeWidget,
+    RecordingStore,
+)
 from tk_uia.annotate import PropId, install
 from tk_uia.tkversion import Strategy
 
 _A_BUTTON_HANDLE = 0x000407A2
 _A_LABEL_HANDLE = 0x000407A5
+
+_NOTHING_STILL_LISTENING = 0
 
 
 def _a_tk_that_needs_annotating() -> FakeInterpreter:
@@ -84,6 +92,35 @@ def test_a_widget_destroyed_after_enabling_gives_its_handle_back_clean() -> None
     # wearing a dead label's name
     assert store.cleared == [_A_LABEL_HANDLE], (
         f"the destroyed widget's handle was left annotated: cleared {store.cleared}"
+    )
+
+
+def test_a_widget_destroyed_after_enabling_lets_go_of_the_variable_it_was_following() -> (
+    None
+):
+    # Given a status label whose name follows a Tk variable
+    store = RecordingStore()
+    root = FakeRoot(_a_tk_that_needs_annotating())
+    installation = install(root, store)
+    label = FakeWidget("Label", _A_LABEL_HANDLE)
+    status = FakeVariable("ready")
+    root.announce("<Map>", label)
+    installation.annotator.bind_text_variable(label, status)
+
+    # When Tk destroys the label and the variable goes on being written, which
+    # is the ordinary shape of a variable: it belongs to the application, not to
+    # the widget, and routinely outlives every widget that ever displayed it
+    label.destroy()
+    root.announce("<Destroy>", str(label))
+    status.set("task created")
+
+    # Then the trace is off the variable rather than merely inert. A guard that
+    # declined to announce would leave the registration in place for the life of
+    # the process, firing on every write — a slow leak in a long-running
+    # application, and one more thing between a variable and being garbage.
+    assert status.traces_left() == _NOTHING_STILL_LISTENING, (
+        f"{status.traces_left()} trace(s) outlived the widget they were "
+        "registered for, and will go on firing at a dead window path forever"
     )
 
 
