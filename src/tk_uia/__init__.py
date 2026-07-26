@@ -29,6 +29,8 @@ from tk_uia.annotate import (
     InertAnnotator,
     Installation,
 )
+from tk_uia.describe import Description, Gap, WidgetDescription
+from tk_uia.describe import describe as _describe
 from tk_uia.roles import ROLE_FOR_TK_CLASS, Role
 from tk_uia.tkversion import Strategy
 
@@ -40,13 +42,17 @@ __version__ = "0.2.1"
 __all__ = [
     "ROLE_FOR_TK_CLASS",
     "AnnotationRefused",
+    "Description",
+    "Gap",
     "Role",
     "Strategy",
+    "WidgetDescription",
     "__version__",
     "add_acc_object",
     "bind_text_variable",
     "bind_value_variable",
     "check_screenreader",
+    "describe",
     "enable",
     "forget",
     "set_acc_action",
@@ -176,6 +182,16 @@ def forget(widget: tkinter.Misc | str) -> None:
     _annotator().forget(widget)
 
 
+def describe(root: tkinter.Misc) -> Description:
+    """Say what this application has told Windows about the widgets under `root`.
+
+    Reports what tk-uia believes it wrote, which is not evidence that a client
+    can read it — see the caveat the report closes with. `print()` it for the
+    report; read `.widgets` for the same thing as data.
+    """
+    return _describe(root, _the_installation())
+
+
 def check_screenreader() -> bool:
     """Whether Windows believes something is reading the screen aloud."""
     from tk_uia._accprop import screen_reader_running
@@ -184,10 +200,14 @@ def check_screenreader() -> bool:
 
 
 def _annotator() -> Annotator | InertAnnotator:
+    return _the_installation().annotator
+
+
+def _the_installation() -> Installation:
     if _installed is None:
         raise AnnotationRefused(
             "tk_uia.enable(root) has not been called, so there is nothing to "
             "annotate through; call it once after building the window and "
             "before saying anything about the widgets in it"
         )
-    return _installed.annotator
+    return _installed

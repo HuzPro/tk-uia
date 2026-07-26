@@ -94,6 +94,25 @@ def test_saying_something_before_accessibility_is_switched_on_is_refused() -> No
     )
 
 
+def test_describing_an_application_that_has_not_switched_accessibility_on_is_refused() -> (
+    None
+):
+    # Given an application that has not called `enable()` yet
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False))
+
+    # When it asks what it has told Windows about its widgets
+    with pytest.raises(AnnotationRefused) as refusal:
+        tk_uia.describe(root)
+
+    # Then it is told, in the same words every other call uses. A report saying
+    # "enable() was never called" is tempting — it is the number one cause of
+    # "nothing works" — but there would be no honest strategy to head it with,
+    # and the refusal already is the complete answer.
+    assert "enable" in str(refusal.value), (
+        f"the refusal has to say what was skipped: {refusal.value}"
+    )
+
+
 def test_every_call_an_application_makes_says_what_it_does_when_asked() -> None:
     # Given the names the package publishes as its whole public surface
     published = [getattr(tk_uia, name) for name in tk_uia.__all__]
