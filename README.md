@@ -1,9 +1,11 @@
 # tk-uia
 
+[![tests](https://github.com/HuzPro/tk-uia/actions/workflows/tests.yml/badge.svg)](https://github.com/HuzPro/tk-uia/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**Your Tkinter application is unreadable to a screen reader. One call fixes it.**
+**Your Tkinter application is unreadable to a screen reader. One call makes it
+findable and readable.**
 
 A blind user running NVDA over a Tk 8.6 window hears almost nothing useful. The
 button is announced as an unnamed button. The label beside it is announced as a
@@ -21,9 +23,18 @@ tk_uia.enable(root)          # ← the whole of it
 ```
 
 After that call the same window offers a `ButtonControl` named "New Task", a
-`TextControl` that reads its own words, and an `EditControl` whose contents a
-client can query. Zero runtime dependencies, no C extension, no `ttk` rewrite,
+`TextControl` that reads its own words, and an `EditControl` where Tk offered an
+anonymous pane. Zero runtime dependencies, no C extension, no `ttk` rewrite,
 nothing visible on screen.
+
+**One call is where it starts, not where it ends.** `enable()` names every
+widget that carries its own words and gives every widget the right control type.
+What it cannot do on its own is read a value out of a widget that does not hold
+one: an entry showing `buy milk` arrives as an `EditControl` whose ValuePattern
+is `''` — measured, and a confidently wrong answer where bare Tk gave no answer
+at all. One more line (`bind_value_variable`) fixes that, and the table below
+marks exactly which cells each call is responsible for. This README's job is to
+tell you which is which before you ship it to somebody who depends on it.
 
 Because the mechanism is real accessibility rather than a test hook, the same
 call also makes the window drivable by UI Automation tooling — pytest-uia,
@@ -64,7 +75,7 @@ does on its behalf.
 
 ## Quickstart
 
-tk-uia is **not on PyPI** — publishing is out of scope for v0.1 (see
+tk-uia is **not on PyPI** — publishing is out of scope for now (see
 [ROADMAP](ROADMAP.md)). Install it from a clone:
 
 ```bash
@@ -88,14 +99,24 @@ root.mainloop()
 ```
 
 What a UI Automation client reads, before and after that one call — measured
-against the fixture app in this repo, from a **separate process**:
+from a **separate process**, against the fixture app in this repo and
+`probes/what_enable_alone_gives_you.py`:
 
-| Widget | Bare Tk 8.6 | After `enable()` |
-|---|---|---|
-| `tk.Button(text="New Task")` | `ButtonControl`, `Name=''` | `ButtonControl`, **`Name='New Task'`** |
-| `tk.Label(text="Task list")` | **`ImageControl`**, `Name=''` | **`TextControl`**, **`Name='Task list'`** |
-| `tk.Entry` | `PaneControl`, `Name=''`, no ValuePattern | **`EditControl`**, `Name='Title'`, **ValuePattern `'Write the report'`** |
-| `tk.Canvas` (this package has no role for one) | `PaneControl`, `Name=''` | unchanged — the control group |
+| Widget | Bare Tk 8.6 | After `enable()` **alone** | With one more line |
+|---|---|---|---|
+| `tk.Button(text="New Task")` | `ButtonControl`, `Name=''` | `ButtonControl`, **`Name='New Task'`** | — |
+| `tk.Label(text="Task list")` | **`ImageControl`**, `Name=''` | **`TextControl`**, **`Name='Task list'`** | — |
+| `tk.Checkbutton(text="Done")` | `ButtonControl`, `Name=''` | **`CheckBoxControl`**, **`Name='Done'`**, **`ToggleState`** correct and live | — |
+| `tk.Entry` (showing `buy milk`) | `PaneControl`, `Name=''`, no ValuePattern | **`EditControl`**, `Name=''`, ValuePattern **`''`** | `set_acc_name(e, "Title")` → `Name='Title'`; `bind_value_variable(e, var)` → ValuePattern `'buy milk'` |
+| `tk.Canvas` (this package has no role for one) | `PaneControl`, `Name=''` | unchanged — the control group | — |
+
+**Read the Entry row carefully.** An entry keeps neither its label nor its
+contents on the widget: the label is a separate `tk.Label` this package has no
+way to associate, and the contents live in a Tk variable. So `enable()` gives it
+the right control type and a ValuePattern that did not exist before — and that
+pattern reads `''` until an application says otherwise. That is the one place
+where annotating alone leaves a client a *confident wrong answer* rather than no
+answer, and it is two lines to fix.
 
 Widgets with a `-text` option are named from it automatically. Everything else
 takes one line:
@@ -110,8 +131,8 @@ takes one line:
 | `set_acc_role(widget, Role.…)` | Override the inferred role. |
 | `set_acc_description` / `set_acc_help` / `set_acc_action` / `set_acc_state` | The rest of the MSAA properties. |
 | `set_automation_id(widget, number)` | An explicit, stable id for a test suite to pin to. |
-| `add_acc_object(widget)` | Annotate one widget by hand (`enable()` already does this for everything Tk maps). |
-| `forget(widget)` | Take every annotation back off a widget. |
+| `add_acc_object(widget)` | Annotate one widget by hand, re-reading its `-text` — which is how a name is un-staled after `config(text=…)`. |
+| `forget(widget)` | Take every annotation back off a widget, and stop following any variable bound to it. |
 | `check_screenreader()` | Whether Windows believes something is reading the screen aloud. |
 
 `enable()` **returns** its strategy rather than logging it, because "annotated"
@@ -241,10 +262,48 @@ is out of the picture entirely.
 
 ### Caveats worth knowing
 
+- **A plain `config(text=…)` leaves the accessible name stale, indefinitely.**
+  Measured: a label annotated as `'Task list'` that later does
+  `label.config(text="in progress")` goes on being read as **`'Task list'`** —
+  the widget's `-text` is only ever read at `<Map>`, and nothing re-reads it
+  until an unmap/remap fires `<Map>` again. Staleness is the worst way an
+  accessibility tree can be wrong, because a stale answer is indistinguishable
+  from a true one. Two ways out, both verified: call
+  **`add_acc_object(widget)`** after the `config` and the name is re-read
+  immediately (`'in progress'`), or drive the widget from a `StringVar` and
+  **`bind_text_variable`** it, which is the durable answer and needs saying
+  once.
+- **Disabled state is not conveyed, and nothing tracks any state.** Measured: a
+  `tk.Button(state=DISABLED)` reads back `IsEnabled=True` — the widget is greyed
+  on screen and advertised to a client as usable. `set_acc_state(widget, 0x1)`
+  (`STATE_SYSTEM_UNAVAILABLE`) does fix it — verified, `IsEnabled` becomes
+  `False` — but it is a write, not a subscription: nothing here notices a widget
+  being disabled or re-enabled, so an application that says it has to keep
+  saying it. A `bind_state_variable` sibling is on the [ROADMAP](ROADMAP.md).
+  **Checked state is the exception, and it works:** an annotated `Checkbutton`
+  is a `CheckBoxControl` whose `ToggleState` is correct *and follows its
+  variable* with no call to this package at all (measured: `1`, then `0` after
+  the application set the variable to 0). That comes from the MSAA proxy, not
+  from here.
+- **Compound-widget items are invisible.** A `Listbox` is annotated as a `LIST`
+  and its *rows* are not in the tree at all; the same goes for `Treeview` items
+  and `Notebook` tabs. Tk gives one HWND per widget, and annotation works on
+  HWNDs — exposing items means MSAA's `IAccessible` child-id model, which is a
+  different piece of machinery. So a screen-reader user can find your listbox
+  and cannot hear what is in it. On the [ROADMAP](ROADMAP.md); not here yet.
 - **A widget Tk never maps is never annotated.** An unshown notebook tab, a
   window built and withdrawn — `<Map>` never fires, so nothing happens until it
   does. This is inherent to the event, and shared with Tk 9.1's own
   implementation.
+- **`enable()` is idempotent, and one call covers the whole application.** A
+  second call reports what the first did and installs nothing further; the
+  bindings go on the `all` bindtag, so every window the application opens is
+  already covered.
+- **A window cannot be annotated by hand.** `set_acc_name(root, …)` raises
+  `AnnotationRefused`. `winfo_id()` on a toplevel answers with the container
+  child Tk puts every widget under, so the name would land on an inner pane and
+  leave the window itself unnamed — use `root.title(…)`, which is where a
+  window's accessible name comes from anyway.
 - **Toplevels are deliberately excluded.** `wm title` already gives a window a
   correct accessible `Name`, and overriding it breaks resolving a window by its
   title, which is where every other query starts.
@@ -310,7 +369,8 @@ itself closes in 9.1.
 ## Measured
 
 Windows 11, Python 3.13.1, **Tk 8.6.15**, read from a separate process through
-`uiautomation`.
+`uiautomation`. Everything below either comes from a spec in `tests/` or is
+reproducible by running `probes/what_enable_alone_gives_you.py`.
 
 | | |
 |---|---|
@@ -323,8 +383,15 @@ Windows 11, Python 3.13.1, **Tk 8.6.15**, read from a separate process through
 | `InvokePattern.Invoke()` on an annotated Tk button | returns cleanly; press counter unchanged |
 | `LegacyIAccessible.DoDefaultAction()` | returns cleanly; press counter unchanged |
 | Hit-testing after annotation | `ElementFromPoint` identical before and after, 8/8 widgets |
+| `tk.Entry` showing `buy milk`, after `enable()` alone | `EditControl`, `Name=''`, ValuePattern **`''`** |
+| Accessible name after `label.config(text="in progress")` | unchanged — still `'Task list'` |
+| …and after `add_acc_object(label)` | `'in progress'` |
+| `tk.Button(state=DISABLED)` after `enable()` | `IsEnabled` **`True`** — the greyed button reads as usable |
+| …and after `set_acc_state(button, 0x1)` | `IsEnabled` `False` |
+| Annotated `Checkbutton` `ToggleState` | `1`, then `0` when the application set its variable to 0 — correct, and live, with no call to this package |
+| Write trace left on a `StringVar` after its bound widget is destroyed | **0** (`trace_info()` read inside the app) |
 | `enable()` runtime dependencies | **0**, permanently |
-| gui suite (9 specs, a real window each) | ~8 s |
+| gui suite (10 specs, a real window each) | ~8.5 s |
 
 The `ProviderDescription` line is the useful one for anybody writing a UIA
 client: a Tk window is served by the MSAA proxy but reports `FrameworkId`
@@ -389,21 +456,24 @@ py -m venv .venv
 uv pip install -e ".[dev]"        # or: pip install -e ".[dev]"
 
 pytest -m "not gui" -q            # instant; no windows, runs on any platform
-pytest -m gui -q                  # launches a real Tk window, nine times
+pytest -m gui -q                  # launches a real Tk window, ten times
 pytest -q                         # everything
 
-ruff check src tests
-ruff format --check src tests
+ruff check src tests probes
+ruff format --check src tests probes
 ```
 
 The unit suite runs against a `RecordingStore` and a `FakeWidget` — **no Tk, no
 display, no Windows** — which is what lets it be the same suite on every
-platform. The gui suite is the counterweight: `_accprop.py` has no unit tests by
-design, because a recording double would agree with a COM call that returned
+platform. The gui suite is the counterweight: `_accprop.py` is almost untested
+by design, because a recording double would agree with a COM call that returned
 `S_OK` and changed nothing, and that is the exact failure this package exists to
 refuse. Its correctness comes from `tests/test_gui_annotations.py`, which
 launches `tests/fixture_apps/annotated_app.py` into a process of its own and
-reads it back with `uiautomation`.
+reads it back with `uiautomation`. The one decision in it that *is* unit-tested
+is what an application is told when a COM call refuses — which of the eleven
+identical-looking annotation calls it was has to survive into the message, and
+that is specifiable with no desktop and no live `oleacc`.
 
 To run the platform-independence lane locally the way CI does — on a Python with
 no `tkinter`, no `ctypes.windll` and no `uiautomation`:
@@ -422,16 +492,33 @@ wsl -- bash -lc 'cd /mnt/c/…/tk-uia \
   && PYTHONPATH=src:.venv/Lib/site-packages python3 -m pytest -q'
 ```
 
-Either way the nine gui specs are not collected at all — `collect_ignore_glob`
+Either way the ten gui specs are not collected at all — `collect_ignore_glob`
 in `tests/conftest.py` drops `test_gui_*.py` off Windows, because a `skipif`
-marks a test but cannot stop pytest importing the module carrying it.
+marks a test but cannot stop pytest importing the module carrying it. The one
+Windows-only unit spec (`tests/test_com_diagnostics.py`, which asks what an
+application is told when a COM call refuses) skips there instead, since it needs
+`ctypes.WINFUNCTYPE` but no desktop.
 
 CI runs `ruff` on Ubuntu and `pytest -m "not gui"` on
 {Ubuntu, Windows} × {3.10, 3.13}. The **Ubuntu lane is the meaningful one**: it
 is what proves this package imports and runs where there is no Tk and no
 Windows, which matters because it is installed at runtime inside somebody else's
-application. The gui suite is local-only in v0.1 — it needs an interactive
-desktop.
+application. The gui suite is local-only — it needs an interactive desktop.
+
+### Probes
+
+`probes/` holds the scripts behind the numbers in this README, so that a reader
+who doubts one can re-run it rather than take it on trust. They are not tests
+and CI does not run them; they print measurements.
+
+```powershell
+python probes/what_enable_alone_gives_you.py
+```
+
+That one launches a window that calls `enable(root)` and deliberately says
+nothing else, then reads it back from this process — which is where the empty
+ValuePattern, the stale name after `config(text=…)`, the disabled button that
+reads as enabled, and the checkbox state that is right all along come from.
 
 ### Layout
 
@@ -442,6 +529,7 @@ src/tk_uia/
 ├── annotate.py     # all the behaviour, over AccessibilityStore/TkWidget Protocols
 ├── tkversion.py    # the Tk 9.1 capability gate
 └── _accprop.py     # the ctypes/COM humble object — the only Windows in here
+probes/            # the scripts behind the measurements above; not tests
 ```
 
 Everything above `_accprop.py` talks to Protocols, which is why the whole unit

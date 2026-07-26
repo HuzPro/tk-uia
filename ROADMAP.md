@@ -52,6 +52,19 @@ and a package that costs an application nothing to install.
   `NATIVE` into "call Tk's own commands, so one API covers both eras" is the
   main outstanding piece of work, and it is blocked on Tk 9.1 being installable
   rather than on any open design question.
+- **`bind_state_variable`, so that state stops being a write-once claim.**
+  `set_acc_state` exists and works — measured, a `tk.Button(state=DISABLED)`
+  reads back `IsEnabled=True` until it is called, and `False` afterwards — but
+  it is a write and not a subscription, so nothing keeps it true. That is the
+  same shape of hole `bind_text_variable` and `bind_value_variable` already
+  fill, and the same fix: a `write` trace on the variable behind the widget,
+  mapping its value onto `STATE_SYSTEM_*` bits. Deferred out of v0.2.1 because
+  that release is bug fixes only. Worth knowing before starting it: **checked
+  state needs none of this.** An annotated `Checkbutton` is a `CheckBoxControl`
+  whose `ToggleState` is correct and follows its variable with no call to this
+  package at all — measured `1`, then `0` after the application wrote the
+  variable. The MSAA proxy derives that one for free, so the gap is narrower
+  than it looks and is really about disabled, selected and read-only.
 - **`IAccPropServer` for dynamic properties.** Everything today is *pushed*: a
   value is written when the application says so, and `bind_text_variable` and
   `bind_value_variable` exist precisely because otherwise a status line and an
@@ -64,7 +77,10 @@ and a package that costs an application nothing to install.
   as a `LIST` and its *items* are invisible; the same goes for `Treeview` rows
   and `Notebook` tabs. Exposing them means child ids under one HWND — MSAA's
   `IAccessible` child model, which is a different piece of machinery from
-  annotating a window handle.
+  annotating a window handle. This is now also documented as a caveat in the
+  README, because a user reads the shop window rather than the roadmap, and
+  "your listbox is findable and its contents are not" is something to know
+  before adopting rather than after.
 - **Publishing to PyPI.** Out of scope for v0.1 by decision, not by omission.
   The name is free.
 
