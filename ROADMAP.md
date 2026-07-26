@@ -33,7 +33,28 @@ and a package that costs an application nothing to install.
 - **Zero runtime dependencies**, and a unit suite that runs with no Tk, no
   display and no Windows — enforced by the Ubuntu CI lane.
 
+## Shipped in v0.3
+
+- **`describe(root)`, so an application can ask what it has told Windows.** A
+  row per widget with everything that was written about it, and for every widget
+  it did not write, a named reason drawn from the caveats the README already
+  documents. It walks the live widget tree and reads the annotation ledger; it
+  touches neither UI Automation nor COM, so runtime dependencies stay at zero
+  and the whole report renders on a Linux CPython with no `tkinter` at all. The
+  strategy leads the report, because a page of blanks on a machine where
+  `enable()` stood down would otherwise read as a clean bill of health. Nothing
+  in it is verification, and it says so in its own last paragraph.
+
 ## Next
+
+- **The cross-repo comparison, as a recipe rather than a tool.** `describe()`
+  says what this library believes it wrote; a client-side dump says what a
+  client sees; the difference is every `S_OK`-and-nothing failure this package
+  has. The script spans tk-uia and pytest-uia, so it belongs in neither — but
+  the half of it that fits here is already a gui spec, checking every name the
+  description claims against the real UI Automation tree. What is missing is the
+  written recipe, and a decision about whether the `Gap` member names are stable
+  enough to be a documented interface for the client half to match on.
 
 - **Verify with a real screen reader.** Verification today stops at the
   accessibility tree. That is what a screen reader consumes, so it is the right
@@ -64,7 +85,10 @@ and a package that costs an application nothing to install.
   whose `ToggleState` is correct and follows its variable with no call to this
   package at all — measured `1`, then `0` after the application wrote the
   variable. The MSAA proxy derives that one for free, so the gap is narrower
-  than it looks and is really about disabled, selected and read-only.
+  than it looks and is really about disabled, selected and read-only. Note that
+  `describe(root)` reports a written state as the raw `STATE=1` integer rather
+  than as `STATE_SYSTEM_UNAVAILABLE`: a bit-name table is a second source of
+  truth for a property almost nobody sets, and it can wait for the binding.
 - **`IAccPropServer` for dynamic properties.** Everything today is *pushed*: a
   value is written when the application says so, and `bind_text_variable` and
   `bind_value_variable` exist precisely because otherwise a status line and an
@@ -80,7 +104,9 @@ and a package that costs an application nothing to install.
   annotating a window handle. This is now also documented as a caveat in the
   README, because a user reads the shop window rather than the roadmap, and
   "your listbox is findable and its contents are not" is something to know
-  before adopting rather than after.
+  before adopting rather than after. `describe(root)` now names the affected
+  widgets per path (`ITEMS_NOT_IN_THE_TREE`), which is the same information at
+  the point where an author can act on it.
 - **Publishing to PyPI.** Out of scope for v0.1 by decision, not by omission.
   The name is free.
 

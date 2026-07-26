@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.3.0 — 2026-07-26
+
+One new call, and it answers a question the library previously left an
+application with no way to ask.
+
+- **`describe(root)` says what this application has told Windows, and names
+  every widget it did not.** Until now `enable()` returned a strategy and
+  nothing else: an author who wanted to know whether their listbox had been
+  annotated, or why their entry was going to read back `''`, had no way to find
+  out from inside their own process. `describe(root)` returns a frozen
+  `Description` — `print()` it for a report, read `.widgets` for the same thing
+  as data — with a row per widget carrying the role, name, value, automation id
+  and everything else that was written, and, for every widget it did **not**
+  write or wrote incompletely, a named and enumerated reason. It walks the live
+  widget tree and reads tk-uia's own annotation ledger. It touches neither UI
+  Automation nor COM, imports neither `tkinter` nor `ctypes`, and runtime
+  dependencies stay at zero — measured, the whole report renders on a Linux
+  CPython with no `tkinter` and with `windll`, `oledll`, `WinDLL`, `OleDLL`,
+  `WINFUNCTYPE` and `HRESULT` deleted from `ctypes`.
+
+- **The reason a widget carries nothing is the product, not the table.** The
+  ledger supplies four columns; the live walk supplies the diagnosis. The
+  highest-value one was a surprise: a window with a fixed `geometry()` leaves
+  the Tk packer silently dropping whatever it cannot fit, so `<Map>` never fires
+  and those widgets are invisible to accessibility with no exception, no warning
+  and nothing in any log. In `probes/what_your_app_tells_windows.py` four
+  widgets are in that state — an unshown notebook tab, a frame that was never
+  packed and its child, and there is no other way to discover it. The ten
+  reasons are a closed catalogue by rule: a `Gap` member has to correspond to a
+  caveat the README already documents, which is what stops the taxonomy
+  sprawling into a second, worse README.
+
+- **A report that showed only successes would be worse than no report.** Where
+  `enable()` reported `NATIVE` or `UNSUPPORTED` nothing in the window was
+  annotated at all, and a report of what went right would render that as a blank
+  page an author could read as a clean bill of health. So the strategy is the
+  first line, ahead of a single row, and every widget is listed as unwritten.
+  Same rule for the widgets: one that was never touched is named with the reason
+  rather than left out, and a ledger entry the walk never reached is named too.
+
+- **Nothing in it is presented as verification, and there is a spec that fails
+  if that ever changes.** `IAccPropServices` accepts a write to a window handle
+  nobody owns, answers `S_OK` and changes nothing, so "tk-uia wrote it" and "a
+  client can read it" are different claims. The report closes by saying so, in
+  as many words, and `set_automation_id`'s number is reported as what was asked
+  for rather than read back out of `GWLP_ID` — reading it back would have
+  dragged the COM store into a module that has no business importing `ctypes`.
+  The comparison that *does* close the gap spans two repositories and stays a
+  recipe; the half of it that fits here is a gui spec that reads the description
+  out of a live fixture app and checks every name it claims against the real UI
+  Automation tree. Measured against a deliberate fault — annotations written one
+  past the right window handle, which is what a cross-process write looks like —
+  it names all eight claimed names as unreadable.
+
+- **The annotation ledger now records where each property came from, which is
+  what makes the staleness check usable.** Without it, `NAME_MAY_BE_STALE` fires
+  on a pattern the README encourages: `Button(text="OK")` named `"Confirm
+  order"` leaves the ledger and the widget's `-text` legitimately disagreeing.
+  A property is now recorded as inferred from the widget, said once by the
+  application, or kept in step by a variable, and only the first can go stale.
+  The one behavioural change this needed is in the annotator's hot path and was
+  made carefully: `_write`'s early return became a guard around the COM write
+  **only**, so the redundant write on every `<Map>` is still skipped — that is
+  the ledger's whole job — while the recorded source stays current for a binding
+  whose first announcement happens to match what was already there. The cost is
+  one dict assignment per `<Map>`, against three Tcl round-trips already being
+  paid on the same path.
+
+- **Internals: two Extract Class refactors, both to seams that already existed
+  as fields.** `Ledger` was three raw dicts on the annotator, and `describe` now
+  depends on its interface rather than on the annotator's privates. `OwningThread`
+  was the thread guard, and `describe` needs the same rule for a different
+  reason — it makes six kinds of trip into the Tcl interpreter per widget, and
+  doing that from a foreign thread corrupts it quietly — but could not inherit
+  it from the annotator, because on an unsupported Tk the annotator is an
+  `InertAnnotator` whose entire job is to refuse nothing. `enable(root,
+  roles=...)`'s merged table is now read by the report as well, so a caller who
+  has already added a role for their canvas is never told to go and add one.
+
 ## 0.2.1 — 2026-07-26
 
 Bug fixes and documentation. No new API.
