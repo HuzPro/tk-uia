@@ -133,6 +133,7 @@ takes one line:
 | `set_automation_id(widget, number)` | An explicit, stable id for a test suite to pin to. |
 | `add_acc_object(widget)` | Annotate one widget by hand, re-reading its `-text` — which is how a name is un-staled after `config(text=…)`. |
 | `forget(widget)` | Take every annotation back off a widget, and stop following any variable bound to it. |
+| `describe(root)` | Say what this application has told Windows about its widgets, and name every widget it did not. |
 | `check_screenreader()` | Whether Windows believes something is reading the screen aloud. |
 
 `enable()` **returns** its strategy rather than logging it, because "annotated"
@@ -322,6 +323,123 @@ is out of the picture entirely.
   would be paid again on every repaint, forever, for no change to what a client
   reads.
 
+## What your own application tells Windows
+
+Every caveat above is general. `describe(root)` is those caveats applied to
+*your* window, naming the widgets by their Tk paths:
+
+```python
+tk_uia.enable(root)
+...
+print(tk_uia.describe(root))     # the report
+tk_uia.describe(root).widgets    # the same thing, as data
+```
+
+It walks the live widget tree and reads tk-uia's own annotation ledger. It does
+**not** touch UI Automation, does not import `uiautomation`, and reads nothing
+back from Windows — runtime dependencies stay at zero, which is what lets you
+leave this call in a production application.
+
+Run `python probes/what_your_app_tells_windows.py` for the whole thing. Abridged
+(a deliberately mixed window: classic `tk` and `ttk`, a canvas, a listbox, a
+notebook, a frame that is never packed, a second toplevel):
+
+```
+tk-uia 0.3.0 -- what this application has told Windows it is showing
+enable() reported ANNOTATED. 18 widgets under .: 12 written to, 6 not.
+
+WIDGET              CLASS      ROLE                NAME         VALUE               ID
+------------------  ---------  ------------------  -----------  ------------------  ----
+.                   Tk         -                   -            -                   -
+.!label             Label      STATIC_TEXT (41)    'Task list'  -                   -
+.!button            Button     PUSH_BUTTON (43)    'New Task'   -                   4207
+    also written: DESCRIPTION='creates a task and clears the form'
+.!entry             Entry      TEXT (42)           -            -                   -
+.!entry2            Entry      TEXT (42)           'Title'      'Write the report'  -
+    kept in step with a variable: value
+.!label2            Label      STATIC_TEXT (41)    'ready'      -                   -
+    kept in step with a variable: name
+.!canvas            Canvas     -                   -            -                   -
+.!listbox           Listbox    LIST (33)           -            -                   -
+...
+
+WHAT A CLIENT WILL NOT GET, AND WHY
+
+  NEVER_MAPPED  (3)
+    nothing was written: Tk has never mapped it, so <Map> never fired. A
+    withdrawn window, an unshown notebook tab, or a widget the geometry
+    manager could not fit.
+      .!notebook.!frame2  (TFrame)
+      .!frame  (Frame)
+      .!frame.!label  (Label)
+
+  NAME_MAY_BE_STALE  (1)
+    the name written here is not what the widget's -text says now. A plain
+    config(text=...) does not re-announce; call add_acc_object(widget), or
+    drive it from a variable and bind_text_variable it.
+      .!label3  (Label)   -text now says 'in progress'
+
+  NO_VALUE  (2)
+    no accessible value. The role gives this widget a ValuePattern it did
+    not have before, and it reads '' until something writes one -- a
+    confident wrong answer where bare Tk gave none. bind_value_variable().
+      .!entry  (Entry)
+      .!combobox  (TCombobox)
+...
+
+LEFT ALONE ON PURPOSE
+
+  NAMED_BY_ITS_TITLE  (2)
+    a window, and `wm title` already gives it a correct accessible name.
+    ...
+
+Everything above is what tk-uia believes it wrote. It is not evidence that
+a client can read it: IAccPropServices accepts a write to a window handle
+nobody owns, answers S_OK, and changes nothing. Reading the same window
+back from another process is the only thing that proves the bridge carried
+it.
+```
+
+**`NEVER_MAPPED` is the line to read first, and it was the surprise.** That
+window sets a fixed `geometry()`, and the Tk packer silently drops whatever it
+cannot fit: `<Map>` never fires, so those widgets are invisible to accessibility
+— with no exception, no warning and nothing in any log. Four widgets in the
+probe are in that state. There is no other way to find out.
+
+Each reason is one of the caveats above, and the catalogue is closed by that
+rule: a `Gap` member has to correspond to a caveat this README already
+documents. The member *names* (`NO_VALUE`, `NEVER_MAPPED`, …) are stable — they
+are what the recipe below matches on.
+
+**A report that showed only successes would be worse than none.** On a machine
+where `enable()` returned `NATIVE` or `UNSUPPORTED`, nothing is annotated at
+all, and a report of what went right would render as a blank page an author
+could read as a clean bill of health. So the strategy is the first line, before
+a single row, and every widget is listed as unwritten.
+
+**Nothing here is verification, and the report says so itself.** It reports what
+tk-uia *believes* it wrote. `IAccPropServices` accepts a write to a window handle
+nobody owns, answers `S_OK`, and changes nothing — so "we wrote it" and "a client
+can read it" are different claims, and only the first is in this report.
+`check_screenreader()` answers a different question again ("is anything even
+listening?") and is deliberately not folded in.
+
+### Closing the gap: compare it with what a client sees
+
+Run `tk_uia.describe(root)` inside your application and a client-side dump —
+[pytest-uia](https://github.com/HuzPro/pytest-uia)'s, or your own `uiautomation`
+walk — from outside it. Every widget the first says it named must appear in the
+second with that name; every widget the first reports as unwritten must appear
+anonymous. Anything that disagrees is a write that returned `S_OK` and went
+nowhere.
+
+The script that does the comparison spans two repositories, so it stays a recipe
+rather than becoming a feature in either. The most valuable half of it is
+guarded here:
+`tests/test_gui_description.py::test_every_name_the_description_says_it_wrote_is_a_name_a_client_in_another_process_can_read`
+reads the description out of a live fixture app and checks every name it claims
+against the real UI Automation tree.
+
 ## The forward path: this library is deliberately temporary
 
 **TIP 733 is Final, and lands in Tk 9.1.** `win/tkWinAccessibility.c` is merged;
@@ -391,7 +509,7 @@ reproducible by running `probes/what_enable_alone_gives_you.py`.
 | Annotated `Checkbutton` `ToggleState` | `1`, then `0` when the application set its variable to 0 — correct, and live, with no call to this package |
 | Write trace left on a `StringVar` after its bound widget is destroyed | **0** (`trace_info()` read inside the app) |
 | `enable()` runtime dependencies | **0**, permanently |
-| gui suite (10 specs, a real window each) | ~8.5 s |
+| gui suite (12 specs, a real window each) | ~10 s |
 
 The `ProviderDescription` line is the useful one for anybody writing a UIA
 client: a Tk window is served by the MSAA proxy but reports `FrameworkId`
@@ -406,6 +524,14 @@ reader consumes, which makes it the right boundary to have reached first — but
 **"NVDA can read this tree" and "NVDA says the right thing at the right moment"
 are different claims, and only the first is evidenced here.** Nothing in this
 repository has been heard out loud.
+
+**`describe(root)` does not move a single checkbox in this list, and it is worth
+being clear why.** It reports what this library *believes* it wrote, which is
+strictly *less* verified than the cross-process readback the gui specs already
+do. Comparing that belief against what a client sees is a real and useful
+mechanism — it is what exposes an annotation that returned `S_OK` and went
+nowhere — but it is a different and lesser thing than hearing a screen reader
+say the right words at the right moment. Two gaps, both still open.
 
 The gap matters because the failures it would catch are ones a tree assertion
 cannot see: a name that is correct but announced at the wrong moment, a role
@@ -456,7 +582,7 @@ py -m venv .venv
 uv pip install -e ".[dev]"        # or: pip install -e ".[dev]"
 
 pytest -m "not gui" -q            # instant; no windows, runs on any platform
-pytest -m gui -q                  # launches a real Tk window, ten times
+pytest -m gui -q                  # launches a real Tk window, twelve times
 pytest -q                         # everything
 
 ruff check src tests probes
@@ -492,7 +618,7 @@ wsl -- bash -lc 'cd /mnt/c/…/tk-uia \
   && PYTHONPATH=src:.venv/Lib/site-packages python3 -m pytest -q'
 ```
 
-Either way the ten gui specs are not collected at all — `collect_ignore_glob`
+Either way the twelve gui specs are not collected at all — `collect_ignore_glob`
 in `tests/conftest.py` drops `test_gui_*.py` off Windows, because a `skipif`
 marks a test but cannot stop pytest importing the module carrying it. The one
 Windows-only unit spec (`tests/test_com_diagnostics.py`, which asks what an
@@ -513,12 +639,18 @@ and CI does not run them; they print measurements.
 
 ```powershell
 python probes/what_enable_alone_gives_you.py
+python probes/what_your_app_tells_windows.py
 ```
 
-That one launches a window that calls `enable(root)` and deliberately says
+The first launches a window that calls `enable(root)` and deliberately says
 nothing else, then reads it back from this process — which is where the empty
 ValuePattern, the stale name after `config(text=…)`, the disabled button that
 reads as enabled, and the checkbox state that is right all along come from.
+
+The second builds the deliberately mixed window quoted under *What your own
+application tells Windows* and prints its description, so that every line of
+that report can be re-run rather than taken on trust. It reads nothing back and
+needs no client; it is the one probe that costs nothing but a window.
 
 ### Layout
 
@@ -527,6 +659,7 @@ src/tk_uia/
 ├── __init__.py     # the public surface; imports neither tkinter nor ctypes.windll
 ├── roles.py        # MSAA role numbers, and ROLE_FOR_TK_CLASS
 ├── annotate.py     # all the behaviour, over AccessibilityStore/TkWidget Protocols
+├── describe.py     # what was written, what was not, and why — over the same Protocols
 ├── tkversion.py    # the Tk 9.1 capability gate
 └── _accprop.py     # the ctypes/COM humble object — the only Windows in here
 probes/            # the scripts behind the measurements above; not tests
