@@ -1,5 +1,98 @@
 # Changelog
 
+## 0.2.1 — 2026-07-26
+
+Bug fixes and documentation. No new API.
+
+- **A bound variable no longer keeps firing at a widget that has gone.**
+  `bind_text_variable` and `bind_value_variable` registered a Tcl `write` trace
+  and nothing ever removed it — and a trace lives on the *variable*, which
+  routinely outlives every widget that displayed it. Reproduced against 0.2.0 in
+  a real Tk: destroy a bound label, write the variable, and Tcl raises
+  `TclError: bad window path name ".!label"` inside its own callback, where the
+  application has no call of its own to wrap it in. It lands as an unhandled
+  traceback on stderr, on every write, for the life of the process. The quieter
+  half was worse: because the trace also survived `forget()`, the next write
+  silently put the annotation back on a widget the caller had just taken away —
+  in 0.2.0, `forget()` released **none** of the traces registered on a variable.
+  `trace_add`'s return is now kept per widget and handed back to `trace_remove`
+  in `forget()`, which is where `<Destroy>` already routes. A liveness check
+  inside the announce closure (`winfo_exists`, which answers `0` rather than
+  raising for a path Tk no longer has) is the second line, for a widget that
+  dies by a route which never reaches `forget` — but removal is the fix, since a
+  guard alone would leave the registration on the variable forever. Three
+  specs, one of them a gui spec that reads the application's own
+  `trace_info()` count out of the window through UI Automation and watches it go
+  from `1` to `0`.
+
+- **`enable()` is idempotent.** A second call used to stack a second pair of
+  `<Map>`/`<Destroy>` bindings over the first (`[<Map>+, <Destroy>+, <Map>+,
+  <Destroy>+]`), leaving a stale annotator auto-annotating widgets that
+  `forget()` — which reached only the newest — could no longer take back, and
+  leaking one never-released `IAccPropServices` per call. It now reports what
+  the first call did and installs nothing further. That is not a compromise:
+  the bindings go on the `all` bindtag, so one installation already covers every
+  window the application will open.
+
+- **The thread guard fires before Tk is touched, not after.** `add()` asked the
+  widget for `winfo_class()`, `keys()` and `cget()` — three trips into the Tcl
+  interpreter — and only then let `_write` refuse a caller from the wrong
+  thread. So the spec that claimed to prove the store was protected was passing
+  while Tk had already been poked from the wrong thread, which is the half that
+  corrupts rather than merely misplaces. The refusal moved to the top of `add`,
+  and the widget double now refuses a foreign caller itself, so the spec fails
+  if anything reaches Tk first. It is deliberately stricter than Tk, which
+  mostly answers and corrupts quietly instead.
+
+- **A failing COM call says which call failed.** Every prototype declared
+  `ctypes.HRESULT` as its `restype`, which looks like the honest choice and is
+  the wrong one: ctypes raises an `OSError` of its own on any negative HRESULT
+  *before* the caller sees the value, so `_checked` never ran and the carefully
+  built `SetHwndPropStr(NAME)` context was unreachable code. Measured, the
+  message an application got was a bare `[WinError -2147024891] Access is
+  denied` with no way to tell which of eleven identical-looking annotation calls
+  refused. Read as a plain `c_long` the code reaches `_checked`, which now
+  reports `SetHwndPropStr(NAME) failed 0x80070005` — and also catches the
+  positive non-`S_OK` answers that `ctypes.HRESULT` waves through as success.
+
+- **Naming a window by hand is refused.** The rule that toplevels are left to
+  `wm title` guarded only the automatic path; `set_acc_name(root, …)` walked
+  straight past it. `winfo_id()` on a toplevel answers with the container child
+  Tk puts every widget under, so the name landed on an inner pane while the
+  window itself stayed unnamed — a confident wrong answer, and the failure mode
+  this package exists to refuse. It now raises `AnnotationRefused` and says
+  where a window's accessible name really comes from.
+
+- **The README stops overclaiming, which matters more here than elsewhere: an
+  accessibility library that oversells misleads exactly the people who depend on
+  it.** The headline said *"One call fixes it"*; measured, after `enable()`
+  alone an entry displaying `buy milk` is an `EditControl` whose ValuePattern
+  reads `''` — a confidently wrong answer where bare Tk gave no answer at all.
+  It now says what the project can prove: **one call makes it findable and
+  readable.** The quickstart table gained a column separating what `enable()`
+  does on its own from what takes another line, because its `Entry` row was
+  quietly showing the result of two extra hand-written calls. Three gaps that
+  were undocumented or buried are now caveats beside the `Invoke` limitation:
+  a name goes stale after `config(text=…)` until `add_acc_object(widget)`
+  re-reads it (`bind_text_variable` being the durable answer); a
+  `tk.Button(state=DISABLED)` reads back `IsEnabled=True` and no state is ever
+  tracked; and compound-widget items — `Listbox` rows, `Treeview` items,
+  `Notebook` tabs — are not in the tree at all. One claim did **not** survive
+  measurement and is documented as working rather than broken: an annotated
+  `Checkbutton`'s `ToggleState` is correct *and follows its variable* with no
+  call to this package, so the state gap is really about disabled, selected and
+  read-only. Also: a CI badge, ten public functions that no longer answer
+  `help()` with nothing, and the last two `v0.1` strings.
+
+- **`probes/` ships the scripts behind the numbers.** Several measurements in
+  the README were made out-of-band, which is an odd thing for a project whose
+  whole argument is falsifiability.
+  `probes/what_enable_alone_gives_you.py` launches a window that calls
+  `enable(root)` and deliberately says nothing else, reads it back from another
+  process, and prints the empty ValuePattern, the stale name, the disabled
+  button that reads as enabled and the checkbox state that was right all along.
+  A reader who doubts a row can now re-run it instead of taking it on trust.
+
 ## 0.2.0 — 2026-07-26
 
 - **`bind_value_variable(widget, variable)` keeps a widget's accessible value in
