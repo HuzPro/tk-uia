@@ -30,7 +30,7 @@ from tk_uia.tkversion import Strategy
 if TYPE_CHECKING:
     import tkinter
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0"
 
 __all__ = [
     "ROLE_FOR_TK_CLASS",

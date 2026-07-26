@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install "ruff==0.16.*"
+      - run: ruff check src tests
+      - run: ruff format --check src tests
+
+  # The `gui` suite launches a real Tk window and reads it back through UI
+  # Automation, so it needs an interactive Windows desktop and is local-only
+  # (see ROADMAP). What runs here is everything else, on both platforms.
+  #
+  # The Ubuntu lane is the meaningful one: this package is installed at runtime
+  # inside somebody else's application, and it claims to cost that application
+  # nothing and to import anywhere. A Linux CPython has no `ctypes.windll` and
+  # is not guaranteed to carry `_tkinter` at all, so a lane that imports the
+  # package and runs its whole unit suite there is what keeps that claim true.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -m "not gui" -q
