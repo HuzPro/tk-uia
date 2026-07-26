@@ -1,0 +1,129 @@
+"""Behavioral spec for putting the annotator in the path of a running Tk.
+
+Two halves, and both are needed: a binding for everything Tk maps from now on,
+and a sweep of everything already on screen. `<Map>` fires once per widget, on
+the way up — a window that is already showing when `enable()` is called will
+never fire it again, and without the sweep those widgets stay anonymous forever.
+"""
+
+from __future__ import annotations
+
+from tests.doubles import FakeInterpreter, FakeRoot, FakeWidget, RecordingStore
+from tk_uia.annotate import PropId, install
+from tk_uia.tkversion import Strategy
+
+_A_BUTTON_HANDLE = 0x000407A2
+_A_LABEL_HANDLE = 0x000407A5
+
+
+def _a_tk_that_needs_annotating() -> FakeInterpreter:
+    return FakeInterpreter("8.6.15", "win32", native=False)
+
+
+def test_enabling_accessibility_on_tk_eight_six_installs_the_class_bindings_and_reports_it() -> (
+    None
+):
+    # Given a window that is already on screen when accessibility is switched on
+    store = RecordingStore()
+    already_showing = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(_a_tk_that_needs_annotating(), children=[already_showing])
+
+    # When it is switched on
+    installation = install(root, store)
+
+    # Then the caller is told which of the three things happened, which is the
+    # only way a suite can tell "annotated" from "the gate mis-fired and this
+    # did nothing at all"
+    assert installation.strategy is Strategy.ANNOTATED, (
+        f"reported {installation.strategy} for a Tk that has no accessibility"
+    )
+
+    # And Tk will hand over every widget it maps or destroys from here on,
+    # without displacing the bindings Tk and the application already have
+    assert root.class_bindings == [("<Map>", "+"), ("<Destroy>", "+")], (
+        f"bound {root.class_bindings}; anything but `add='+'` silently replaces "
+        "whatever else was listening for the same event"
+    )
+
+    # And the widget that was already up has been annotated, because its own
+    # `<Map>` came and went before any of this was listening
+    assert store.properties(_A_BUTTON_HANDLE)[PropId.NAME] == "New Task", (
+        "every widget on screen at the moment enable() is called stays anonymous"
+    )
+
+
+def test_a_widget_mapped_after_enabling_is_annotated_as_soon_as_tk_says_so() -> None:
+    # Given accessibility already switched on for an empty window
+    store = RecordingStore()
+    root = FakeRoot(_a_tk_that_needs_annotating())
+    install(root, store)
+    label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
+
+    # When Tk maps a new widget
+    root.announce("<Map>", label)
+
+    # Then it announces itself without the application having to say anything
+    assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "ready", (
+        "a widget added after startup never became visible to a client"
+    )
+
+
+def test_a_widget_destroyed_after_enabling_gives_its_handle_back_clean() -> None:
+    # Given a widget that has been mapped and annotated
+    store = RecordingStore()
+    root = FakeRoot(_a_tk_that_needs_annotating())
+    install(root, store)
+    label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
+    root.announce("<Map>", label)
+
+    # When Tk destroys it, passing only the path — which is all `<Destroy>`
+    # carries once the widget object has already gone
+    root.announce("<Destroy>", str(label))
+
+    # Then the handle is released, so whatever Windows issues it to next is not
+    # wearing a dead label's name
+    assert store.cleared == [_A_LABEL_HANDLE], (
+        f"the destroyed widget's handle was left annotated: cleared {store.cleared}"
+    )
+
+
+def test_a_tk_that_answers_for_itself_is_neither_bound_to_nor_written_to() -> None:
+    # Given a Tk 9.1 with its own accessibility, and a widget on screen
+    store = RecordingStore()
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(FakeInterpreter("9.1.0", "win32", native=True), children=[button])
+
+    # When accessibility is switched on
+    installation = install(root, store)
+
+    # Then nothing is bound and nothing is written. Standing aside has to mean
+    # standing aside: a binding left in place would keep annotating over an
+    # implementation that is already answering correctly.
+    assert installation.strategy is Strategy.NATIVE
+    assert root.class_bindings == [], f"bound anyway: {root.class_bindings}"
+    assert store.writes == [], f"annotated over a native Tk: {store.writes}"
+
+
+def test_the_whole_surface_can_still_be_called_where_there_is_nothing_to_annotate() -> (
+    None
+):
+    # Given an application on X11, which calls the same code as on Windows
+    store = RecordingStore()
+    root = FakeRoot(FakeInterpreter("8.6.15", "x11", native=False))
+    installation = install(root, store)
+
+    # When it goes on to say the things it would say on Windows
+    label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
+    installation.annotator.add(label)
+    installation.annotator.set_name(label, "ready")
+    installation.annotator.set_value(label, "ready")
+    installation.annotator.set_automation_id(label, 4207)
+    installation.annotator.forget(label)
+
+    # Then every one of them is a no-op rather than an error. An application
+    # that has to guard each call in a platform check will get one of them
+    # wrong, and the failure will only ever show up on the other platform.
+    assert installation.strategy is Strategy.UNSUPPORTED
+    assert store.writes == [], (
+        f"reached for MSAA on a machine without it: {store.writes}"
+    )

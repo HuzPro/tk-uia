@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tk-uia"
+dynamic = ["version"]
+description = "Make Tkinter widgets visible to Windows accessibility clients: screen readers and UI Automation see named, correctly-roled controls instead of anonymous panes."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "HuzPro" }]
+keywords = [
+    "tkinter",
+    "tk",
+    "accessibility",
+    "a11y",
+    "screen-reader",
+    "nvda",
+    "msaa",
+    "ui-automation",
+    "uia",
+    "windows",
+    "gui-testing",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Adaptive Technologies",
+    "Topic :: Software Development :: User Interfaces",
+    "Typing :: Typed",
+]
+# Permanently empty, and that is a feature: this is installed at runtime inside
+# somebody else's application, which must not inherit a test tool's dependency
+# tree to make its buttons announceable.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "ruff==0.16.*"]
+
+[project.urls]
+Homepage = "https://github.com/HuzPro/tk-uia"
+Documentation = "https://github.com/HuzPro/tk-uia#readme"
+Source = "https://github.com/HuzPro/tk-uia"
+Issues = "https://github.com/HuzPro/tk-uia/issues"
+Changelog = "https://github.com/HuzPro/tk-uia/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "src/tk_uia/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tk_uia"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+src = ["src", "tests"]
