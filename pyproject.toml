@@ -42,7 +42,15 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4", "ruff==0.16.*"]
+# `uiautomation` is the client the gui specs read the annotations back with, from
+# a separate process. It is a dev dependency and must never become a runtime one:
+# this package's whole claim is that an application can install it and inherit
+# nothing.
+dev = [
+    "pytest>=7.4",
+    "ruff==0.16.*",
+    "uiautomation>=2.0; sys_platform == 'win32'",
+]
 
 [project.urls]
 Homepage = "https://github.com/HuzPro/tk-uia"
@@ -59,6 +67,9 @@ packages = ["src/tk_uia"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "gui: drives a real Tk window on the real desktop and reads it back through UI Automation",
+]
 
 [tool.ruff]
 target-version = "py310"

@@ -1,21 +1,122 @@
-"""Keeps the specs independent of each other despite one module-level variable.
+"""Keeps the specs independent of each other, and launches the one real window.
 
 `enable()` records what it installed on the package, because the surface an
 application calls is `tk_uia.set_acc_name(widget, ...)` and not a handle it has
 to carry around. That state is the one thing in the package a spec can leave
 behind for the next one, so it is put back after every one of them.
+
+The rest of this file belongs to the gui specs: the fixture application is
+launched into a process of its own and handed back as the window a UI
+Automation client sees, because an annotation read back inside the process that
+wrote it proves nothing about the bridge to UI Automation.
 """
 
 from __future__ import annotations
 
+import subprocess
+import sys
+import uuid
 from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 import tk_uia
+
+FIXTURE_APPS = Path(__file__).parent / "fixture_apps"
+
+# A `skipif` marks a test; it cannot stop pytest importing the module carrying
+# it. The gui specs reach `uiautomation` and the Tk fixture app at module scope,
+# and both are Windows-only — `uiautomation` is a win32-marked dev dependency,
+# and a Linux CPython is not guaranteed to carry `_tkinter` at all. So off
+# Windows they are not collected, otherwise the lane whose entire job is to
+# prove this package needs neither dies during collection instead.
+collect_ignore_glob = [] if sys.platform == "win32" else ["test_gui_*.py"]
+
+# Tk paints in well under a second here; the rest is the interpreter starting.
+_READY_TIMEOUT_SECONDS = 20.0
+_HOW_OFTEN_TO_LOOK_FOR_THE_WINDOW = 0.2
+
+_TOP_LEVEL_WINDOWS = 1
+
+_SHUTDOWN_GRACE_SECONDS = 10.0
+
+# Deliberately `sys.executable`, which inside a virtual environment on Windows
+# is a copy of CPython's venvlauncher: it starts the real interpreter as a
+# *child* and waits for it, so the pid a launch reports owns no window and
+# terminating it leaves the window behind. Hence a tree kill at teardown, and a
+# window found by a title nothing else can be wearing rather than by pid.
+_INTERPRETER = sys.executable
+
+
+@dataclass(frozen=True)
+class RunningApp:
+    """The fixture application on screen, as a spec talks to it."""
+
+    # `uiautomation.WindowControl`, untyped here because this module is imported
+    # on platforms where there is no `uiautomation` to name.
+    window: Any
+    commands: Path
+
+    def ask_for(self, command: str) -> None:
+        """Have the application do something to itself, and say when it did.
+
+        A dropped file rather than a click, because a click is the one thing a
+        UI Automation client cannot make a Tk button feel — the limitation
+        `test_an_annotated_button_still_cannot_be_pressed_through_its_invoke_pattern`
+        exists to pin down. A spec that drove this channel with the mouse would
+        be asserting on the very thing it is trying to measure.
+        """
+        (self.commands / command).write_text("", encoding="utf-8")
 
 
 @pytest.fixture(autouse=True)
 def a_package_that_has_not_been_enabled_yet() -> Iterator[None]:
     yield
     tk_uia._installed = None
+
+
+@pytest.fixture
+def annotated_app(tmp_path: Path) -> Iterator[RunningApp]:
+    """The self-annotating Tk app, up and painted, in a process of its own."""
+    # Imported inside the fixture rather than at module scope: conftest is
+    # imported on every platform, including the one with no `uiautomation`.
+    import uiautomation as auto
+
+    title = f"tk-uia fixture {uuid.uuid4()}"
+    app = subprocess.Popen(
+        [_INTERPRETER, str(FIXTURE_APPS / "annotated_app.py"), title, str(tmp_path)],
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        window = auto.WindowControl(searchDepth=_TOP_LEVEL_WINDOWS, Name=title)
+        if not window.Exists(_READY_TIMEOUT_SECONDS, _HOW_OFTEN_TO_LOOK_FOR_THE_WINDOW):
+            pytest.fail(_why_no_window_appeared(app, title))
+        yield RunningApp(window, tmp_path)
+    finally:
+        _killed_with_its_children(app)
+
+
+def _why_no_window_appeared(app: subprocess.Popen[str], title: str) -> str:
+    if app.poll() is None:
+        return (
+            f"no window titled {title!r} appeared within "
+            f"{_READY_TIMEOUT_SECONDS:.0f}s, and the fixture app is still running"
+        )
+    # It refused to start, and the reason it printed is the only useful thing
+    # left — most likely `enable()` reporting a strategy other than ANNOTATED.
+    return (
+        f"the fixture app exited {app.returncode} before painting:\n{app.stderr.read()}"
+    )
+
+
+def _killed_with_its_children(app: subprocess.Popen[str]) -> None:
+    subprocess.run(
+        ["taskkill", "/T", "/F", "/PID", str(app.pid)],
+        capture_output=True,
+        check=False,
+    )
+    app.wait(timeout=_SHUTDOWN_GRACE_SECONDS)
