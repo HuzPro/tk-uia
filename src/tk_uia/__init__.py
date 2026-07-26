@@ -30,7 +30,7 @@ from tk_uia.tkversion import Strategy
 if TYPE_CHECKING:
     import tkinter
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "ROLE_FOR_TK_CLASS",
@@ -40,6 +40,7 @@ __all__ = [
     "__version__",
     "add_acc_object",
     "bind_text_variable",
+    "bind_value_variable",
     "check_screenreader",
     "enable",
     "forget",
@@ -102,6 +103,11 @@ def set_acc_state(widget: tkinter.Misc, state: int) -> None:
 def bind_text_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> None:
     """Keep a widget's accessible name in step with the variable it displays."""
     _annotator().bind_text_variable(widget, variable)
+
+
+def bind_value_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> None:
+    """Keep a widget's accessible value in step with the variable it holds."""
+    _annotator().bind_value_variable(widget, variable)
 
 
 def set_automation_id(widget: tkinter.Misc, automation_id: int) -> None:

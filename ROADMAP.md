@@ -50,8 +50,9 @@ and a package that costs an application nothing to install.
   main outstanding piece of work, and it is blocked on Tk 9.1 being installable
   rather than on any open design question.
 - **`IAccPropServer` for dynamic properties.** Everything today is *pushed*: a
-  value is written when the application says so, and `bind_text_variable` exists
-  precisely because otherwise a status line goes stale. An `IAccPropServer` is
+  value is written when the application says so, and `bind_text_variable` and
+  `bind_value_variable` exist precisely because otherwise a status line and an
+  entry go stale between one write and the next. An `IAccPropServer` is
   *pulled* — the client asks, and the application answers with the current
   truth. That removes the whole class of "the tree says something the window
   stopped showing", and it is the right shape for a listbox or a treeview, whose

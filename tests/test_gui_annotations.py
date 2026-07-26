@@ -33,6 +33,8 @@ from tests.fixture_apps.annotated_app import (
     NEW_TASK_NUMBER,
     PRESS_THE_BUTTON,
     READY,
+    REVISE_THE_DRAFT,
+    REVISION,
     SCRATCH,
     TASK_CREATED,
     TITLE,
@@ -235,7 +237,7 @@ def test_clearing_a_widgets_annotations_returns_it_to_looking_anonymous(
     )
 
 
-def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_it(
+def test_a_name_bound_to_a_tk_variable_follows_it_when_the_application_changes_it(
     annotated_app: RunningApp,
 ) -> None:
     # Given a status label showing a Tk variable, and saying so to a client
@@ -257,6 +259,35 @@ def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_
         (_TEXT, TASK_CREATED),
         f"the status label still does not read {TASK_CREATED!r}, so the "
         "binding stopped following the variable after the first write",
+    )
+
+
+def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_it(
+    annotated_app: RunningApp,
+) -> None:
+    # Given the entry whose contents come from a Tk variable, reading back to a
+    # client as the words the application started it with
+    import uiautomation as auto
+
+    entry = auto.EditControl(searchFromControl=annotated_app.window, Name=TITLE)
+    at_rest = entry.GetValuePattern().Value
+
+    assert at_rest == DRAFT, (
+        f"the entry never took its value from the variable it displays: {at_rest!r}"
+    )
+
+    # When the application rewrites that variable, and says nothing to this
+    # package about it
+    annotated_app.ask_for(REVISE_THE_DRAFT)
+
+    # Then what a client reads out of the edit control follows. A value is the
+    # property a screen reader and a test tool re-read most, and a stale one is
+    # indistinguishable from a true one: the box on screen shows the new words
+    # while the tree goes on answering with the old ones.
+    _eventually(
+        lambda: entry.GetValuePattern().Value == REVISION,
+        f"the entry still reads {DRAFT!r} rather than {REVISION!r}, so the "
+        "binding never followed the variable it was bound to",
     )
 
 

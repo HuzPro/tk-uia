@@ -174,11 +174,14 @@ class Annotator:
         # A `textvariable` widget has no `-text` to infer from, so the widget
         # whose entire job is to say what just happened is the one widget that
         # would otherwise say nothing.
-        variable.trace_add(
-            _A_WRITE,
-            lambda *_: self.set_name(widget, _whatever_the_variable_holds(variable)),
-        )
-        self.set_name(widget, _whatever_the_variable_holds(variable))
+        _keep_in_step_with(variable, lambda words: self.set_name(widget, words))
+
+    def bind_value_variable(self, widget: TkWidget, variable: TkVariable) -> None:
+        # The contents of an entry are not on the widget to be read back — they
+        # are in the variable, and only the application knows when it moved. So
+        # the property a client re-reads more than any other is the one nothing
+        # here can keep true on its own.
+        _keep_in_step_with(variable, lambda contents: self.set_value(widget, contents))
 
     def set_automation_id(self, widget: TkWidget, automation_id: int) -> None:
         self._refuse_a_caller_from_another_thread()
@@ -270,6 +273,8 @@ class InertAnnotator:
 
     def bind_text_variable(self, widget: TkWidget, variable: TkVariable) -> None: ...
 
+    def bind_value_variable(self, widget: TkWidget, variable: TkVariable) -> None: ...
+
     def set_role(self, widget: TkWidget, role: Role) -> None: ...
 
     def set_name(self, widget: TkWidget, name: str) -> None: ...
@@ -350,6 +355,17 @@ def _annotate_if_there_is_still_a_widget(
         # resolve one, and a path answers no question worth asking here.
         return
     annotator.add(widget)
+
+
+def _keep_in_step_with(variable: TkVariable, announce: Callable[[str], None]) -> None:
+    # Said once here as well as on every write from now on: a trace fires on the
+    # *next* change and never for the one already made, so a binding that only
+    # traced would leave the widget announcing whatever it was annotated with
+    # before the variable existed — for most widgets, nothing at all.
+    variable.trace_add(
+        _A_WRITE, lambda *_: announce(_whatever_the_variable_holds(variable))
+    )
+    announce(_whatever_the_variable_holds(variable))
 
 
 def _whatever_the_variable_holds(variable: TkVariable) -> str:

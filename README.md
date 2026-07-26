@@ -106,6 +106,7 @@ takes one line:
 | `set_acc_name(widget, name)` | The name a screen reader announces. Needed for anything with no `-text`. |
 | `set_acc_value(widget, value)` | What a client reads out of an edit control. |
 | `bind_text_variable(widget, variable)` | Keep the name in step with a `StringVar`, so a status line stays truthful. |
+| `bind_value_variable(widget, variable)` | Keep the value in step with a `StringVar`, so an entry never reads back what it used to hold. |
 | `set_acc_role(widget, Role.…)` | Override the inferred role. |
 | `set_acc_description` / `set_acc_help` / `set_acc_action` / `set_acc_state` | The rest of the MSAA properties. |
 | `set_automation_id(widget, number)` | An explicit, stable id for a test suite to pin to. |
@@ -323,7 +324,7 @@ Windows 11, Python 3.13.1, **Tk 8.6.15**, read from a separate process through
 | `LegacyIAccessible.DoDefaultAction()` | returns cleanly; press counter unchanged |
 | Hit-testing after annotation | `ElementFromPoint` identical before and after, 8/8 widgets |
 | `enable()` runtime dependencies | **0**, permanently |
-| gui suite (8 specs, a real window each) | ~7 s |
+| gui suite (9 specs, a real window each) | ~8 s |
 
 The `ProviderDescription` line is the useful one for anybody writing a UIA
 client: a Tk window is served by the MSAA proxy but reports `FrameworkId`
@@ -341,7 +342,7 @@ py -m venv .venv
 uv pip install -e ".[dev]"        # or: pip install -e ".[dev]"
 
 pytest -m "not gui" -q            # instant; no windows, runs on any platform
-pytest -m gui -q                  # launches a real Tk window, eight times
+pytest -m gui -q                  # launches a real Tk window, nine times
 pytest -q                         # everything
 
 ruff check src tests
@@ -374,7 +375,7 @@ wsl -- bash -lc 'cd /mnt/c/…/tk-uia \
   && PYTHONPATH=src:.venv/Lib/site-packages python3 -m pytest -q'
 ```
 
-Either way the eight gui specs are not collected at all — `collect_ignore_glob`
+Either way the nine gui specs are not collected at all — `collect_ignore_glob`
 in `tests/conftest.py` drops `test_gui_*.py` off Windows, because a `skipif`
 marks a test but cannot stop pytest importing the module carrying it.
 

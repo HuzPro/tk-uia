@@ -12,7 +12,7 @@ import sys
 import pytest
 
 import tk_uia
-from tests.doubles import FakeInterpreter, FakeRoot, FakeWidget
+from tests.doubles import FakeInterpreter, FakeRoot, FakeVariable, FakeWidget
 from tk_uia import Strategy
 from tk_uia.annotate import AnnotationRefused
 
@@ -26,12 +26,15 @@ def test_switching_accessibility_on_where_there_is_none_says_so_and_stays_callab
     # Given the same application, running somewhere MSAA does not exist
     root = FakeRoot(FakeInterpreter("8.6.15", "x11", native=False))
     label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
+    status = FakeVariable("ready")
 
     # When it switches accessibility on and then says everything it would say
     strategy = tk_uia.enable(root)
     tk_uia.add_acc_object(label)
     tk_uia.set_acc_name(label, "status")
     tk_uia.set_acc_value(label, "ready")
+    tk_uia.bind_text_variable(label, status)
+    tk_uia.bind_value_variable(label, status)
     tk_uia.set_automation_id(label, _AN_ID_THE_APPLICATION_CHOSE)
     tk_uia.forget(label)
 

@@ -33,6 +33,7 @@ NEW_TASK = "New Task"
 HEADLINE = "Task list"
 TITLE = "Title"
 DRAFT = "Write the report"
+REVISION = "Write the quarterly report"
 DISPOSABLE = "Disposable"
 SCRATCH = "Scratch"
 READY = "ready"
@@ -45,6 +46,7 @@ NEW_TASK_NUMBER = 4207
 
 FORGET_THE_DISPOSABLE_WIDGETS = "forget"
 ADVANCE_THE_STATUS = "advance"
+REVISE_THE_DRAFT = "revise"
 PRESS_THE_BUTTON = "press"
 
 _HOW_OFTEN_TO_CHECK_FOR_A_COMMAND_MS = 50
@@ -65,6 +67,7 @@ class Widgets:
     new_task: tk.Button
     pressed: tk.StringVar
     tally: tk.Label
+    draft: tk.StringVar
     title_entry: tk.Entry
     status: tk.StringVar
     status_label: tk.Label
@@ -114,12 +117,15 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     # the same call that annotated everything around it.
     tk.Canvas(root, width=200, height=40).pack(pady=10)
 
+    draft = tk.StringVar(value=DRAFT)
+
     return Widgets(
         root=root,
         new_task=new_task,
         pressed=pressed,
         tally=tally,
-        title_entry=_an_entry_holding_a_draft(root),
+        draft=draft,
+        title_entry=_an_entry_holding_a_draft(root, draft),
         status=status,
         status_label=status_label,
         disposable_label=disposable_label,
@@ -127,14 +133,13 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     )
 
 
-def _an_entry_holding_a_draft(root: tk.Tk) -> tk.Entry:
+def _an_entry_holding_a_draft(root: tk.Tk, draft: tk.StringVar) -> tk.Entry:
     # A frame deep on purpose: `enable()`'s sweep of what is already on screen
     # has to descend, and a widget only reachable by recursion is the one that
     # proves it does.
     frame = tk.Frame(root)
     frame.pack(pady=10)
-    entry = tk.Entry(frame, width=30)
-    entry.insert(0, DRAFT)
+    entry = tk.Entry(frame, width=30, textvariable=draft)
     entry.pack()
     return entry
 
@@ -156,13 +161,15 @@ def _the_things_no_widget_can_say_for_itself(widgets: Widgets) -> None:
     # An entry has no `-text` to be named from, and a name invented from its Tk
     # path would be worse than none, so this is the application's job.
     tk_uia.set_acc_name(widgets.title_entry, TITLE)
-    tk_uia.set_acc_value(widgets.title_entry, DRAFT)
     tk_uia.set_acc_name(widgets.disposable_entry, SCRATCH)
     # A widget showing a `textvariable` has no `-text` either, so the two
     # widgets whose whole job is to report what just happened are the two that
     # would otherwise never say anything at all.
     tk_uia.bind_text_variable(widgets.status_label, widgets.status)
     tk_uia.bind_text_variable(widgets.tally, widgets.pressed)
+    # And what a client reads out of the entry is what is in the variable
+    # behind it, from now on rather than only at startup.
+    tk_uia.bind_value_variable(widgets.title_entry, widgets.draft)
     tk_uia.set_automation_id(widgets.new_task, NEW_TASK_NUMBER)
 
 
@@ -181,6 +188,7 @@ def _watching_for_commands(widgets: Widgets, commands: Path) -> None:
             widgets.disposable_label, widgets.disposable_entry
         ),
         ADVANCE_THE_STATUS: lambda: widgets.status.set(TASK_CREATED),
+        REVISE_THE_DRAFT: lambda: widgets.draft.set(REVISION),
         # Tk's own invoke, which really does run the command — the control that
         # stops "the counter never moved" being mistaken for "the counter could
         # never have moved".

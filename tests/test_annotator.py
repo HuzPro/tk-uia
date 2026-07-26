@@ -391,6 +391,48 @@ def test_a_widget_bound_to_a_variable_re_announces_itself_whenever_it_changes() 
     )
 
 
+def test_a_value_bound_to_a_variable_is_written_as_soon_as_it_is_bound() -> None:
+    # Given an annotated entry whose contents live in a variable
+    store = RecordingStore()
+    annotator = Annotator(store)
+    entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+    draft = FakeVariable("Write the report")
+    annotator.add(entry)
+
+    # When its value is bound to that variable
+    annotator.bind_value_variable(entry, draft)
+
+    # Then what is already in the box is readable straight away, and it is the
+    # value that carries it. A trace only fires on the *next* write, so a
+    # binding that waited for one would leave an entry announcing nothing until
+    # somebody happened to type in it.
+    assert store.properties(_AN_ENTRY_HANDLE) == {
+        PropId.ROLE: Role.TEXT.value,
+        PropId.VALUE: "Write the report",
+    }, "binding must announce what the variable already holds, into the value"
+
+
+def test_a_bound_value_follows_the_variable_when_the_application_changes_it() -> None:
+    # Given an entry whose value is already bound to the variable behind it
+    store = RecordingStore()
+    annotator = Annotator(store)
+    entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+    draft = FakeVariable("Write the report")
+    annotator.add(entry)
+    annotator.bind_value_variable(entry, draft)
+
+    # When the application puts something else in the variable
+    draft.set("Write the quarterly report")
+
+    # Then that is what a client now reads out of the edit control, with the
+    # application saying nothing further. A value is the one property a client
+    # re-reads constantly, and a stale one is indistinguishable from a true one
+    # — the widget shows the new text while the tree keeps answering the old.
+    assert store.properties(_AN_ENTRY_HANDLE)[PropId.VALUE] == (
+        "Write the quarterly report"
+    ), "the value is stuck on whatever the entry held when it was bound"
+
+
 def _the_failure_raised_on_another_thread(work: Callable[[], None]) -> BaseException:
     caught: list[BaseException] = []
 

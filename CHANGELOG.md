@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.2.0 — 2026-07-26
+
+- **`bind_value_variable(widget, variable)` keeps a widget's accessible value in
+  step with the variable behind it, exactly as `bind_text_variable` already did
+  for its name.** The symptom it removes is a stale value, which is the worst
+  way an accessibility tree can be wrong: the box on screen shows what was just
+  typed while UI Automation goes on answering with whatever was written at
+  startup, and no client can tell a stale value from a true one — a value is
+  also the property a screen reader and a test tool re-read more than any other.
+  The mechanism is the one already proven for names: a `write` trace on the
+  variable, writing `PROPID_ACC_VALUE` through the same `AccessibilityStore`
+  seam, and writing once immediately on binding, because a trace fires on the
+  *next* change and never for the one already made. What it fixes for a
+  consuming application is six lines of hand-rolled `trace_add` plus a handler
+  it has to remember to call once by hand, per entry, collapsing to
+  `tk_uia.bind_value_variable(entry, draft)`. The trace-and-say-it-now mechanism
+  common to both bindings now sits in one place, so the two read as the siblings
+  they are. Specified against the recording store and fake widgets with no Tk,
+  no display and no Windows, and proven end to end by a ninth gui spec that
+  watches a real entry's ValuePattern follow a `StringVar` from
+  `'Write the report'` to `'Write the quarterly report'`, read from another
+  process.
+
+- **The gui spec covering the *name* case is now named for the name.**
+  `test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_it`
+  always watched a status label's `Name` follow a `StringVar`, so it is now
+  `test_a_name_bound_to_a_tk_variable_follows_it_when_the_application_changes_it`
+  and the old name belongs to its value-side twin. Neither spec's assertions
+  changed. The fixture app's entry is now driven by a `StringVar` and bound with
+  the new call, so the value read cross-process is the binding's work rather
+  than a one-off `set_acc_value` at startup.
+
 ## 0.1.0 — 2026-07-26
 
 First release. A library that makes Tkinter widgets visible to Windows
