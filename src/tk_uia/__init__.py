@@ -31,19 +31,22 @@ from tk_uia.annotate import (
 )
 from tk_uia.describe import Description, Gap, WidgetDescription
 from tk_uia.describe import describe as _describe
+from tk_uia.layout import NamedByTheLayout
+from tk_uia.layout import infer_names_from_layout as _names_the_layout_implies
 from tk_uia.roles import ROLE_FOR_TK_CLASS, Role
 from tk_uia.tkversion import Strategy
 
 if TYPE_CHECKING:
     import tkinter
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "ROLE_FOR_TK_CLASS",
     "AnnotationRefused",
     "Description",
     "Gap",
+    "NamedByTheLayout",
     "Role",
     "Strategy",
     "WidgetDescription",
@@ -55,6 +58,8 @@ __all__ = [
     "describe",
     "enable",
     "forget",
+    "infer_names_from_layout",
+    "label_for",
     "set_acc_action",
     "set_acc_description",
     "set_acc_help",
@@ -71,6 +76,11 @@ _installed: Installation | None = None
 def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> Strategy:
     """Annotate this application's widgets, and say which way it went.
 
+    A widget driven by a `textvariable` is followed from here on: the widget
+    already told Tk which variable it shows, so its name — or its value, where
+    a client asks the contents of the control — stays in step with no further
+    call. Saying something yourself takes it back, permanently.
+
     Idempotent: a second call reports what the first one did and installs
     nothing further. `bind_all` binds on the `all` bindtag, so one installation
     already covers every window the application will ever open — where a second
@@ -84,6 +94,7 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
     from tk_uia._accprop import AccPropServicesStore
     from tk_uia._overlay import Win32Overlays
     from tk_uia._tkstrip import TkTabStrip, is_a_notebook
+    from tk_uia._tkvars import a_variable_the_application_owns
     from tk_uia.annotate import install
     from tk_uia.tabs import Notebooks, TabHandles
 
@@ -92,7 +103,7 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
         TabHandles(store, Win32Overlays()),
         lambda widget: TkTabStrip(widget) if is_a_notebook(widget) else None,
     )
-    _installed = install(root, store, roles, notebooks)
+    _installed = install(root, store, roles, notebooks, a_variable_the_application_owns)
     return _installed.strategy
 
 
@@ -128,6 +139,42 @@ def set_acc_name(widget: tkinter.Misc, name: str) -> None:
     `AnnotationRefused` for a toplevel, which is named by `wm title` instead.
     """
     _annotator().set_name(widget, name)
+
+
+def label_for(label: tkinter.Misc, widget: tkinter.Misc) -> None:
+    """Say that this label is the caption for that widget, and name it accordingly.
+
+    The Tk answer to Qt's `QLabel.setBuddy` and HTML's `<label for=...>`. An
+    entry has no words of its own and in Tk its caption is a *sibling* — nothing
+    in the toolkit records the relationship, so nothing can read it back. Said
+    once here, the widget answers to the label's words, without the colon a
+    caption ends with: `label_for(tk.Label(text="Host:"), entry)` names the
+    entry `'Host'`.
+
+    Where the label declares a `-textvariable`, the name follows that variable
+    from then on. Where it does not, the words are read once and go stale on the
+    next `config(text=...)`, exactly as `add_acc_object`'s do — call this again
+    to re-read them. A label showing nothing at all raises `AnnotationRefused`
+    rather than naming the widget the empty string.
+    """
+    _annotator().label_for(label, widget)
+
+
+def infer_names_from_layout(root: tkinter.Misc) -> tuple[NamedByTheLayout, ...]:
+    """Name what the layout of this window says its controls are, and report what it did.
+
+    The retrofit: every entry is named after the caption beside it, and every
+    "Browse..." button is qualified with the row it acts on. Deliberately not
+    part of `enable()` — this reads a widget's name off the widgets *around* it,
+    which Tk records nothing about, so it is a guess rather than a reading. The
+    library never guesses on its own; this is a convention you have recognised
+    in your own window and asked to have applied.
+
+    Nothing an application named itself is touched, whether it said so before
+    this call or after. What comes back is every widget this named and what it
+    called it; `describe(root)` is still the full picture.
+    """
+    return _names_the_layout_implies(root, _the_installation())
 
 
 def set_acc_value(widget: tkinter.Misc, value: str) -> None:
@@ -168,12 +215,23 @@ def set_acc_state(widget: tkinter.Misc, state: int) -> None:
 
 
 def bind_text_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> None:
-    """Keep a widget's accessible name in step with the variable it displays."""
+    """Keep a widget's accessible name in step with a variable of your choosing.
+
+    The variable a widget declares in its `-textvariable` is followed by
+    `enable()` already. This is for the widget that declares none, and for the
+    application whose announced name is not the one on screen — it replaces the
+    automatic binding rather than joining it.
+    """
     _annotator().bind_text_variable(widget, variable)
 
 
 def bind_value_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> None:
-    """Keep a widget's accessible value in step with the variable it holds."""
+    """Keep a widget's accessible value in step with a variable of your choosing.
+
+    The same override as `bind_text_variable`, for what a client reads out of an
+    edit control: needed where the entry holds its contents somewhere this
+    package cannot see, and not needed for one driven by a `textvariable`.
+    """
     _annotator().bind_value_variable(widget, variable)
 
 

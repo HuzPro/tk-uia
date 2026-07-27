@@ -16,6 +16,7 @@ would be inventing state to describe a window this module cannot read.
 from __future__ import annotations
 
 import textwrap
+from collections import Counter
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
@@ -81,6 +82,14 @@ class Gap(Enum):
         "the name written here is not what the widget's -text says now. A plain "
         "config(text=...) does not re-announce; call add_acc_object(widget), or "
         "drive it from a variable and bind_text_variable it."
+    )
+    NAME_NOT_UNIQUE = (
+        "shares its role and its accessible name with another widget in the "
+        "same window, so a client asking for it reaches one of them at random "
+        "and a screen reader announces both of them the same way. Qualify the "
+        "caption -- 'Browse... for GUI Executable' -- with set_acc_name, or let "
+        "infer_names_from_layout(root) qualify the generic ones for a whole "
+        "window at once."
     )
     NO_NAME = (
         "no accessible name, so a screen reader announces the control and not "
@@ -155,9 +164,11 @@ def describe(root: TkWidget, installation: Installation) -> Description:
     # thread corrupts it quietly rather than raising.
     installation.owner.refuse_any_other_caller()
     annotator = installation.annotator
-    widgets = tuple(
-        _described(widget, annotator.ledger, annotator.roles, installation.tabs)
-        for widget in _the_root_and_everything_under_it(root)
+    widgets = _and_whichever_of_them_a_client_cannot_tell_apart(
+        tuple(
+            _described(widget, annotator.ledger, annotator.roles, installation.tabs)
+            for widget in _the_root_and_everything_under_it(root)
+        )
     )
     return Description(
         installation.strategy,
@@ -165,6 +176,113 @@ def describe(root: TkWidget, installation: Installation) -> Description:
         widgets,
         _annotations_this_walk_never_reached(annotator.ledger, widgets),
     )
+
+
+def _and_whichever_of_them_a_client_cannot_tell_apart(
+    widgets: tuple[WidgetDescription, ...],
+) -> tuple[WidgetDescription, ...]:
+    """Add NAME_NOT_UNIQUE to every widget another widget answers to as well.
+
+    A pass of its own, after every widget has been described, because nothing
+    about a widget on its own says this: both of the "Browse..." buttons are
+    correctly typed and correctly named, and the fault is that they are named
+    the same thing. It is here rather than in the renderer so that `.widgets`
+    carries it too — the data and the page have to say the same thing, or
+    neither of them is worth reading.
+    """
+    windows = _the_windows_a_client_scopes_a_query_to(widgets)
+    asked_for = tuple(
+        _how_a_client_would_ask_for(widget, windows) for widget in widgets
+    )
+    shared = _the_queries_more_than_one_widget_answers_to(asked_for)
+    return tuple(
+        _carrying_the_ambiguity_as_well(widget) if query in shared else widget
+        for widget, query in zip(widgets, asked_for)
+    )
+
+
+def _carrying_the_ambiguity_as_well(widget: WidgetDescription) -> WidgetDescription:
+    # Appended to whatever the widget already carries rather than replacing it,
+    # which is where this differs from UNMAPPED_SINCE_ANNOTATED: two buttons a
+    # client cannot tell apart are still two buttons it cannot press, and
+    # neither of those reasons stops the other being worth acting on.
+    return replace(widget, gaps=(*widget.gaps, Gap.NAME_NOT_UNIQUE))
+
+
+@dataclass(frozen=True)
+class _WhatAClientWouldAskFor:
+    """A window, a control type and a name: the whole of an ordinary query.
+
+    Two widgets answering to one of these is the ambiguity. The window is part
+    of it because a client scopes a query to one — it resolves the window by
+    its title and searches inside it — so a dialog's "Confirm" and the main
+    window's are two answers to two different questions and not a collision.
+    """
+
+    window: str
+    role: Role
+    name: str
+
+
+def _how_a_client_would_ask_for(
+    widget: WidgetDescription, windows: tuple[str, ...]
+) -> _WhatAClientWouldAskFor | None:
+    # A widget with no role or no name cannot be asked for at all, and is
+    # already reported as whichever of those it is missing. Calling every
+    # anonymous pane a duplicate of every other would put most of an
+    # unannotated window under a heading whose advice does not apply to it.
+    if widget.role is None or widget.name is None:
+        return None
+    return _WhatAClientWouldAskFor(
+        _the_window_holding(widget.path, windows), widget.role, widget.name
+    )
+
+
+def _the_queries_more_than_one_widget_answers_to(
+    asked_for: tuple[_WhatAClientWouldAskFor | None, ...],
+) -> frozenset[_WhatAClientWouldAskFor]:
+    return frozenset(
+        query
+        for query, how_many in Counter(asked_for).items()
+        if query is not None and how_many > _ONE_WIDGET_IS_NEVER_AMBIGUOUS
+    )
+
+
+def _the_windows_a_client_scopes_a_query_to(
+    widgets: tuple[WidgetDescription, ...],
+) -> tuple[str, ...]:
+    # Read out of the walk rather than asked of Tk, which would be a seventh
+    # kind of trip into the interpreter for something already in hand: the
+    # widgets that name themselves are the toplevels, by definition.
+    return tuple(
+        widget.path
+        for widget in widgets
+        if widget.tk_class in WINDOWS_THAT_ALREADY_NAME_THEMSELVES
+    )
+
+
+def _the_window_holding(path: str, windows: tuple[str, ...]) -> str:
+    # The nearest one, so that a dialog opened from a dialog scopes to itself
+    # rather than to the window behind it. A walk that started below every
+    # toplevel — describe(some_frame) — finds none, and everything it reached is
+    # inside one window anyway.
+    return max(
+        (window for window in windows if _is_inside(path, window)),
+        key=len,
+        default=_WHATEVER_WINDOW_THIS_WALK_STARTED_IN,
+    )
+
+
+def _is_inside(path: str, window: str) -> bool:
+    # On the segment boundary and not on the characters: `.!toplevel22.!button`
+    # begins with the whole of `.!toplevel2` and is in a different window
+    # entirely. The root is `.`, which is the separator already.
+    within = (
+        window
+        if window.endswith(_HOW_TK_SEPARATES_A_PATH)
+        else window + _HOW_TK_SEPARATES_A_PATH
+    )
+    return path != window and path.startswith(within)
 
 
 def _annotations_this_walk_never_reached(
@@ -492,6 +610,16 @@ _UNDER_THE_ROW = "    "
 _UNDER_THE_REASON = "      "
 _NOTHING = "-"
 
+# What Tk puts between the segments of a widget path, and what the root is
+# called: `.`, then `.!toplevel`, then `.!toplevel.!button`.
+_HOW_TK_SEPARATES_A_PATH = "."
+
+# What a walk that began below every toplevel scopes to. Everything it reached
+# shares it, which is the truth: they are all in whatever window it started in.
+_WHATEVER_WINDOW_THIS_WALK_STARTED_IN = ""
+
+_ONE_WIDGET_IS_NEVER_AMBIGUOUS = 1
+
 _WHAT_THIS_IS = "what this application has told Windows it is showing"
 _WHAT_A_CLIENT_WILL_NOT_GET = "WHAT A CLIENT WILL NOT GET, AND WHY"
 _LEFT_ALONE_ON_PURPOSE = "LEFT ALONE ON PURPOSE"
@@ -528,7 +656,21 @@ _ROLES_NOBODY_ANNOUNCES = frozenset({Role.GROUPING, Role.SCROLL_BAR})
 # The roles the MSAA-to-UIA bridge hands a ValuePattern to. Annotating one of
 # these is what turns Tk's anonymous pane into a control a client will ask the
 # contents of — and it answers `''` until an application says otherwise.
-_ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF = frozenset({Role.TEXT, Role.COMBO_BOX})
+#
+# Read off COVERAGE.md's `patterns` column rather than reasoned about, since
+# every one of those cells was read back from another process: `Value` is
+# measured on `tk.Entry`, `tk.Text` and `tk.Spinbox`, and on `ttk.Entry`,
+# `ttk.Combobox` and `ttk.Spinbox` — three roles between them. A `tk.Scrollbar`
+# offers `RangeValue`, which is a different pattern and not this. The one that
+# almost was not here is `ttk.Progressbar`: carrying the pattern and answering
+# wrongly are different claims, so it waited for its own measurement. Read back
+# three ways, its `ProgressBarControl` answers `''` with nothing written and
+# still `''` after the widget's own `-value` moved — the proxy never serves the
+# number the bar is showing, and only `set_acc_value` reads back. That is the
+# entry's failure mode exactly, so it takes the entry's gap.
+_ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF = frozenset(
+    {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON, Role.PROGRESS_BAR}
+)
 
 # The roles whose whole point is what is inside them. Tk gives one window handle
 # per widget and annotation works on handles, so the rows, items and tabs need

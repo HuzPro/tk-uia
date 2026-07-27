@@ -30,6 +30,9 @@ from tests.fixture_apps.annotated_app import (
     DRAFT,
     FORGET_THE_DISPOSABLE_WIDGETS,
     HEADLINE,
+    HOST,
+    HOST_CAPTION,
+    MOVE_WHAT_NOBODY_BOUND,
     NEW_TASK,
     NEW_TASK_NUMBER,
     PRESS_THE_BUTTON,
@@ -39,6 +42,11 @@ from tests.fixture_apps.annotated_app import (
     SCRATCH,
     TASK_CREATED,
     TITLE,
+    UNBOUND_DRAFT,
+    UNBOUND_DRAFT_REVISED,
+    UNBOUND_ENTRY_NAME,
+    UNBOUND_STATUS,
+    UNBOUND_STATUS_MOVED,
     presses,
     traces,
 )
@@ -190,6 +198,43 @@ def test_an_annotated_entry_is_read_as_an_edit_control_whose_value_a_client_can_
     )
 
 
+def test_an_entry_named_after_its_caption_answers_to_the_label_beside_it(
+    annotated_app: RunningApp,
+) -> None:
+    # Given the form row in that window: a caption, the entry it captions, and
+    # one `label_for` call — the application says nothing else about either
+    import uiautomation as auto
+
+    # When a client asks for the edit control by the words on the label
+    entry = auto.EditControl(searchFromControl=annotated_app.window, Name=HOST)
+
+    # Then it is there, under the caption without its colon. In Tk the caption
+    # is a sibling widget and the relationship is recorded nowhere, so this is
+    # the one name in a form no amount of reading the entry could ever find —
+    # and it is the largest remaining gap in a real window: measured on a
+    # six-tab settings dialog, 15 of 110 controls were nameless entries.
+    assert entry.Exists(0), (
+        f"no edit control in the window answers to {HOST!r}, so the association "
+        "between the label and the entry reached no client"
+    )
+
+    # And the label goes on saying what it says on screen, colon and all: the
+    # association names the widget it speaks for, and changes nothing about the
+    # widget doing the speaking.
+    shown = _what_the_application_shows(annotated_app.window)
+
+    assert (_TEXT, HOST_CAPTION) in shown, (
+        f"the caption stopped reading {HOST_CAPTION!r} of its own: {shown}"
+    )
+
+
+# `infer_names_from_layout` has no gui spec of its own, and deliberately: every
+# name it writes goes through `label_for` above or through `set_acc_name`, and
+# both are read back from another process by the specs in this module. What the
+# convention adds is only *which* widgets it picks and what it decides to call
+# them, and that is a decision about a widget tree — specified in
+# `tests/test_layout.py` against doubles, with no Tk in sight. A gui spec for it
+# would re-prove the bridge and cost another window on the developer's desktop.
 def test_a_widget_left_unannotated_still_looks_anonymous_to_a_client(
     annotated_app: RunningApp,
 ) -> None:
@@ -301,6 +346,71 @@ def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_
         lambda: entry.GetValuePattern().Value == REVISION,
         f"the entry still reads {DRAFT!r} rather than {REVISION!r}, so the "
         "binding never followed the variable it was bound to",
+    )
+
+
+def test_a_label_that_declares_a_textvariable_is_named_from_it_with_no_binding_call(
+    annotated_app: RunningApp,
+) -> None:
+    # Given the one label in that window nothing ever said a word about: built
+    # with a `textvariable` like any Tk status line, and never passed to
+    # `bind_text_variable`
+    at_rest = _what_the_application_shows(annotated_app.window)
+
+    assert (_TEXT, UNBOUND_STATUS) in at_rest, (
+        "a label driven by a variable nobody bound is announcing nothing, so "
+        f"`enable()` never read the `-textvariable` the widget declares: {at_rest}"
+    )
+
+    # When the application writes that variable, and says nothing to this
+    # package before, during or after
+    annotated_app.ask_for(MOVE_WHAT_NOBODY_BOUND)
+
+    # Then a client in another process reads the new words. This is the half
+    # that cannot be faked by a double: the trace behind it is a Tcl command
+    # registered against a variable this package deliberately does not own —
+    # wrapping it in a `tkinter.Variable` would have unset the application's own
+    # variable the moment the wrapper was collected.
+    _eventually_shows(
+        annotated_app.window,
+        (_TEXT, UNBOUND_STATUS_MOVED),
+        f"the unbound label still reads {UNBOUND_STATUS!r}, so the variable it "
+        "declares was read once and never followed",
+    )
+
+
+def test_an_entry_that_declares_a_textvariable_reads_back_its_contents_with_no_binding_call(
+    annotated_app: RunningApp,
+) -> None:
+    # Given the entry nothing ever bound either — named by the application,
+    # because no entry has words of its own, and nothing more than named
+    import uiautomation as auto
+
+    entry = auto.EditControl(
+        searchFromControl=annotated_app.window, Name=UNBOUND_ENTRY_NAME
+    )
+    at_rest = entry.GetValuePattern().Value
+
+    assert at_rest == UNBOUND_DRAFT, (
+        f"the unbound entry reads {at_rest!r}: annotating alone leaves a "
+        "ValuePattern that answers '' — a confident wrong answer where bare Tk "
+        "gave none — and the variable the widget declares is what fills it"
+    )
+
+    # When the application rewrites the variable behind it
+    annotated_app.ask_for(MOVE_WHAT_NOBODY_BOUND)
+
+    # Then what a client reads out of the edit control follows, and the name the
+    # application set by hand is untouched. The two properties are separate
+    # questions, and saying one must not stop the other being kept true.
+    _eventually(
+        lambda: entry.GetValuePattern().Value == UNBOUND_DRAFT_REVISED,
+        f"the unbound entry still reads {UNBOUND_DRAFT!r} rather than "
+        f"{UNBOUND_DRAFT_REVISED!r}, so its declared variable is not followed",
+    )
+    assert entry.Name == UNBOUND_ENTRY_NAME, (
+        f"the entry is now called {entry.Name!r}: following a declared variable "
+        "into the value has overwritten the name the application chose"
     )
 
 

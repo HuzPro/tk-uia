@@ -97,6 +97,13 @@ and a package that costs an application nothing to install.
   truth. That removes the whole class of "the tree says something the window
   stopped showing", and it is the right shape for a listbox or a treeview, whose
   contents are far too large to push on every change.
+
+  **0.6.0 narrowed this without changing the model.** A widget that declared its
+  own `-textvariable` is followed from `<Map>` onwards with no call at all, so a
+  status line and a variable-driven entry are no longer things an application
+  can forget to keep true — the push happens on the write that changed them.
+  What is left for a pull is the widget whose contents live somewhere it never
+  named, and the compound widgets below.
 - **Compound widgets, not just the HWND they live in.** A `Listbox` is annotated
   as a `LIST` and its *rows* are invisible; the same goes for `Treeview` rows and
   a `Menu`'s items. This is the last widget-level gap: as of 0.5.0 every widget
@@ -123,8 +130,17 @@ and a package that costs an application nothing to install.
   stands. The lesson is narrower and worth keeping: "this needs a different
   mechanism" was a conclusion nobody had tried to falsify.
 
-- **Publishing to PyPI.** Out of scope for v0.1 by decision, not by omission.
-  The name is free.
+- **Publishing to PyPI — built in 0.6.0, and not uploaded.** Out of scope for
+  v0.1 by decision rather than by omission, and now most of the way done: the
+  sdist and the wheel build clean from `pyproject.toml`, the wheel carries
+  `py.typed` and nothing that is not the package, and it installs into a virtual
+  environment that has never seen this repository with zero dependencies, where
+  `enable()` on a withdrawn root reports `ANNOTATED`. What is left is the upload
+  itself, which needs the maintainer's PyPI account and an API token, and the
+  README's install section, which still says clone-and-`pip install -e .` and is
+  the true instruction until then. [RELEASING.md](RELEASING.md) has the steps in
+  order. The name was verified free when this project started; nothing reserves
+  a PyPI name, and the first successful upload is what claims it.
 
 ## Non-goals
 

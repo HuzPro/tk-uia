@@ -32,6 +32,12 @@ from tk_uia import Strategy
 NEW_TASK = "New Task"
 HEADLINE = "Task list"
 TITLE = "Title"
+
+# The form row: what the caption says, and what the entry beside it is therefore
+# called. The colon is on the label and not on the name — every caption in a
+# real dialog ends with one, and none of them is part of a control's name.
+HOST_CAPTION = "Host:"
+HOST = "Host"
 DRAFT = "Write the report"
 REVISION = "Write the quarterly report"
 DISPOSABLE = "Disposable"
@@ -42,6 +48,16 @@ TASK_CREATED = "task created"
 PRESSES = "presses"
 TRACES = "traces"
 
+# The two widgets nothing in this application says one word about. Both are
+# built with a `textvariable` and neither is ever passed to `bind_text_variable`
+# or `bind_value_variable`, which is the whole point of them: what a client
+# reads back is what `enable()` alone worked out from what the widget declared.
+UNBOUND_STATUS = "nobody bound this"
+UNBOUND_STATUS_MOVED = "and it followed anyway"
+UNBOUND_DRAFT = "typed into an unbound entry"
+UNBOUND_DRAFT_REVISED = "retyped, still unbound"
+UNBOUND_ENTRY_NAME = "Unbound"
+
 # Chosen by this application, never by the package: an id derived from a widget
 # path would make every repack a breaking change for whoever locates by it.
 NEW_TASK_NUMBER = 4207
@@ -49,6 +65,7 @@ NEW_TASK_NUMBER = 4207
 FORGET_THE_DISPOSABLE_WIDGETS = "forget"
 ADVANCE_THE_STATUS = "advance"
 REVISE_THE_DRAFT = "revise"
+MOVE_WHAT_NOBODY_BOUND = "unbound"
 PRESS_THE_BUTTON = "press"
 DESTROY_THE_STATUS_LABEL = "destroy"
 WRITE_THE_DESCRIPTION = "describe"
@@ -96,6 +113,11 @@ class Widgets:
     trace_tally: tk.Label
     disposable_label: tk.Label
     disposable_entry: tk.Entry
+    host_caption: tk.Label
+    host: tk.Entry
+    unbound_status: tk.StringVar
+    unbound_draft: tk.StringVar
+    unbound_entry: tk.Entry
 
 
 def main(title: str, commands: Path) -> None:
@@ -115,7 +137,10 @@ def main(title: str, commands: Path) -> None:
 def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     root = tk.Tk()
     root.title(title)
-    root.geometry("420x420")
+    # Tall enough for every widget below to be laid out: the Tk packer silently
+    # drops whatever it cannot fit, `<Map>` never fires for those, and a spec
+    # measuring one would be measuring a widget accessibility never reached.
+    root.geometry("420x520")
 
     tk.Label(root, text=HEADLINE).pack(pady=10)
 
@@ -137,6 +162,27 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     disposable_label.pack()
     disposable_entry = tk.Entry(root, width=20)
     disposable_entry.pack()
+
+    # A form row exactly as Tk lays one out: a caption, and the entry it
+    # captions, side by side. Nothing in the toolkit records that the two have
+    # anything to do with each other — the application says so, once, below.
+    row = tk.Frame(root)
+    row.pack(pady=10)
+    host_caption = tk.Label(row, text=HOST_CAPTION)
+    host_caption.pack(side=tk.LEFT)
+    host = tk.Entry(row, width=20)
+    host.pack(side=tk.LEFT)
+
+    # The pair nothing below ever mentions again: an ordinary Tk label and an
+    # ordinary Tk entry, each built the way the tutorials build them, and
+    # neither bound to anything by this application. Whatever a client reads out
+    # of these two came from the widget's own `-textvariable` and from nowhere
+    # else, which is the only way to prove that half is real.
+    unbound_status = tk.StringVar(value=UNBOUND_STATUS)
+    tk.Label(root, textvariable=unbound_status).pack()
+    unbound_draft = tk.StringVar(value=UNBOUND_DRAFT)
+    unbound_entry = tk.Entry(root, width=30, textvariable=unbound_draft)
+    unbound_entry.pack()
 
     # The control group, and it is a widget of somebody's own class: every class
     # both toolkits ship has a role now, so the only thing `enable()` walks past
@@ -162,6 +208,11 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
         trace_tally=trace_tally,
         disposable_label=disposable_label,
         disposable_entry=disposable_entry,
+        host_caption=host_caption,
+        host=host,
+        unbound_status=unbound_status,
+        unbound_draft=unbound_draft,
+        unbound_entry=unbound_entry,
     )
 
 
@@ -194,6 +245,14 @@ def _the_things_no_widget_can_say_for_itself(widgets: Widgets) -> None:
     # path would be worse than none, so this is the application's job.
     tk_uia.set_acc_name(widgets.title_entry, TITLE)
     tk_uia.set_acc_name(widgets.disposable_entry, SCRATCH)
+    # Its *name* and nothing else. What is in this entry is what is in the
+    # variable it declares, and saying who it is must not stop that being read:
+    # the two are different questions a client asks separately.
+    tk_uia.set_acc_name(widgets.unbound_entry, UNBOUND_ENTRY_NAME)
+    # The one thing an entry's caption cannot say for itself: in Tk it is a
+    # sibling label, and nothing in the toolkit records which widget it speaks
+    # for. Said once, about the pair, rather than by copying its words across.
+    tk_uia.label_for(widgets.host_caption, widgets.host)
     # A widget showing a `textvariable` has no `-text` either, so the two
     # widgets whose whole job is to report what just happened are the two that
     # would otherwise never say anything at all.
@@ -222,6 +281,17 @@ def _destroy_the_status_label(widgets: Widgets) -> None:
     widgets.status_label.destroy()
     widgets.status.set(TASK_CREATED)
     _report_what_is_still_traced(widgets)
+
+
+def _move_what_nobody_bound(widgets: Widgets) -> None:
+    """Write the two variables this application declared and never bound.
+
+    Ordinary `StringVar.set` calls, of the kind an application makes all day.
+    Nothing here mentions tk-uia, which is exactly what a client reading the new
+    words back has to be evidence of.
+    """
+    widgets.unbound_status.set(UNBOUND_STATUS_MOVED)
+    widgets.unbound_draft.set(UNBOUND_DRAFT_REVISED)
 
 
 def _write_the_description(widgets: Widgets, commands: Path) -> None:
@@ -262,6 +332,7 @@ def _watching_for_commands(widgets: Widgets, commands: Path) -> None:
         ADVANCE_THE_STATUS: lambda: widgets.status.set(TASK_CREATED),
         DESTROY_THE_STATUS_LABEL: lambda: _destroy_the_status_label(widgets),
         REVISE_THE_DRAFT: lambda: widgets.draft.set(REVISION),
+        MOVE_WHAT_NOBODY_BOUND: lambda: _move_what_nobody_bound(widgets),
         # Tk's own invoke, which really does run the command — the control that
         # stops "the counter never moved" being mistaken for "the counter could
         # never have moved".

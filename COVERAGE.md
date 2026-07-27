@@ -56,7 +56,7 @@ join on — and those are the rows worth having.
 | `ttk.Spinbox` | `TSpinbox` | `PaneControl` — | `SpinnerControl` — | `SpinnerControl` 'Quantity' | Value | — | `app.spinbox("Quantity")` |
 | `ttk.Scale` | `TScale` | `PaneControl` — | `SliderControl` — | `SliderControl` 'Volume' |  | — | `app.slider("Volume")` |
 | `ttk.Scrollbar` | `TScrollbar` | `PaneControl` — | `ScrollBarControl` — | `ScrollBarControl` 'Scroll the results' |  | — | `app.scrollbar("Scroll the results")` |
-| `ttk.Progressbar` | `TProgressbar` | `PaneControl` — | `ProgressBarControl` — | `ProgressBarControl` 'Upload progress' | Value | — | `app.progressbar("Upload progress")` |
+| `ttk.Progressbar` | `TProgressbar` | `PaneControl` — | `ProgressBarControl` — | `ProgressBarControl` 'Upload progress' | Value | NO_VALUE | `app.progressbar("Upload progress")` |
 | `ttk.Separator` | `TSeparator` | `PaneControl` — | `SeparatorControl` — | `SeparatorControl` 'Divider' |  | — | `app.separator("Divider")` |
 | `ttk.Sizegrip` | `TSizegrip` | `PaneControl` — | `ThumbControl` — | `ThumbControl` 'Resize this window' |  | — | `app.thumb("Resize this window")` |
 | `ttk.Frame` | `TFrame` | `PaneControl` — | `GroupControl` — | `GroupControl` 'Details' |  | — | `app.group("Details")` |

@@ -28,18 +28,25 @@ anonymous pane. Zero runtime dependencies, no C extension, no `ttk` rewrite,
 nothing visible on screen.
 
 **One call is where it starts, not where it ends.** `enable()` names every
-widget that carries its own words and gives every widget the right control type.
-What it cannot do on its own is read a value out of a widget that does not hold
-one: an entry showing `buy milk` arrives as an `EditControl` whose ValuePattern
-is `''` — measured, and a confidently wrong answer where bare Tk gave no answer
-at all. One more line (`bind_value_variable`) fixes that, and the table below
-marks exactly which cells each call is responsible for. This README's job is to
-tell you which is which before you ship it to somebody who depends on it.
+widget that carries its own words, gives every widget the right control type,
+and — since 0.6.0 — keeps both in step with whatever `textvariable` the widget
+told Tk it shows. What it cannot do on its own is read a value out of a widget
+that never said where it keeps one: an entry filled by `insert()` rather than
+driven by a variable arrives as an `EditControl` whose ValuePattern is `''` —
+measured, and a confidently wrong answer where bare Tk gave no answer at all.
+One more line (`bind_value_variable`) fixes that, and the table below marks
+exactly which cells each call is responsible for. This README's job is to tell
+you which is which before you ship it to somebody who depends on it.
 
 Because the mechanism is real accessibility rather than a test hook, the same
 call also makes the window drivable by UI Automation tooling — pytest-uia,
 pywinauto, Inspect.exe, Accessibility Insights. That is the second audience, and
 it is a consequence rather than the point.
+
+> **Start here: [COOKBOOK.md](COOKBOOK.md) — your first accessible form.** One
+> small form, the two or three calls that put it in the accessibility tree, and
+> how to check that they worked. Ten minutes. This README is the reference: what
+> is measured, what is not, and why.
 
 ### The claim, stated precisely
 
@@ -75,8 +82,9 @@ does on its behalf.
 
 ## Quickstart
 
-tk-uia is **not on PyPI** — publishing is out of scope for now (see
-[ROADMAP](ROADMAP.md)). Install it from a clone:
+tk-uia is **not on PyPI yet** — the wheel builds, installs and annotates; the
+upload is the step that has not happened (see [RELEASING.md](RELEASING.md)).
+Install it from a clone:
 
 ```bash
 git clone https://github.com/HuzPro/tk-uia
@@ -107,28 +115,34 @@ from a **separate process**, against the fixture app in this repo and
 | `tk.Button(text="New Task")` | `ButtonControl`, `Name=''` | `ButtonControl`, **`Name='New Task'`** | — |
 | `tk.Label(text="Task list")` | **`ImageControl`**, `Name=''` | **`TextControl`**, **`Name='Task list'`** | — |
 | `tk.Checkbutton(text="Done")` | `ButtonControl`, `Name=''` | **`CheckBoxControl`**, **`Name='Done'`**, **`ToggleState`** correct and live | — |
-| `tk.Entry` (showing `buy milk`) | `PaneControl`, `Name=''`, no ValuePattern | **`EditControl`**, `Name=''`, ValuePattern **`''`** | `set_acc_name(e, "Title")` → `Name='Title'`; `bind_value_variable(e, var)` → ValuePattern `'buy milk'` |
+| `tk.Entry(textvariable=var)` (showing `buy milk`) | `PaneControl`, `Name=''`, no ValuePattern | **`EditControl`**, ValuePattern **`'buy milk'`**, and it **follows the variable** | `label_for(caption, e)` → `Name='Title'` |
+| `tk.Entry` driven by no variable | `PaneControl`, `Name=''`, no ValuePattern | **`EditControl`**, `Name=''`, ValuePattern **`''`** | `label_for(caption, e)`; `bind_value_variable(e, var)` → ValuePattern `'buy milk'` |
+| `tk.Label(textvariable=status)` | **`ImageControl`**, `Name=''` | **`TextControl`**, **`Name`** = what the variable says, **kept in step with it** | — |
 | `tk.Canvas` | `PaneControl`, `Name=''` | **`ImageControl`**, `Name=''` — what it *shows* is paint | `set_acc_name(c, "Sparkline")` |
 | A widget of **your own class** | `PaneControl`, `Name=''` | unchanged — the control group | `enable(root, roles={"SparklineChart": Role.GRAPHIC})` |
 
-**Read the Entry row carefully.** An entry keeps neither its label nor its
-contents on the widget: the label is a separate `tk.Label` this package has no
-way to associate, and the contents live in a Tk variable. So `enable()` gives it
-the right control type and a ValuePattern that did not exist before — and that
-pattern reads `''` until an application says otherwise. That is the one place
-where annotating alone leaves a client a *confident wrong answer* rather than no
-answer, and it is two lines to fix.
+**Read the two Entry rows carefully.** An entry keeps neither its label nor its
+contents on the widget: the label is a separate `tk.Label` that nothing in Tk
+records the relationship to — `label_for(label, entry)` is the one line that
+says it — and the contents live in a Tk variable. Where the entry was
+built with `textvariable=`, it *told Tk* which variable — so `enable()` reads
+that name off the widget and follows it, and the ValuePattern is right from the
+first moment and stays right. Where it was not, that pattern reads `''` until an
+application says otherwise, and that is the one place where annotating alone
+leaves a client a *confident wrong answer* rather than no answer.
 
-Widgets with a `-text` option are named from it automatically. Everything else
-takes one line:
+Widgets with a `-text` option are named from it automatically, and a widget
+driven by a `textvariable` is followed. Everything else takes one line:
 
 | Call | What it does |
 |---|---|
-| `enable(root, roles=None)` | Annotate this application, and **return** which of `ANNOTATED` / `NATIVE` / `UNSUPPORTED` happened. |
-| `set_acc_name(widget, name)` | The name a screen reader announces. Needed for anything with no `-text`. |
+| `enable(root, roles=None)` | Annotate this application, and **return** which of `ANNOTATED` / `NATIVE` / `UNSUPPORTED` happened. Follows every `textvariable` a widget declares. |
+| `set_acc_name(widget, name)` | The name a screen reader announces. Needed for anything with no `-text` and no `textvariable`. |
+| `label_for(label, widget)` | Say that this label is that widget's caption — Tk's `<label for=…>`. The widget takes the label's words, without the trailing colon, and follows them if the label shows a variable. |
+| `infer_names_from_layout(root)` | The retrofit: apply the row-and-caption convention your form already follows, to every row at once, and report what it named. Asked for explicitly — [see below](#the-caption-an-entry-has-and-tk-does-not-record). |
 | `set_acc_value(widget, value)` | What a client reads out of an edit control. |
-| `bind_text_variable(widget, variable)` | Keep the name in step with a `StringVar`, so a status line stays truthful. |
-| `bind_value_variable(widget, variable)` | Keep the value in step with a `StringVar`, so an entry never reads back what it used to hold. |
+| `bind_text_variable(widget, variable)` | The **manual override**: keep the name in step with a `StringVar` the widget does not declare — or with a different one than it does. |
+| `bind_value_variable(widget, variable)` | The same override for the value, where an entry holds its contents somewhere this package cannot see. |
 | `set_acc_role(widget, Role.…)` | Override the inferred role. |
 | `set_acc_description` / `set_acc_help` / `set_acc_action` / `set_acc_state` | The rest of the MSAA properties. |
 | `set_automation_id(widget, number)` | An explicit, stable id for a test suite to pin to. |
@@ -145,6 +159,63 @@ refuses to start otherwise, and a suite of your own should do the same.
 Names are inferred, never invented. A widget with no `-text` gets its **role**
 set and no name at all: a listbox announced as `.!listbox` is worse than one
 announced as an unnamed list, because it looks like it worked.
+
+### The caption an entry has, and Tk does not record
+
+`enable()` names a widget from its own words. An entry has none — in Tk its
+caption is a **sibling label**, and nothing in the toolkit records which widget
+that label speaks for, so no library can read the relationship back. This is the
+largest gap left in a real window: measured on a six-tab settings dialog, **15 of
+its 110 controls were nameless entries**, every one of them captioned by the
+label beside it.
+
+```python
+caption = tk.Label(row, text="Host:")
+entry = tk.Entry(row)
+tk_uia.label_for(caption, entry)      # the entry is announced as 'Host'
+```
+
+`label_for` is the Tk answer to Qt's `QLabel.setBuddy` and HTML's
+`<label for=…>`. The trailing colon comes off, because every caption in a form
+has one and none of them is part of a control's name. Where the label declares a
+`-textvariable` the name follows it from then on; where it does not, the words
+are read once and go stale on the next `config(text=…)` exactly as every other
+caption here does — call it again to re-read them. A label showing nothing at
+all raises `AnnotationRefused` rather than naming the entry `''`.
+
+```python
+for named in tk_uia.infer_names_from_layout(root):
+    print(named.path, "->", named.name)
+```
+
+`infer_names_from_layout` is the retrofit for a window that already has fifty of
+those rows. It walks the tree and applies the convention the layout is already
+following: a **row** is a frame — or a window, since status bars are packed
+straight onto toplevels; its **subject** is the first label in it that is not
+showing a variable, or failing that the button that captions it; every **entry**
+in the row is named after that subject; and every **button** whose caption says
+nothing on its own (`Browse...`, `Reset to Default`, `?`) is qualified with it,
+as `Browse... for GUI Executable`. Two buttons called "Browse..." in one window
+are indistinguishable to a screen reader user choosing between them and to a
+locator trying to pick one, and that dialog had six. Applying this took the same
+dialog from 83 of 110 controls addressable to **110 of 110**.
+
+Two of those rules are refusals. A label driven by a variable is showing what
+the row *holds* rather than saying what it is, so it is never a subject —
+measured, taking one produced a button announced as `Reset to Default for
+C:\Example\stopped.ico`, a name that changes whenever the value does. And a name
+your application chose is never replaced, whether you said it before this call
+or after it.
+
+**Why this is not in `enable()`.** Everything else this package writes is read
+off the widget being annotated: its class, its `-text`, the variable it declared.
+This is read off the widgets *around* it, and a layout is not a statement — two
+widgets are beside each other because somebody packed them that way. That makes
+it a guess, and the library never guesses on its own. Asked for by name it is
+something else: a convention you have recognised in your own window and chosen to
+apply. What comes back is every widget it named and what it called it, so the
+whole of the guess is readable before you ship it — and `describe(root)` is
+still the full picture.
 
 ## How it works
 
@@ -169,6 +240,10 @@ So `enable()`:
    up, and will not fire again for a window that was already showing.
 4. For each widget, looks `winfo_class()` up in `ROLE_FOR_TK_CLASS` and writes
    `PROPID_ACC_ROLE`, plus `PROPID_ACC_NAME` from `-text` when there is one.
+5. Reads the widget's `-textvariable`, and where it names one, keeps the
+   annotation in step with that variable through a Tcl `write` trace — into
+   `PROPID_ACC_VALUE` for the controls a client asks the contents of, and into
+   `PROPID_ACC_NAME` for the rest.
 
 The roles come from `oleacc.h` and deliberately mirror the mapping Tk 9.1 uses,
 so migrating later is close to deletion. The `41`/`42` split is load-bearing:
@@ -280,9 +355,49 @@ is out of the picture entirely.
   accessibility tree can be wrong, because a stale answer is indistinguishable
   from a true one. Two ways out, both verified: call
   **`add_acc_object(widget)`** after the `config` and the name is re-read
-  immediately (`'in progress'`), or drive the widget from a `StringVar` and
-  **`bind_text_variable`** it, which is the durable answer and needs saying
-  once.
+  immediately (`'in progress'`), or drive the widget from a `StringVar`, which
+  is the durable answer and — since 0.6.0 — needs saying to nobody at all.
+- **A declared `textvariable` is followed automatically, and that is the
+  durable answer to staleness.** `tk.Label(textvariable=status)` already told Tk
+  which variable it shows, so `enable()` reads that name off the widget and
+  keeps the annotation in step with it: no `bind_text_variable` call, and no way
+  for the name to drift from what is on screen. The widget's **role** decides
+  which property the variable drives — in an `Entry`, a `Combobox` or a
+  `Spinbox`, the three the bridge hands a ValuePattern to, it is the **value**;
+  everywhere else the widget shows the variable *instead of* a caption, so it is
+  the **name**. Sixteen widget classes across both toolkits carry the option;
+  `tk.Text` carries none, and a `Listbox`'s `-listvariable` and a `Scale`'s
+  `-variable` are deliberately not this — the rows of one are not in the tree,
+  and the other's role offers no pattern to write to.
+
+  **Your word always wins, and permanently.** `set_acc_name`, `set_acc_value`,
+  `label_for`, `bind_text_variable` and `bind_value_variable` each *release* the
+  automatic binding for that property rather than merely outranking it —
+  otherwise the next write would take back the name you had just chosen, from
+  inside a Tcl callback with no call of yours in the traceback. Re-pointing a
+  widget at another variable is followed too: `config(textvariable=other)` then
+  `add_acc_object(widget)`, and the old one is let go of.
+
+  One implementation note, because it is a trap worth naming: nothing here
+  builds a `tkinter.Variable` around your variable. `Variable.__del__` *unsets*
+  the Tcl variable it names, so a wrapper would destroy the application's own
+  variable the moment it was garbage-collected — measured, and silent. The
+  binding is made with raw Tcl `trace add variable` calls instead, and released
+  the same way.
+- **Two controls with the same name are two controls nobody can choose
+  between.** Nothing here refuses a duplicate, because a `Name` is not an
+  identifier: two `Browse...` buttons in one dialog are annotated exactly as
+  asked, and are then indistinguishable — a screen-reader user hears the same
+  announcement for controls that do different things, and a locator asking for
+  "the Browse... button" gets whichever one the tree hands back first. Measured
+  on the same six-tab settings dialog: **four buttons in that state**, two
+  `Browse...` and two `Reset to Default`, every one of them correctly typed and
+  correctly named. The fix is to qualify the caption —
+  `set_acc_name(button, "Browse... for GUI Executable")`, or
+  `infer_names_from_layout(root)`, which does exactly that for a whole window.
+  `describe(root)` reports whatever is left as `NAME_NOT_UNIQUE`, counted **per
+  window**, since a dialog's `Confirm` and the main window's `Confirm` are two
+  answers to two different questions.
 - **Disabled state is not conveyed, and nothing tracks any state.** Measured: a
   `tk.Button(state=DISABLED)` reads back `IsEnabled=True` — the widget is greyed
   on screen and advertised to a client as usable. `set_acc_state(widget, 0x1)`
@@ -369,8 +484,8 @@ Run `python probes/what_your_app_tells_windows.py` for the whole thing. Abridged
 notebook, a frame that is never packed, a second toplevel):
 
 ```
-tk-uia 0.3.0 -- what this application has told Windows it is showing
-enable() reported ANNOTATED. 18 widgets under .: 12 written to, 6 not.
+tk-uia 0.6.0 -- what this application has told Windows it is showing
+enable() reported ANNOTATED. 18 widgets under .: 13 written to, 5 not.
 
 WIDGET              CLASS      ROLE                NAME         VALUE               ID
 ------------------  ---------  ------------------  -----------  ------------------  ----
@@ -383,8 +498,11 @@ WIDGET              CLASS      ROLE                NAME         VALUE           
     kept in step with a variable: value
 .!label2            Label      STATIC_TEXT (41)    'ready'      -                   -
     kept in step with a variable: name
-.!canvas            Canvas     -                   -            -                   -
+.!canvas            Canvas     GRAPHIC (40)        -            -                   -
 .!listbox           Listbox    LIST (33)           -            -                   -
+...
+.!notebook          TNotebook  PAGE_TAB_LIST (60)  -            -                   -
+    tabs a client can reach: Open, Done
 ...
 
 WHAT A CLIENT WILL NOT GET, AND WHY
@@ -402,6 +520,16 @@ WHAT A CLIENT WILL NOT GET, AND WHY
     config(text=...) does not re-announce; call add_acc_object(widget), or
     drive it from a variable and bind_text_variable it.
       .!label3  (Label)   -text now says 'in progress'
+
+  NAME_NOT_UNIQUE  (2)
+    shares its role and its accessible name with another widget in the
+    same window, so a client asking for it reaches one of them at random
+    and a screen reader announces both of them the same way. Qualify the
+    caption -- 'Browse... for GUI Executable' -- with set_acc_name, or let
+    infer_names_from_layout(root) qualify the generic ones for a whole
+    window at once.
+      .!label  (Label)
+      .!label3  (Label)
 
   NO_VALUE  (2)
     no accessible value. The role gives this widget a ValuePattern it did
@@ -424,11 +552,14 @@ back from another process is the only thing that proves the bridge carried
 it.
 ```
 
-**`NEVER_MAPPED` is the line to read first, and it was the surprise.** That
-window sets a fixed `geometry()`, and the Tk packer silently drops whatever it
-cannot fit: `<Map>` never fires, so those widgets are invisible to accessibility
-— with no exception, no warning and nothing in any log. Four widgets in the
-probe are in that state. There is no other way to find out.
+**`NEVER_MAPPED` is the line to read first, and it was the surprise.** `<Map>`
+fires when Tk puts a widget on the screen and at no other time, so anything the
+geometry manager never placed is invisible to accessibility — with no exception,
+no warning and nothing in any log. Three widgets in that probe are in that state:
+a frame that was never packed, its child, and the notebook tab nobody has opened.
+The fourth way in is the one worth fearing, because it is the one nobody writes
+on purpose: that window sets a fixed `geometry()`, and a Tk packer that runs out
+of room silently drops whatever will not fit. There is no other way to find out.
 
 Each reason is one of the caveats above, and the catalogue is closed by that
 rule: a `Gap` member has to correspond to a caveat this README already
@@ -527,7 +658,8 @@ reproducible by running `probes/what_enable_alone_gives_you.py`.
 | `InvokePattern.Invoke()` on an annotated Tk button | returns cleanly; press counter unchanged |
 | `LegacyIAccessible.DoDefaultAction()` | returns cleanly; press counter unchanged |
 | Hit-testing after annotation | `ElementFromPoint` identical before and after, 8/8 widgets |
-| `tk.Entry` showing `buy milk`, after `enable()` alone | `EditControl`, `Name=''`, ValuePattern **`''`** |
+| `tk.Entry(textvariable=…)` showing `buy milk`, after `enable()` alone | `EditControl`, `Name=''`, ValuePattern **`'buy milk'`** — and it follows the variable from then on |
+| An entry driven by no variable, after `enable()` alone | ValuePattern **`''`**: nothing declared it, so nothing can follow it |
 | Accessible name after `label.config(text="in progress")` | unchanged — still `'Task list'` |
 | …and after `add_acc_object(label)` | `'in progress'` |
 | `tk.Button(state=DISABLED)` after `enable()` | `IsEnabled` **`True`** — the greyed button reads as usable |
@@ -535,7 +667,7 @@ reproducible by running `probes/what_enable_alone_gives_you.py`.
 | Annotated `Checkbutton` `ToggleState` | `1`, then `0` when the application set its variable to 0 — correct, and live, with no call to this package |
 | Write trace left on a `StringVar` after its bound widget is destroyed | **0** (`trace_info()` read inside the app) |
 | `enable()` runtime dependencies | **0**, permanently |
-| gui suite (12 specs, a real window each) | ~10 s |
+| gui suite (29 specs, a real window each) | ~81 s |
 
 The `ProviderDescription` line is the useful one for anybody writing a UIA
 client: a Tk window is served by the MSAA proxy but reports `FrameworkId`
@@ -608,7 +740,7 @@ py -m venv .venv
 uv pip install -e ".[dev]"        # or: pip install -e ".[dev]"
 
 pytest -m "not gui" -q            # instant; no windows, runs on any platform
-pytest -m gui -q                  # launches a real Tk window, twelve times
+pytest -m gui -q                  # launches a real Tk window, once per spec
 pytest -q                         # everything
 
 ruff check src tests probes
@@ -644,7 +776,7 @@ wsl -- bash -lc 'cd /mnt/c/…/tk-uia \
   && PYTHONPATH=src:.venv/Lib/site-packages python3 -m pytest -q'
 ```
 
-Either way the twelve gui specs are not collected at all — `collect_ignore_glob`
+Either way the gui specs are not collected at all — `collect_ignore_glob`
 in `tests/conftest.py` drops `test_gui_*.py` off Windows, because a `skipif`
 marks a test but cannot stop pytest importing the module carrying it. The one
 Windows-only unit spec (`tests/test_com_diagnostics.py`, which asks what an
@@ -686,6 +818,7 @@ src/tk_uia/
 ├── roles.py        # MSAA role numbers, and ROLE_FOR_TK_CLASS
 ├── annotate.py     # all the behaviour, over AccessibilityStore/TkWidget Protocols
 ├── describe.py     # what was written, what was not, and why — over the same Protocols
+├── layout.py       # the row-and-caption convention, applied only when asked for
 ├── tkversion.py    # the Tk 9.1 capability gate
 └── _accprop.py     # the ctypes/COM humble object — the only Windows in here
 probes/            # the scripts behind the measurements above; not tests

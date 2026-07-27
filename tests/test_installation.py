@@ -14,12 +14,16 @@ from tests.doubles import (
     FakeVariable,
     FakeWidget,
     RecordingStore,
+    VariablesByName,
 )
 from tk_uia.annotate import PropId, install
 from tk_uia.tkversion import Strategy
 
 _A_BUTTON_HANDLE = 0x000407A2
 _A_LABEL_HANDLE = 0x000407A5
+
+# What Tcl calls the first `StringVar` an application makes.
+_A_DECLARED_VARIABLE = "PY_VAR0"
 
 _NOTHING_STILL_LISTENING = 0
 
@@ -127,6 +131,30 @@ def test_a_widget_destroyed_after_enabling_lets_go_of_the_variable_it_was_follow
     assert status.traces_left() == _NOTHING_STILL_LISTENING, (
         f"{status.traces_left()} trace(s) outlived the widget they were "
         "registered for, and will go on firing at a dead window path forever"
+    )
+
+
+def test_a_widget_already_showing_follows_the_variable_it_declares_from_the_start() -> (
+    None
+):
+    # Given a status label on screen before accessibility is switched on, driven
+    # by a variable the application never mentions to this package
+    store = RecordingStore()
+    status = FakeVariable("ready")
+    label = FakeWidget("Label", _A_LABEL_HANDLE, textvariable=_A_DECLARED_VARIABLE)
+    root = FakeRoot(_a_tk_that_needs_annotating(), children=[label])
+
+    # When it is switched on, and the application gets on with its work
+    install(root, store, variables=VariablesByName({_A_DECLARED_VARIABLE: status}))
+    status.set("task created")
+
+    # Then the label announces what the variable says now. The widget told Tk
+    # which variable drives it when it was built, and the whole point of this is
+    # that an application does not have to tell this package the same thing
+    # again — so the wiring from `enable()` down to the trace has to be real.
+    assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "task created", (
+        "the variable the widget declares is not being followed at all: "
+        f"{store.properties(_A_LABEL_HANDLE)}"
     )
 
 

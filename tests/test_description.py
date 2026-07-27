@@ -15,6 +15,7 @@ from tests.doubles import (
     FakeVariable,
     FakeWidget,
     RecordingStore,
+    VariablesByName,
 )
 from tests.threads import the_failure_raised_on_another_thread
 from tk_uia import __version__
@@ -45,8 +46,16 @@ _A_LISTBOX_HANDLE = 0x000407A8
 _A_TREEVIEW_HANDLE = 0x000407A9
 _A_NOTEBOOK_HANDLE = 0x000407AA
 _A_LABEL_HANDLE = 0x000407A5
+_A_PROGRESSBAR_HANDLE = 0x000A0D11
+_A_SPINBOX_HANDLE = 0x000407AB
+_A_SECOND_BUTTON_HANDLE = 0x000407AC
+_A_SECOND_ENTRY_HANDLE = 0x000407AD
+_A_SECOND_DIALOG_HANDLE = 0x000407AE
 _A_RECYCLED_HANDLE = 0x000508B1
 _AN_ID_THE_APPLICATION_CHOSE = 4207
+
+# What Tcl calls the first `StringVar` an application makes.
+_A_DECLARED_VARIABLE = "PY_VAR0"
 
 _LEFT_ALONE = "LEFT ALONE ON PURPOSE"
 _THE_TABLE = "WIDGET"
@@ -244,6 +253,90 @@ def test_an_annotated_entry_is_reported_as_having_neither_a_name_nor_a_value_a_c
     assert said.gaps == (Gap.NO_NAME, Gap.NO_VALUE), (
         f"an annotated entry nobody named or filled in is reported as "
         f"{said.gaps}, so the reader is not told what a client will read"
+    )
+
+
+def test_an_annotated_spinbox_with_nothing_in_it_is_reported_as_having_no_value() -> (
+    None
+):
+    # Given a spinbox that `enable()` annotated and the application said no more
+    # about — the quantity box in a form, with the number it shows living in a
+    # variable nobody has introduced
+    store = RecordingStore()
+    annotator = Annotator(store)
+    spinbox = FakeWidget("Spinbox", _A_SPINBOX_HANDLE)
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[spinbox]
+    )
+    annotator.add(spinbox)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then the value is reported missing, exactly as an entry's is. COVERAGE.md
+    # measures this one from another process: an annotated spinbox reaches a
+    # client as a `SpinnerControl` carrying a ValuePattern, so a report that
+    # left it out understated by one whole widget class in both toolkits.
+    said = _what_the_description_says_about(description, str(spinbox))
+
+    assert said.gaps == (Gap.NO_NAME, Gap.NO_VALUE), (
+        f"an annotated spinbox nobody named or filled in is reported as "
+        f"{said.gaps}, so a control a client will ask the contents of is "
+        "described as complete while it answers ''"
+    )
+
+
+def test_an_annotated_progressbar_is_reported_as_having_no_value_until_one_is_said() -> (
+    None
+):
+    # Given a progressbar `enable()` annotated and the application said no more
+    # about, showing 40 percent on screen the whole time
+    store = RecordingStore()
+    annotator = Annotator(store)
+    progressbar = FakeWidget("TProgressbar", _A_PROGRESSBAR_HANDLE)
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[progressbar]
+    )
+    annotator.add(progressbar)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then the value is reported missing. Measured cross-process, three ways: an
+    # annotated progressbar's ValuePattern answers '' with nothing written, and
+    # still '' after the widget's own -value moved from 10 to 90 — the proxy
+    # never serves the widget's number. Only set_acc_value reads back. So a bar
+    # visibly at 40 percent tells a client nothing, which is exactly the
+    # confident wrong answer this gap exists to name.
+    said = _what_the_description_says_about(description, str(progressbar))
+
+    assert Gap.NO_VALUE in said.gaps, (
+        f"{said.gaps}: a progressbar whose pattern answers '' is described as "
+        "complete while the widget shows a number"
+    )
+
+
+def test_a_spinbox_whose_value_was_written_is_not_reported_as_missing_one() -> None:
+    # Given the same spinbox, with the application having said what is in it
+    store = RecordingStore()
+    annotator = Annotator(store)
+    spinbox = FakeWidget("Spinbox", _A_SPINBOX_HANDLE)
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[spinbox]
+    )
+    annotator.add(spinbox)
+    annotator.set_value(spinbox, "3")
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then nothing is held against it. The gap is a missing value and not the
+    # role that offers one, and a report that flagged every spinbox in a window
+    # would send an author to fix the boxes they have already filled in.
+    said = _what_the_description_says_about(description, str(spinbox))
+
+    assert Gap.NO_VALUE not in said.gaps, (
+        f"a spinbox carrying the value '3' is reported as {said.gaps}"
     )
 
 
@@ -479,6 +572,231 @@ def test_a_name_the_application_chose_itself_is_never_called_stale_when_the_widg
     )
 
 
+def test_two_widgets_a_client_cannot_tell_apart_are_both_reported_as_ambiguous() -> (
+    None
+):
+    # Given the shape measured on a real six-tab settings dialog: two `Browse...`
+    # buttons on one tab, each correctly typed, each correctly named, and named
+    # identically
+    store = RecordingStore()
+    annotator = Annotator(store)
+    for_the_executable = FakeWidget("Button", _A_BUTTON_HANDLE, text="Browse...")
+    for_the_log = FakeWidget("Button", _A_SECOND_BUTTON_HANDLE, text="Browse...")
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False),
+        children=[for_the_executable, for_the_log],
+    )
+    annotator.add(for_the_executable)
+    annotator.add(for_the_log)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then both are named as ambiguous. Nothing is wrong with either widget on
+    # its own, which is exactly why no per-widget check can see this and why it
+    # takes the whole walk: a client asking for "the Browse... button" reaches
+    # one of the two at random, and a screen-reader user hears the same
+    # announcement for controls that do different things.
+    said = [
+        _what_the_description_says_about(description, str(widget))
+        for widget in (for_the_executable, for_the_log)
+    ]
+
+    assert [Gap.NAME_NOT_UNIQUE in widget.gaps for widget in said] == [True, True], (
+        f"two buttons a client cannot choose between are reported as "
+        f"{[widget.gaps for widget in said]}"
+    )
+
+
+def test_the_ambiguity_is_added_to_what_a_widget_is_already_missing_rather_than_replacing_it() -> (
+    None
+):
+    # Given those same two buttons, which — like every Tk button — also
+    # advertise an InvokePattern that presses nothing
+    store = RecordingStore()
+    annotator = Annotator(store)
+    for_the_executable = FakeWidget("Button", _A_BUTTON_HANDLE, text="Browse...")
+    for_the_log = FakeWidget("Button", _A_SECOND_BUTTON_HANDLE, text="Browse...")
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False),
+        children=[for_the_executable, for_the_log],
+    )
+    annotator.add(for_the_executable)
+    annotator.add(for_the_log)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then the widget carries both reasons. This one is additive where
+    # UNMAPPED_SINCE_ANNOTATED replaces, and the difference is whether the other
+    # reasons are still true: a widget nothing can see has no other complaint
+    # worth hearing, while two buttons that cannot be told apart are still two
+    # buttons that cannot be pressed.
+    said = _what_the_description_says_about(description, str(for_the_log))
+
+    assert said.gaps == (Gap.CANNOT_BE_PRESSED, Gap.NAME_NOT_UNIQUE), (
+        f"a duplicate-named button is reported as {said.gaps}, so a reason that "
+        "was true before the second button existed has been dropped"
+    )
+
+
+def test_the_same_name_on_two_different_roles_is_not_reported_as_ambiguous() -> None:
+    # Given a heading and a button that both read "Options" — the everyday shape
+    # of a section captioned above the control that opens it
+    store = RecordingStore()
+    annotator = Annotator(store)
+    heading = FakeWidget("Label", _A_LABEL_HANDLE, text="Options")
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="Options")
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[heading, button]
+    )
+    annotator.add(heading)
+    annotator.add(button)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then neither is held against it. A query names a control type as well as a
+    # name — `app.text("Options")` and `app.button("Options")` reach one widget
+    # each — so a check that matched on the name alone would flag the commonest
+    # arrangement in every window there is, and be switched off within a day.
+    said = [
+        _what_the_description_says_about(description, str(widget))
+        for widget in (heading, button)
+    ]
+
+    assert not any(Gap.NAME_NOT_UNIQUE in widget.gaps for widget in said), (
+        f"a label and a button sharing a caption are reported as "
+        f"{[widget.gaps for widget in said]}"
+    )
+
+
+def test_widgets_nobody_named_are_never_reported_as_ambiguous_with_one_another() -> (
+    None
+):
+    # Given two entries in a form, neither of them named — which is the state
+    # `enable()` alone leaves every entry in an application in
+    store = RecordingStore()
+    annotator = Annotator(store)
+    host = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+    port = FakeWidget("Entry", _A_SECOND_ENTRY_HANDLE)
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[host, port]
+    )
+    annotator.add(host)
+    annotator.add(port)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then neither is reported as a duplicate of the other. Both are already
+    # reported as NO_NAME, which is the fix and is one call each; counting every
+    # anonymous widget in a window as clashing with every other would put most
+    # of a form under a heading whose advice is to qualify a caption that does
+    # not exist.
+    said = [
+        _what_the_description_says_about(description, str(widget))
+        for widget in (host, port)
+    ]
+
+    assert [widget.gaps for widget in said] == [(Gap.NO_NAME, Gap.NO_VALUE)] * 2, (
+        f"two nameless entries are reported as {[widget.gaps for widget in said]}"
+    )
+
+
+def test_the_same_control_in_two_windows_is_not_a_collision_because_a_client_asks_one_window_at_a_time() -> (
+    None
+):
+    # Given a dialog's "Confirm" button and the main window's own
+    store = RecordingStore()
+    annotator = Annotator(store)
+    in_the_dialog = FakeWidget(
+        "Button", _A_BUTTON_HANDLE, text="Confirm", path=".!toplevel.!button"
+    )
+    dialog = FakeWidget(
+        "Toplevel", _A_DIALOG_HANDLE, path=".!toplevel", children=[in_the_dialog]
+    )
+    in_the_main_window = FakeWidget(
+        "Button", _A_SECOND_BUTTON_HANDLE, text="Confirm", path=".!button"
+    )
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False),
+        children=[dialog, in_the_main_window],
+    )
+    annotator.add(in_the_dialog)
+    annotator.add(in_the_main_window)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then neither is reported as ambiguous. Ambiguity is counted per window
+    # because that is how a client resolves one: every query starts by finding
+    # the window by its title and then searches inside it, so a name repeated
+    # across two windows is two answers to two different questions. Counting it
+    # globally would flag the OK button of every dialog an application has.
+    said = [
+        _what_the_description_says_about(description, str(widget))
+        for widget in (in_the_dialog, in_the_main_window)
+    ]
+
+    assert not any(Gap.NAME_NOT_UNIQUE in widget.gaps for widget in said), (
+        f"the same button in two windows is reported as "
+        f"{[widget.gaps for widget in said]}"
+    )
+
+
+def test_a_window_whose_path_merely_begins_with_anothers_is_still_a_different_window() -> (
+    None
+):
+    # Given two dialogs whose Tk paths differ only by a digit on the end, each
+    # with a "Confirm" of its own. `.!toplevel22` begins with the whole of
+    # `.!toplevel2` and is not inside it — Tk separates a path by segments, and
+    # an application that has opened this many windows is the ordinary way to
+    # arrive at two that read alike.
+    store = RecordingStore()
+    annotator = Annotator(store)
+    in_the_second = FakeWidget(
+        "Button", _A_BUTTON_HANDLE, text="Confirm", path=".!toplevel2.!button"
+    )
+    second = FakeWidget(
+        "Toplevel", _A_DIALOG_HANDLE, path=".!toplevel2", children=[in_the_second]
+    )
+    in_the_twenty_second = FakeWidget(
+        "Button", _A_SECOND_BUTTON_HANDLE, text="Confirm", path=".!toplevel22.!button"
+    )
+    twenty_second = FakeWidget(
+        "Toplevel",
+        _A_SECOND_DIALOG_HANDLE,
+        path=".!toplevel22",
+        children=[in_the_twenty_second],
+    )
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False),
+        children=[second, twenty_second],
+    )
+    annotator.add(in_the_second)
+    annotator.add(in_the_twenty_second)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then neither is reported as ambiguous. A widget's window is read out of
+    # the paths the walk already has, and a Tk path is a run of segments rather
+    # than a string of characters: these two windows share eleven of those
+    # characters and hold nothing of each other, so each "Confirm" is the only
+    # answer to the only question that will be asked of it.
+    said = [
+        _what_the_description_says_about(description, str(widget))
+        for widget in (in_the_second, in_the_twenty_second)
+    ]
+
+    assert not any(Gap.NAME_NOT_UNIQUE in widget.gaps for widget in said), (
+        f"buttons in `.!toplevel2` and `.!toplevel22` are reported as "
+        f"{[widget.gaps for widget in said]}, so two windows that merely read "
+        "alike were scoped as one"
+    )
+
+
 def test_the_report_says_which_properties_a_variable_is_keeping_in_step_so_a_reader_knows_they_will_not_go_stale() -> (
     None
 ):
@@ -508,6 +826,48 @@ def test_the_report_says_which_properties_a_variable_is_keeping_in_step_so_a_rea
     )
     assert Gap.NAME_MAY_BE_STALE not in said.gaps, (
         f"a name a variable is keeping in step is reported as stale: {said.gaps}"
+    )
+
+
+def test_a_widget_following_the_variable_it_declares_is_reported_as_kept_in_step() -> (
+    None
+):
+    # Given a status label driven by a `textvariable` and bound by nobody, whose
+    # variable has moved on since. Tk keeps a classic label's `-text` in step
+    # with its variable, so this is the shape that used to be reported as a name
+    # gone stale on every single write.
+    store = RecordingStore()
+    status = FakeVariable("ready")
+    annotator = Annotator(
+        store, variables=VariablesByName({_A_DECLARED_VARIABLE: status})
+    )
+    label = FakeWidget(
+        "Label", _A_LABEL_HANDLE, text="ready", textvariable=_A_DECLARED_VARIABLE
+    )
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[label])
+    annotator.add(label)
+    status.set("task created")
+    label.says_something_else("task created")
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then the report says a variable is keeping this name true, and nothing
+    # asks the author to go and fix it. A widget looking after itself must not
+    # be listed beside the ones that are genuinely wrong, or the list stops
+    # being read.
+    said = _what_the_description_says_about(description, str(label))
+
+    assert said.name == "task created", (
+        f"the report says the label is announcing {said.name!r} after its own "
+        "variable moved on"
+    )
+    assert said.kept_in_step == (PropId.NAME,), (
+        f"a name followed from the widget's own -textvariable is reported as "
+        f"kept in step by {said.kept_in_step}"
+    )
+    assert Gap.NAME_MAY_BE_STALE not in said.gaps, (
+        f"a widget that needs nothing from its author is reported as {said.gaps}"
     )
 
 
@@ -758,6 +1118,40 @@ def test_the_report_prints_the_reason_for_every_gap_beside_the_widgets_it_applie
     assert printed.index(f"      {root}  (Tk)") > printed.index(_LEFT_ALONE), (
         f"the root is not under {_LEFT_ALONE!r}:\n{printed}"
     )
+
+
+def test_the_report_lists_the_widgets_a_client_cannot_tell_apart_by_path() -> None:
+    # Given the two `Browse...` buttons, which is the state a reader has to be
+    # able to find in their own source before they can qualify either caption
+    store = RecordingStore()
+    annotator = Annotator(store)
+    for_the_executable = FakeWidget("Button", _A_BUTTON_HANDLE, text="Browse...")
+    for_the_log = FakeWidget("Button", _A_SECOND_BUTTON_HANDLE, text="Browse...")
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False),
+        children=[for_the_executable, for_the_log],
+    )
+    annotator.add(for_the_executable)
+    annotator.add(for_the_log)
+
+    # When the description is printed
+    printed = str(describe(root, Installation(Strategy.ANNOTATED, annotator)))
+
+    # Then the reason has a block of its own with both paths under it. The
+    # ambiguity is decided in the walk rather than in the page, so `.widgets`
+    # carries it too — but a name a reader cannot act on is a name they will not
+    # act on, and both Tk paths are what turns this into a two-line fix.
+    assert "NAME_NOT_UNIQUE  (2)" in printed, (
+        f"no counted block for NAME_NOT_UNIQUE:\n{printed}"
+    )
+    assert "infer_names_from_layout" in printed, (
+        f"the reason names no way out of it:\n{printed}"
+    )
+    assert [str(for_the_executable), str(for_the_log)] == [
+        path
+        for path in (str(for_the_executable), str(for_the_log))
+        if f"      {path}  (Button)" in printed
+    ], f"a widget a client cannot tell apart is not listed under it:\n{printed}"
 
 
 def test_the_report_opens_with_the_strategy_so_a_page_of_blanks_cannot_be_read_as_a_clean_bill_of_health() -> (

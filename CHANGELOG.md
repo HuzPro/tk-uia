@@ -1,5 +1,206 @@
 # Changelog
 
+## 0.6.0 — 2026-07-27
+
+The cost of making a Tk application accessible just dropped. A widget that told
+Tk which variable it shows is now followed with no call at all; the caption an
+entry has always had on screen and never in the tree can be said in one call, or
+inferred for a whole window at once; and `describe()` catches the fault no
+single widget can show — two controls a client has no way to choose between. A
+form that used to want a `set_acc_name` per entry and a `bind_text_variable` per
+status line wants `enable(root)` and one line per unlabelled row.
+`COOKBOOK.md` is new and is the ten-minute version of all of it.
+
+- **`describe()` reports a progressbar's missing value.** Measured three ways
+  from another process: an annotated `ProgressBarControl` answers `''` with
+  nothing written, and still `''` after the widget's own `-value` moved from 10
+  to 90 — the proxy never serves the number the bar is showing, and only
+  `set_acc_value` reads back. A bar visibly at 40 percent tells a client
+  nothing, which is the entry's failure mode exactly, so `PROGRESS_BAR` now
+  takes the entry's `NO_VALUE` gap. The spinbox gained the same in this release
+  by the same rule.
+
+- **A declared `-textvariable` is followed automatically.** A widget built as
+  `tk.Label(textvariable=status)` or `tk.Entry(textvariable=draft)` already
+  named the variable driving it, and `cget("textvariable")` hands that name
+  back — so asking the application to repeat itself through
+  `bind_text_variable` was asking for something Tk could answer. `enable()`
+  reads it at `<Map>` and keeps the annotation in step from then on. The
+  **role** decides which property that is: in an `Entry`, a `Combobox` or a
+  `Spinbox` — the three roles the MSAA bridge hands a ValuePattern to, measured
+  in [COVERAGE.md](COVERAGE.md) — the variable is the **value**; in the eleven
+  other classes carrying the option the widget shows the variable *instead of* a
+  caption, so it is the **name**. Sixteen classes across both toolkits have it;
+  `tk.Text` has none, and a `Listbox`'s `-listvariable` and a `Scale`'s
+  `-variable` are deliberately not this — the rows of one are not in the tree
+  and the other's role offers no pattern to write to. Measured, from another
+  process: an entry driven by a variable now reads back its contents after
+  `enable()` **alone**, where `probes/what_enable_alone_gives_you.py` used to
+  measure `''`.
+
+- **This closes the staleness hole for every widget driven by a variable.** A
+  `textvariable` label was the worst case in the package: Tk keeps a classic
+  label's `-text` in step with its variable, so the name was read once at
+  `<Map>` and then quietly disagreed with the screen on every write — and
+  `describe()` could only report `NAME_MAY_BE_STALE` and tell the author to go
+  and bind it. It now reports the same widget as *kept in step*, which is what
+  it is.
+
+- **Your word wins, and it wins permanently.** `set_acc_name`, `set_acc_value`,
+  `bind_text_variable` and `bind_value_variable` each **release** the automatic
+  binding for that property rather than outranking it. Left in place, the next
+  write to the application's own variable would take back the name it had just
+  chosen, from inside a Tcl callback with no call of the application's anywhere
+  in the traceback. Re-pointing a widget at another variable is followed too —
+  `config(textvariable=other)` then `add_acc_object(widget)` — and the old
+  binding is let go of, because two traces on one property do not compose: they
+  take turns, and the widget would read as whichever variable was written last.
+  Following is idempotent, so the `<Map>` that fires on every unhide, tab change
+  and geometry shuffle costs no second trace, and `forget()` releases the
+  automatic binding exactly as it releases a manual one.
+
+- **Nothing here builds a `tkinter.Variable`, and that is the whole of the
+  implementation risk.** The obvious way to reach an application's variable by
+  name is `StringVar(master, name=...)`, and it destroys the application's data:
+  `Variable.__del__` *unsets* the Tcl variable it names, so the wrapper takes
+  the real variable with it when it is collected. Measured — the application's
+  variable is unreadable afterwards, with no exception and nothing in any log,
+  and removing the trace first makes no difference. The binding is made with raw
+  `trace add variable` calls through a humble object (`_tkvars.py`) instead, and
+  the trace command is registered against the toplevel rather than the widget,
+  so that a widget destroyed by a route that skipped `forget()` meets the
+  existing liveness guard instead of a `TclError` per write. Runtime
+  dependencies stay at zero, and `annotate.py` still imports nothing
+  platform-specific: the domain asks a seam for "the variable called this", and
+  the whole of the decision is specified on a machine with no Tk.
+
+- **New: `label_for(label, widget)`, the caption Tk records nowhere.** An entry
+  has no words of its own and in Tk the label that names it is a *sibling* —
+  nothing in the toolkit records which widget a caption speaks for, so no
+  library can read the relationship back and every entry in a form cost a
+  `set_acc_name` of its own. Measured on a real six-tab settings dialog: 15 of
+  its 110 controls were nameless entries, every one of them captioned by the
+  label beside it. One call now says it, the way Qt's `QLabel.setBuddy` and
+  HTML's `<label for=...>` do. The trailing colon comes off — every caption in
+  that dialog ends with one and none of them is part of a control's name — and
+  where the label declares a `-textvariable`, the widget's name **follows** it
+  through the same machinery `enable()` already uses, rather than copying a
+  string across once. A label showing nothing at all raises `AnnotationRefused`
+  rather than quietly naming the widget `''`, which is the confident wrong
+  answer this package exists to refuse. The name counts as the application's
+  own: it survives the `<Map>` that fires on every unhide and tab change, and it
+  releases any variable this package had been following into that widget's name.
+
+- **New: `infer_names_from_layout(root)`, the retrofit — and deliberately not
+  part of `enable()`.** It walks the tree and applies the convention a form is
+  already following: a **row** is a frame, or a window, since a status bar is
+  packed straight onto a toplevel and a walk that visited only frames missed
+  exactly the control that reports what went wrong; the row's **subject** is the
+  first label in it that is not driven by a variable, or failing that the button
+  that captions it; every **entry** in the row takes that subject as its name,
+  through the same association `label_for` records; and every **button** whose
+  caption says nothing on its own — `Browse...`, `Reset to Default`, `?` — is
+  qualified with it, as `Browse... for GUI Executable`, because two identical
+  captions in one window are indistinguishable to a screen reader user and to a
+  locator alike. Measured: applying this took that dialog from 83 of 110
+  controls addressable to **110 of 110**. The variable rule is a measurement
+  too — a subject taken from a variable-driven label produced a button announced
+  as `Reset to Default for C:\Example\stopped.ico`. It is a separate call
+  because everything else this package writes is read off the widget being
+  annotated, and this is read off the widgets *around* it: a layout is not a
+  statement, so inferring from one is a guess. The library never guesses on its
+  own; asked for by name, it is a convention the author has recognised in their
+  own window. It returns what it named, widget by widget, read back out of what
+  was really written rather than out of what it meant to write — so on a Tk
+  where `enable()` stood down it reports naming nothing, which is the truth.
+
+- **What the convention writes is your word, not a guess it can lose.** The
+  obvious implementation writes these names as *inferred*, ranked below anything
+  an application said. Measured, that is unusable: `<Map>` re-runs the automatic
+  annotation, which names a widget from its own `-text`, so a button qualified
+  `Browse... for GUI Executable` was back to `Browse...` after the first tab
+  change — silently, on an event the application never sees, in exactly the
+  dialog this feature was measured on. The convention was asked for, so what it
+  writes is the application's own word; `set_acc_name` still wins either way,
+  before the call by being left alone and after it by replacing what was
+  written.
+
+- **New: `describe()` names the widgets a client cannot tell apart.** Gap
+  `NAME_NOT_UNIQUE`. Measured on that same dialog: four buttons — two
+  `Browse...`, two `Reset to Default` — every one of them correctly typed,
+  correctly named, and correctly named *the same thing*. Nothing about any one
+  of them is wrong, which is exactly why no per-widget check could ever have
+  seen it and why this is the one reason computed after the whole walk: a client
+  asking for "the Browse... button" reaches one of them at random, and a
+  screen-reader user hears the same announcement for controls that do different
+  things. It is counted **per toplevel window**, because that is how a client
+  resolves one — it finds the window by its title and searches inside it — so a
+  dialog's `Confirm` and the main window's `Confirm` are two answers to two
+  different questions and not a collision. A widget's window is read out of the
+  walk itself, from the Tk paths, on segment boundaries: `.!toplevel22` merely
+  reads like `.!toplevel2` and is not inside it. And it is **added** to whatever
+  else a widget is missing rather than replacing it, unlike
+  `UNMAPPED_SINCE_ANNOTATED`: two buttons that cannot be told apart are still
+  two buttons that cannot be pressed. The reason it points at is the one the
+  layout convention already applies — qualify the caption, or
+  `infer_names_from_layout(root)`. There is no gui spec: this is reasoning over
+  a walk that is already gui-proven, and it is specified end to end on a machine
+  with no Tk.
+
+- **Fixed: `describe()` understated a spinbox.** `SPIN_BUTTON` was missing from
+  the roles a missing accessible value is reported for, so an annotated
+  `tk.Spinbox` or `ttk.Spinbox` that nobody had written a value to escaped
+  `NO_VALUE` entirely — while reaching a client as a `SpinnerControl` carrying a
+  ValuePattern, which [COVERAGE.md](COVERAGE.md) has measured from another
+  process all along. That set is now read off its `patterns` column rather than
+  recalled: `Value` is measured on six widget classes across the two toolkits
+  and three roles cover them. A `ttk.Progressbar` is the one other cell carrying
+  it and is deliberately still not reported, since nothing has yet read back
+  what a `ProgressBarControl` answers with when no value was written, and a
+  diagnostic that guesses is the thing this package exists to refuse.
+
+- **New: [COOKBOOK.md](COOKBOOK.md) — one form, and the calls that make it
+  announce itself.** The README is the reference and reads like one; somebody
+  deciding whether to adopt this has ten minutes, and the three changes above
+  are what made a short page possible to write honestly. It builds a small
+  complete form the way a Tkinter programmer builds one, then shows both routes
+  to naming it — a `label_for` per unlabelled row, or
+  `infer_names_from_layout(root)` for a form that already exists — and says
+  which fits when. Every line of output in it was **run rather than written**,
+  which is what makes the middle of it worth reading: `describe()` on that
+  window reports `NAME_NOT_UNIQUE` against the two identically captioned
+  `Browse...` buttons the per-row route leaves behind, and the retrofit route's
+  report has that heading gone and is otherwise unchanged. The gotcha it
+  documents was measured the same way — `describe(root)` called between building
+  the window and `mainloop()` reports nine of the form's twelve widgets as
+  `NEVER_MAPPED`, because `<Map>` is the event that annotates and it has not
+  happened yet.
+
+- **Packaged to release-readiness, and deliberately not published.** The sdist
+  and the wheel build clean from `pyproject.toml`; the wheel carries `py.typed`,
+  the package and nothing else — no `tests/`, no `probes/` — and installs into a
+  virtual environment that has never seen this repository with **zero
+  dependencies**, where `enable()` on a withdrawn root reports `ANNOTATED`. That
+  last assertion is the one worth having: an install that imports cleanly and
+  annotates nothing would pass any weaker check. [RELEASING.md](RELEASING.md) is
+  new and writes down the rest, including the two steps nobody but the
+  maintainer can take — the PyPI API token, and the first upload, which is what
+  *claims* the name rather than merely using it. The README still tells you to
+  clone and `pip install -e .`, because until that upload happens that is the
+  true instruction and a README claiming an install command that does not work
+  is worse than one that undersells.
+
+- **The README's `describe()` sample was three versions stale, and a count
+  beside it was wrong.** It was pasted from 0.3.0 and predated the canvas
+  getting a role, a notebook's tabs becoming reachable, and two new gaps, so it
+  showed a window that no longer exists. It is re-run and re-pasted from
+  `probes/what_your_app_tells_windows.py`. The count is the more embarrassing
+  half: the prose said four widgets in that probe were never mapped and blamed
+  the window's fixed `geometry()`, and the report printed beneath it said three
+  — a frame nobody packed, its child, and the notebook tab nobody opened, none
+  of which the packer dropped. The packer warning is true and is still there,
+  as the thing to fear rather than as what happened here.
+
 ## 0.5.0 — 2026-07-27
 
 Every widget class both toolkits ship now has a role, and two bugs that quietly

@@ -9,7 +9,7 @@ suite runs on a machine with no Tk, no display and no Windows.
 from __future__ import annotations
 
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from tk_uia.annotate import PropId
 
@@ -69,8 +69,10 @@ class FakeWidget:
         *,
         text: str | None = None,
         label: str | None = None,
+        textvariable: str | None = None,
         mapped: bool = True,
         children: Sequence[FakeWidget] = (),
+        path: str | None = None,
     ) -> None:
         self._owning_thread = threading.get_ident()
         self._tk_class = tk_class
@@ -82,9 +84,20 @@ class FakeWidget:
         # `-label`, and it is the one widget in the toolkit built that way.
         if label is not None:
             self._options["label"] = label
+        # The Tcl *name* of a variable, which is all a widget carries: measured,
+        # `cget("textvariable")` answers `'PY_VAR0'` where one is declared and
+        # `''` where the option exists and nobody filled it in. Only the classes
+        # that really have the option get it — an entry does, a `tk.Text` does
+        # not, and the difference is what `keys()` is asked for.
+        if textvariable is not None:
+            self._options["textvariable"] = textvariable
         self._mapped = mapped
         self._children = list(children)
-        self._path = f".!{tk_class.lower()}{hwnd}"
+        # A real Tk path encodes ancestry — a dialog is `.!toplevel` and the
+        # button in it is `.!toplevel.!button` — and the one built here from the
+        # class and the handle is unique and says nothing about who holds it.
+        # A spec that turns on which window a widget is in says so instead.
+        self._path = path if path is not None else f".!{tk_class.lower()}{hwnd}"
         self._destroyed = False
 
     def winfo_id(self) -> int:
@@ -149,6 +162,10 @@ class FakeWidget:
         """Stand in for a plain `config(text=...)`, which never re-announces."""
         self._options["text"] = text
 
+    def declares_a_different_variable(self, name: str) -> None:
+        """Stand in for `config(textvariable=...)` pointing the widget elsewhere."""
+        self._options["textvariable"] = name
+
     def __str__(self) -> str:
         return self._path
 
@@ -190,6 +207,26 @@ class FakeVariable:
     def traces_left(self) -> int:
         """How many registrations are still on the variable, leak and all."""
         return len(self._traces)
+
+
+class VariablesByName:
+    """The variables an application owns, reached the way a widget names them.
+
+    Stands in for `tk_uia._tkvars`: a widget declares the *name* of a variable
+    and nothing else, so something has to turn that name into a value and
+    somewhere to hang a trace. Here that is a dict; there it is four calls into
+    Tcl, made rather than wrapped in a `tkinter.Variable` — one of those unsets
+    the application's own variable when it is collected.
+
+    A name nobody owns answers `None`, which is what a Tk with no such variable
+    answers too, and means the widget is left exactly as it was.
+    """
+
+    def __init__(self, variables: Mapping[str, FakeVariable]) -> None:
+        self._variables = dict(variables)
+
+    def __call__(self, widget: object, name: str) -> FakeVariable | None:
+        return self._variables.get(name)
 
 
 class FakeInterpreter:
