@@ -193,8 +193,8 @@ def test_an_annotated_entry_is_read_as_an_edit_control_whose_value_a_client_can_
 def test_a_widget_left_unannotated_still_looks_anonymous_to_a_client(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the same window, which also holds a canvas — the one widget class
-    # this package has no role for, and so the one widget it never touches
+    # Given the same window, which also holds a widget of a class this package
+    # has never heard of — the only kind it now walks past
 
     # When every widget the application itself put on screen is listed
     widgets = the_widgets_the_application_shows(annotated_app.window)
@@ -210,7 +210,7 @@ def test_a_widget_left_unannotated_still_looks_anonymous_to_a_client(
     ]
 
     assert anonymous == [(_A_PANE, "")], (
-        f"expected the unannotated canvas to be the only pane among the "
+        f"expected the unannotated unknown_class_widget to be the only pane among the "
         f"application's own widgets, and nameless; found {anonymous} out of "
         f"{[(c.ControlTypeName, c.Name) for c in widgets]}"
     )
@@ -230,7 +230,7 @@ def test_clearing_a_widgets_annotations_returns_it_to_looking_anonymous(
 
     # Then each goes back to exactly what bare Tk offers for it: the label to a
     # picture with nothing to read, the entry to an anonymous pane alongside the
-    # canvas. This is the widest a stale annotation could reach — Windows reuses
+    # unknown_class_widget. This is the widest a stale annotation could reach — Windows reuses
     # window handles, so an annotation left on a destroyed widget's handle would
     # eventually put a dead label's name on an unrelated control.
     _eventually_stops_showing(
@@ -246,7 +246,7 @@ def test_clearing_a_widgets_annotations_returns_it_to_looking_anonymous(
     )
     assert after.count((_A_PANE, "")) == _THE_CANVAS_AND_THE_CLEARED_ENTRY, (
         f"the cleared entry should be an anonymous pane again, indistinguishable "
-        f"from the canvas that was never annotated: {after}"
+        f"from the unknown_class_widget that was never annotated: {after}"
     )
 
 

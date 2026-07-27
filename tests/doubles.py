@@ -68,13 +68,20 @@ class FakeWidget:
         hwnd: int,
         *,
         text: str | None = None,
+        label: str | None = None,
         mapped: bool = True,
         children: Sequence[FakeWidget] = (),
     ) -> None:
         self._owning_thread = threading.get_ident()
         self._tk_class = tk_class
         self._hwnd = hwnd
-        self._options = {} if text is None else {"text": text}
+        self._options: dict[str, str] = {}
+        if text is not None:
+            self._options["text"] = text
+        # A classic `tk.Scale` has no `-text` at all; the words it shows sit in
+        # `-label`, and it is the one widget in the toolkit built that way.
+        if label is not None:
+            self._options["label"] = label
         self._mapped = mapped
         self._children = list(children)
         self._path = f".!{tk_class.lower()}{hwnd}"
@@ -124,6 +131,15 @@ class FakeWidget:
 
     def destroy(self) -> None:
         self._destroyed = True
+
+    def is_taken_off_the_screen(self) -> None:
+        """Stand in for Tk unmapping a widget that is still very much alive.
+
+        An unselected notebook tab, a pane the geometry manager could not fit,
+        a `pack_forget()`. The widget keeps its handle and everything written
+        about it; UI Automation simply stops listing it.
+        """
+        self._mapped = False
 
     def take_a_new_handle(self, hwnd: int) -> None:
         """Stand in for Tk rebuilding a widget at the same path on a fresh HWND."""

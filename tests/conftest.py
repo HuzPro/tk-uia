@@ -107,6 +107,12 @@ def annotated_app(tmp_path: Path) -> Iterator[RunningApp]:
 
 
 @pytest.fixture
+def newly_roled_app(tmp_path: Path) -> Iterator[RunningApp]:
+    """One of every widget class that gained a role in 0.5.0."""
+    yield from _the_app_in("newly_roled_app.py", tmp_path)
+
+
+@pytest.fixture
 def notebook_app(tmp_path: Path) -> Iterator[RunningApp]:
     """The app whose window is a notebook, for the specs about its tabs."""
     yield from _the_app_in("notebook_app.py", tmp_path)

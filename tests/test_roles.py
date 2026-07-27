@@ -28,6 +28,8 @@ _THEMED_AND_CLASSIC = [
     ("TSpinbox", "Spinbox"),
     ("TFrame", "Frame"),
     ("TLabelframe", "Labelframe"),
+    ("TMenubutton", "Menubutton"),
+    ("TPanedwindow", "Panedwindow"),
 ]
 
 _ONLY_IN_ONE_TOOLKIT = [
@@ -38,6 +40,24 @@ _ONLY_IN_ONE_TOOLKIT = [
     ("TProgressbar", Role.PROGRESS_BAR),
     ("TNotebook", Role.PAGE_TAB_LIST),
     ("Treeview", Role.OUTLINE),
+    ("Canvas", Role.GRAPHIC),
+    ("Menu", Role.MENU_POPUP),
+    ("TSeparator", Role.SEPARATOR),
+    ("TSizegrip", Role.GRIP),
+]
+
+# What the MSAA-to-UIA bridge was measured to make of each number, and — for the
+# ones where more than one number was plausible — what the alternatives turned
+# out to be. A role the bridge does not recognise comes through as PaneControl,
+# which is what these widgets already were: the wrong number looks exactly like
+# success from inside this process and changes nothing a client can read.
+_MEASURED_AGAINST_THE_BRIDGE = [
+    (Role.GRAPHIC, 40, "ImageControl"),
+    (Role.MENU_BUTTON, 62, "SplitButtonControl"),
+    (Role.SEPARATOR, 21, "SeparatorControl"),
+    (Role.GRIP, 4, "ThumbControl"),
+    (Role.MENU_POPUP, 11, "MenuControl"),
+    (Role.GROUPING, 20, "GroupControl"),
 ]
 
 
@@ -91,6 +111,25 @@ def test_a_label_and_an_entry_are_split_by_the_two_roles_that_mean_read_and_writ
     assert (label.value, entry.value) == (_MSAA_STATICTEXT, _MSAA_TEXT), (
         f"label is {label.value} and entry is {entry.value}; a client reads the "
         "number to decide whether a control can be written to"
+    )
+
+
+@pytest.mark.parametrize(
+    ("role", "number", "control_type"), _MEASURED_AGAINST_THE_BRIDGE
+)
+def test_each_role_carries_the_number_that_was_measured_to_produce_its_control_type(
+    role: Role, number: int, control_type: str
+) -> None:
+    # Given a role this table uses, and the control type it was measured to
+    # produce when read back from another process
+    # When the number that will actually reach Windows is read off it
+    # Then it is the measured one. Nothing else in the package can catch this:
+    # `DIAGRAM`, `CLIENT` and `PANE` were all tried for the canvas and every one
+    # of them came back as the anonymous `PaneControl` the widget already was,
+    # with `S_OK` and no complaint from anywhere.
+    assert role.value == number, (
+        f"{role.name} carries {role.value}; {number} is the number measured to "
+        f"reach a client as {control_type}"
     )
 
 

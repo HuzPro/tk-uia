@@ -29,7 +29,11 @@ _ALONGSIDE_WHAT_IS_ALREADY_BOUND = "+"
 # The only kind of variable change worth re-announcing.
 _A_WRITE = "write"
 
-_WHERE_A_WIDGET_KEEPS_ITS_WORDS = "text"
+# `-text` for almost everything, and `-label` for the classic `tk.Scale`, which
+# is the one widget in either toolkit with no `-text` option at all. In order:
+# nothing has both, and if anything ever does, the option every other widget
+# uses is the one to believe.
+_WHERE_A_WIDGET_KEEPS_ITS_WORDS = ("text", "label")
 
 # Checked ahead of the role table rather than merely left out of it: a window
 # gets a correct accessible name from `wm title` for free, and overriding it
@@ -246,6 +250,18 @@ class Ledger:
         written = self._said.get(hwnd, {}).get(prop)
         return written is not None and written.value == value
 
+    def the_application_chose(self, hwnd: int, prop: PropId) -> bool:
+        """Whether this property was said by the application rather than inferred.
+
+        `<Map>` fires every time Tk shows a widget again — a notebook tab
+        reopened, a `pack_forget` undone — and the automatic annotation runs
+        over it each time. Without this, the caption quietly wins back every
+        name the application deliberately gave a widget, on an event the
+        application never sees.
+        """
+        written = self._said.get(hwnd, {}).get(prop)
+        return written is not None and written.source is not Wrote.INFERRED
+
     def record(self, hwnd: int, prop: PropId, value: str | int, source: Wrote) -> None:
         self._said.setdefault(hwnd, {})[prop] = Written(value, source)
 
@@ -331,10 +347,18 @@ class Annotator:
         # `describe` can tell a name this package read off the widget from one
         # the application chose. Only the first can go stale; calling the second
         # stale would fire on the pattern the README encourages.
-        self._write(widget, PropId.ROLE, role.value, Wrote.INFERRED)
+        self._infer(widget, PropId.ROLE, role.value)
         name = words_the_widget_shows(widget)
         if name:
-            self._write(widget, PropId.NAME, name, Wrote.INFERRED)
+            self._infer(widget, PropId.NAME, name)
+
+    def _infer(self, widget: TkWidget, prop: PropId, value: str | int) -> None:
+        # Never over the application's own answer. This runs again on every
+        # `<Map>`, and a widget shown a second time must not start announcing
+        # its caption in place of the name its author chose for it.
+        if self.ledger.the_application_chose(self._handle_of(widget), prop):
+            return
+        self._write(widget, prop, value, Wrote.INFERRED)
 
     def set_role(self, widget: TkWidget, role: Role) -> None:
         self._write(widget, PropId.ROLE, role.value)
@@ -659,6 +683,7 @@ def words_the_widget_shows(widget: TkWidget) -> str | None:
     # class is not a label — so one without any words stays unnamed rather than
     # named something the application never wrote.
     options_this_widget_has = widget.keys()
-    if _WHERE_A_WIDGET_KEEPS_ITS_WORDS not in options_this_widget_has:
-        return None
-    return str(widget.cget(_WHERE_A_WIDGET_KEEPS_ITS_WORDS))
+    for where in _WHERE_A_WIDGET_KEEPS_ITS_WORDS:
+        if where in options_this_widget_has:
+            return str(widget.cget(where))
+    return None

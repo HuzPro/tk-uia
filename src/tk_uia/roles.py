@@ -16,13 +16,17 @@ class Role(Enum):
     """MSAA roles, by the numbers `oleacc.h` defines for them."""
 
     SCROLL_BAR = 3
+    GRIP = 4
+    MENU_POPUP = 11
     GROUPING = 20
+    SEPARATOR = 21
     LIST = 33
     OUTLINE = 35
     # Deliberately absent from ROLE_FOR_TK_CLASS below: a tab is not a widget
     # and has no `winfo_class()` to look up. It is written by `tabs.py` onto a
     # window handle made for it, which is the only reason one exists at all.
     PAGE_TAB = 37
+    GRAPHIC = 40
     STATIC_TEXT = 41
     TEXT = 42
     PUSH_BUTTON = 43
@@ -33,6 +37,12 @@ class Role(Enum):
     SLIDER = 51
     SPIN_BUTTON = 52
     PAGE_TAB_LIST = 60
+    # `oleacc.h` calls this SPLITBUTTON, and BUTTONMENU (0x39) reads as the more
+    # obviously named thing — measured, it is a `MenuItemControl`, which would
+    # have a screen reader announce a menu *item* for a button that is not in a
+    # menu at all. This one reads as `SplitButtonControl`: a button with a menu
+    # attached, which is what a Menubutton is.
+    MENU_BUTTON = 62
 
 
 ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
@@ -67,5 +77,20 @@ ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
         "TProgressbar": Role.PROGRESS_BAR,
         "TNotebook": Role.PAGE_TAB_LIST,
         "Treeview": Role.OUTLINE,
+        # A drawing surface, and honestly so: what a canvas shows is paint, and
+        # `GRAPHIC` is the one number measured to reach a client as anything
+        # other than the anonymous pane it already was.
+        "Canvas": Role.GRAPHIC,
+        "Menubutton": Role.MENU_BUTTON,
+        "TMenubutton": Role.MENU_BUTTON,
+        "Panedwindow": Role.GROUPING,
+        "TPanedwindow": Role.GROUPING,
+        "TSeparator": Role.SEPARATOR,
+        "TSizegrip": Role.GRIP,
+        # A menu is never mapped, so nothing here is ever written to one — and
+        # that is the point of the entry. Without it `describe()` blames the
+        # missing role, which reads as "add one and this will work"; with it the
+        # report says NEVER_MAPPED, which is the truth and is not fixable.
+        "Menu": Role.MENU_POPUP,
     }
 )

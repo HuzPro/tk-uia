@@ -98,7 +98,11 @@ and a package that costs an application nothing to install.
   stopped showing", and it is the right shape for a listbox or a treeview, whose
   contents are far too large to push on every change.
 - **Compound widgets, not just the HWND they live in.** A `Listbox` is annotated
-  as a `LIST` and its *rows* are invisible; the same goes for `Treeview` rows.
+  as a `LIST` and its *rows* are invisible; the same goes for `Treeview` rows and
+  a `Menu`'s items. This is the last widget-level gap: as of 0.5.0 every widget
+  class both toolkits ship has a role, and `COVERAGE.md` measures the result at
+  17 of 18 classic widgets and 20 of 20 themed ones typed, named and queryable.
+  What is left is what is *inside* them.
   Exposing them means child ids under one HWND — MSAA's `IAccessible` child
   model, which is a different piece of machinery from annotating a window
   handle. This is documented as a caveat in the README, because a user reads the

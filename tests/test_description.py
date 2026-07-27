@@ -83,24 +83,25 @@ def test_describing_an_annotated_widget_reports_the_role_and_the_name_that_were_
 def test_a_widget_whose_class_has_no_role_is_named_as_unwritten_rather_than_left_out_of_the_report() -> (
     None
 ):
-    # Given a canvas nested inside a frame, which is the one widget class the
-    # role table has no entry for and so the one widget `enable()` walks past
+    # Given somebody's own widget nested inside a frame. Every class both
+    # toolkits ship has a role now, so the widget `enable()` walks past is no
+    # longer a canvas — it is a custom one registered under its own class name.
     store = RecordingStore()
     annotator = Annotator(store)
-    canvas = FakeWidget("Canvas", _A_CANVAS_HANDLE)
-    frame = FakeWidget("Frame", _A_FRAME_HANDLE, children=[canvas])
+    homemade = FakeWidget("SparklineChart", _A_CANVAS_HANDLE)
+    frame = FakeWidget("Frame", _A_FRAME_HANDLE, children=[homemade])
     root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[frame])
     annotator.add(frame)
-    annotator.add(canvas)
+    annotator.add(homemade)
 
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then the canvas is in the report, by its path, with the reason nothing was
+    # Then it is in the report, by its path, with the reason nothing was
     # written about it. A description that listed only what it had written would
     # render an application nobody annotated as a blank page — and the widget an
     # author most needs to see is the one they never thought about.
-    said = _what_the_description_says_about(description, str(canvas))
+    said = _what_the_description_says_about(description, str(homemade))
 
     assert said.gaps == (Gap.NO_ROLE_FOR_ITS_CLASS,), (
         f"the canvas is reported with gaps {said.gaps}, so a reader is not told "
@@ -359,6 +360,39 @@ def test_a_notebook_whose_tabs_were_given_handles_is_not_reported_as_hollow() ->
     )
     assert said.tabs == ("General", "Paths"), (
         f"the report says its tabs are {said.tabs}"
+    )
+
+
+def test_a_widget_tk_has_unmapped_since_it_was_annotated_is_reported_as_out_of_reach() -> (
+    None
+):
+    # Given a widget that was annotated while it was on screen, and which Tk has
+    # since taken off it — an unselected notebook tab is the everyday case
+    store = RecordingStore()
+    annotator = Annotator(store)
+    entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[entry])
+    annotator.add(entry)
+    annotator.set_name(entry, "Host")
+    entry.is_taken_off_the_screen()
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then it is reported as out of reach rather than as written. Measured
+    # against a real tabbed dialog: after a tab change, 23 widgets kept their
+    # handles and every annotation on them, and a client could read none of
+    # them — UI Automation does not list an unmapped window. A report that
+    # still called those written was the one thing this file exists to refuse.
+    said = _what_the_description_says_about(description, str(entry))
+    assert said.gaps == (Gap.UNMAPPED_SINCE_ANNOTATED,), (
+        f"reported {said.gaps} for a widget nothing can currently read"
+    )
+    # And the row still shows what was written, because it is all still there:
+    # the widget comes back the moment Tk maps it again, and nothing has to be
+    # re-annotated for that to happen.
+    assert (said.role, said.name) == (Role.TEXT, "Host"), (
+        f"the row lost what was written about it: role {said.role}, name {said.name!r}"
     )
 
 

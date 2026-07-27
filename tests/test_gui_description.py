@@ -59,15 +59,15 @@ def test_describing_a_real_tk_window_names_its_widgets_by_their_real_tk_classes_
     report = _whatever_the_application_wrote(annotated_app, THE_REPORT)
 
     # Then the widgets are named by their real Tk classes and their real paths
-    assert " Canvas " in report, (
-        f"no widget in the report is a real Canvas, so this ran against "
+    assert " SparklineChart " in report, (
+        f"no widget in the report is a real SparklineChart, so this ran against "
         f"something other than a live Tk:\n{report}"
     )
 
-    # And the canvas — the one class the role table has never heard of — is
+    # And the unknown_class_widget — the one class the role table has never heard of — is
     # reported as carrying nothing, with the reason
     assert "NO_ROLE_FOR_ITS_CLASS" in report, (
-        f"the canvas this application deliberately leaves unannotated is not "
+        f"the unknown_class_widget this application deliberately leaves unannotated is not "
         f"reported as unwritten:\n{report}"
     )
 

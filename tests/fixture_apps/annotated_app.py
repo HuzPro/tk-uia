@@ -36,6 +36,7 @@ DRAFT = "Write the report"
 REVISION = "Write the quarterly report"
 DISPOSABLE = "Disposable"
 SCRATCH = "Scratch"
+A_CLASS_NOBODY_HAS_A_ROLE_FOR = "SparklineChart"
 READY = "ready"
 TASK_CREATED = "task created"
 PRESSES = "presses"
@@ -137,11 +138,14 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     disposable_entry = tk.Entry(root, width=20)
     disposable_entry.pack()
 
-    # The control group, and the reason it is a canvas: `ROLE_FOR_TK_CLASS` has
-    # no entry for one, so `enable()` walks straight past it. It stays exactly
-    # as bare Tk left it, in the same window, in the same process, reached by
-    # the same call that annotated everything around it.
-    tk.Canvas(root, width=200, height=40).pack(pady=10)
+    # The control group, and it is a widget of somebody's own class: every class
+    # both toolkits ship has a role now, so the only thing `enable()` walks past
+    # is one it has never heard of. It stays exactly as bare Tk left it, in the
+    # same window, in the same process, reached by the same call that annotated
+    # everything around it.
+    tk.Frame(root, class_=A_CLASS_NOBODY_HAS_A_ROLE_FOR, width=200, height=40).pack(
+        pady=10
+    )
 
     draft = tk.StringVar(value=DRAFT)
 

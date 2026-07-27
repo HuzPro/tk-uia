@@ -18,6 +18,7 @@ from tk_uia.roles import Role
 
 _A_BUTTON_HANDLE = 0x000407A2
 _AN_ENTRY_HANDLE = 0x000407A3
+_A_SCALE_HANDLE = 0x000A0C0E
 _A_CANVAS_HANDLE = 0x000407A4
 _A_ROOT_HANDLE = 0x000407A0
 _A_DIALOG_HANDLE = 0x000407A1
@@ -75,22 +76,84 @@ def test_a_widget_with_no_text_of_its_own_is_given_a_role_but_never_an_invented_
     )
 
 
+def test_a_name_the_application_chose_survives_the_widget_being_mapped_again() -> None:
+    # Given a button the application has deliberately named something other than
+    # its caption — `Button(text="OK")` announced as "Confirm order", which the
+    # README encourages and which is the whole reason `set_acc_name` exists
+    store = RecordingStore()
+    annotator = Annotator(store)
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="OK")
+    annotator.add(button)
+    annotator.set_name(button, "Confirm order")
+
+    # When Tk maps it again — a notebook tab reopened, a pack_forget undone —
+    # and the automatic annotation runs over it a second time
+    annotator.add(button)
+
+    # Then the application's name is still there. An inferred name overwriting a
+    # chosen one loses it silently, on an event the application never sees, and
+    # the widget starts announcing its caption again with nothing raised.
+    assert store.properties(_A_BUTTON_HANDLE)[PropId.NAME] == "Confirm order", (
+        "the caption overwrote the name the application chose: "
+        f"{store.properties(_A_BUTTON_HANDLE)}"
+    )
+
+
+def test_a_role_the_application_chose_survives_the_widget_being_mapped_again() -> None:
+    # Given a widget the application has given a role of its own, over the one
+    # its class would infer
+    store = RecordingStore()
+    annotator = Annotator(store)
+    label = FakeWidget("Label", _A_LABEL_HANDLE, text="12 unread")
+    annotator.add(label)
+    annotator.set_role(label, Role.PROGRESS_BAR)
+
+    # When Tk maps it again
+    annotator.add(label)
+
+    # Then the chosen role stands. Same rule as the name, for the same reason:
+    # the application said so, and a `<Map>` is not the application saying
+    # anything at all.
+    assert store.properties(_A_LABEL_HANDLE)[PropId.ROLE] == Role.PROGRESS_BAR.value, (
+        f"the inferred role came back: {store.properties(_A_LABEL_HANDLE)}"
+    )
+
+
+def test_a_scale_is_named_from_the_label_option_it_keeps_its_words_in() -> None:
+    # Given a classic Scale, which has no `-text` at all: measured, its options
+    # carry `-label` and nothing else that holds words a person reads
+    store = RecordingStore()
+    annotator = Annotator(store)
+    scale = FakeWidget("Scale", _A_SCALE_HANDLE, label="Volume")
+
+    # When the annotator meets it
+    annotator.add(scale)
+
+    # Then it is named from there. Reading only `-text` would leave the one
+    # widget whose caption Tk keeps somewhere else as the one widget a screen
+    # reader announces as an unnamed slider.
+    assert store.properties(_A_SCALE_HANDLE)[PropId.NAME] == "Volume", (
+        f"a labelled Scale was left unnamed: {store.properties(_A_SCALE_HANDLE)}"
+    )
+
+
 def test_a_widget_class_the_role_table_has_never_heard_of_is_left_exactly_as_tk_left_it() -> (
     None
 ):
-    # Given a widget of a class nobody has decided a role for — a canvas, whose
-    # contents are drawn and which a client cannot meaningfully be told about
+    # Given a widget of a class nobody has decided a role for. Every class both
+    # toolkits ship now has one, so this is what it really is: somebody's own
+    # widget, registered under a class name this package has never seen.
     store = RecordingStore()
     annotator = Annotator(store)
-    canvas = FakeWidget("Canvas", _A_CANVAS_HANDLE, text="not really a label")
+    homemade = FakeWidget("SparklineChart", _A_CANVAS_HANDLE, text="not really a label")
 
     # When the annotator meets it
-    annotator.add(canvas)
+    annotator.add(homemade)
 
     # Then nothing is written. Guessing a role invents a control that is not
     # there; a client would go looking for text it can never read.
     assert store.writes == [], (
-        f"an unmapped widget class must be passed over, not guessed at: {store.writes}"
+        f"a class with no role must be passed over, not guessed at: {store.writes}"
     )
 
 
