@@ -48,7 +48,13 @@ def test_enabling_accessibility_on_tk_eight_six_installs_the_class_bindings_and_
 
     # And Tk will hand over every widget it maps or destroys from here on,
     # without displacing the bindings Tk and the application already have
-    assert root.class_bindings == [("<Map>", "+"), ("<Destroy>", "+")], (
+    assert root.class_bindings == [
+        ("<Map>", "+"),
+        ("<Destroy>", "+"),
+        # A notebook's tabs are not widgets, so they never map and `<Map>` says
+        # nothing about one being added or removed. This is the event that does.
+        ("<<NotebookTabChanged>>", "+"),
+    ], (
         f"bound {root.class_bindings}; anything but `add='+'` silently replaces "
         "whatever else was listening for the same event"
     )

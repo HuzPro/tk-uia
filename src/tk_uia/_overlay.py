@@ -1,0 +1,123 @@
+"""The window handles a notebook's tabs borrow, made with four Win32 calls.
+
+Where it plugs in: `enable()` hands one of these to :class:`~tk_uia.tabs.TabHandles`
+as its `OverlayWindows`. A humble object with no unit tests of its own — there
+is no decision in it — proven by the gui specs, which read the tabs back from
+another process and click one.
+
+Why these exact styles, since every one of them is load-bearing:
+
+`WS_EX_TRANSPARENT` keeps the window out of hit-testing, so the click a client
+aims at a tab reaches the notebook underneath and Tk selects it. Without it the
+tab would be visible to a screen reader and dead to a mouse.
+
+`SS_OWNERDRAW` makes the static ask its parent to paint it, by way of
+`WM_DRAWITEM`. Tk has never heard of this window and ignores the message, so
+nothing is painted and the tab strip shows through unaltered. A plain static
+would paint its background over the tab it is standing in for.
+
+Nothing here is registered with Tk, so Tk's geometry managers never see these
+windows and cannot lay them out; they are positioned in the notebook's client
+coordinates and moved when the strip moves. Windows destroys a child with its
+parent, which is a safety net rather than the plan — `TabHandles` gives each one
+back explicitly, and clears what it said first.
+"""
+
+from __future__ import annotations
+
+import ctypes
+from typing import Any
+
+# The generic control class every Windows install has. Nothing is registered:
+# a class of this package's own would have to be unregistered too, and would
+# leave a stale atom behind on every reload.
+_A_PLAIN_STATIC = "STATIC"
+
+_WS_CHILD = 0x40000000
+_WS_VISIBLE = 0x10000000
+_SS_OWNERDRAW = 0x0000000D
+_WS_EX_TRANSPARENT = 0x00000020
+
+_NO_MENU = None
+_NO_MODULE = None
+_NO_PARAMETER = None
+_REPAINT_IT = True
+
+
+class Win32Overlays:
+    """Real child windows over a real notebook's real tabs."""
+
+    def create(self, parent: int, left: int, top: int, width: int, height: int) -> int:
+        made = _create_window()(
+            _WS_EX_TRANSPARENT,
+            _A_PLAIN_STATIC,
+            None,
+            _WS_CHILD | _WS_VISIBLE | _SS_OWNERDRAW,
+            left,
+            top,
+            width,
+            height,
+            ctypes.c_void_p(parent),
+            _NO_MENU,
+            _NO_MODULE,
+            _NO_PARAMETER,
+        )
+        if not made:
+            raise OSError(
+                f"could not make a window for a tab of {parent:#x}: "
+                f"CreateWindowExW failed with {ctypes.get_last_error()}"
+            )
+        return int(made)
+
+    def move(self, hwnd: int, left: int, top: int, width: int, height: int) -> None:
+        _move_window()(ctypes.c_void_p(hwnd), left, top, width, height, _REPAINT_IT)
+
+    def destroy(self, hwnd: int) -> None:
+        _destroy_window()(ctypes.c_void_p(hwnd))
+
+
+def _create_window() -> Any:
+    make = _user32().CreateWindowExW
+    make.restype = ctypes.c_void_p
+    make.argtypes = (
+        ctypes.c_uint32,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+    )
+    return make
+
+
+def _move_window() -> Any:
+    move = _user32().MoveWindow
+    move.restype = ctypes.c_int
+    move.argtypes = (
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+    )
+    return move
+
+
+def _destroy_window() -> Any:
+    close = _user32().DestroyWindow
+    close.restype = ctypes.c_int
+    close.argtypes = (ctypes.c_void_p,)
+    return close
+
+
+def _user32() -> Any:
+    # Per call rather than at import, and with the last error kept: `ctypes.windll`
+    # does not exist off Windows, and this module still has to import there.
+    return ctypes.WinDLL("user32", use_last_error=True)

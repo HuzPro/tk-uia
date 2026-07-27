@@ -286,12 +286,27 @@ is out of the picture entirely.
   variable* with no call to this package at all (measured: `1`, then `0` after
   the application set the variable to 0). That comes from the MSAA proxy, not
   from here.
-- **Compound-widget items are invisible.** A `Listbox` is annotated as a `LIST`
-  and its *rows* are not in the tree at all; the same goes for `Treeview` items
-  and `Notebook` tabs. Tk gives one HWND per widget, and annotation works on
-  HWNDs — exposing items means MSAA's `IAccessible` child-id model, which is a
-  different piece of machinery. So a screen-reader user can find your listbox
-  and cannot hear what is in it. On the [ROADMAP](ROADMAP.md); not here yet.
+- **Notebook tabs are reachable; other compound-widget items are not.** A
+  `Listbox` is annotated as a `LIST` and its *rows* are not in the tree at all;
+  the same goes for `Treeview` items. Tk gives one HWND per widget and
+  annotation works on HWNDs, so exposing those means MSAA's `IAccessible`
+  child-id model — a different piece of machinery. On the
+  [ROADMAP](ROADMAP.md); not here yet.
+
+  **A `ttk.Notebook`'s tabs are the exception, since 0.4.0.** Each one is given
+  a real child window of its own, positioned over the tab and annotated
+  `PAGE_TAB`, so a client sees a `TabControl` with named `TabItemControl`s under
+  it — and a click at a tab's centre selects it, because that window is
+  `WS_EX_TRANSPARENT` and passes the click straight through to Tk. Without this
+  a test could read whichever page was open and could never change which one
+  that was. The window is owner-drawn by a parent that ignores the message, so
+  it paints nothing and the strip looks exactly as it did.
+
+  Tk fires `<<NotebookTabChanged>>` when the *selection* moves and at no other
+  time, so a tab **added** beside the open one, or **renamed** in place, needs
+  `add_acc_object(notebook)` — the same escape hatch a `config(text=...)` needs,
+  for the same reason. Selecting a tab, and removing the open one, are noticed
+  on their own.
 - **A widget Tk never maps is never annotated.** An unshown notebook tab, a
   window built and withdrawn — `<Map>` never fires, so nothing happens until it
   does. This is inherent to the event, and shared with Tk 9.1's own

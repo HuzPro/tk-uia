@@ -98,15 +98,27 @@ and a package that costs an application nothing to install.
   stopped showing", and it is the right shape for a listbox or a treeview, whose
   contents are far too large to push on every change.
 - **Compound widgets, not just the HWND they live in.** A `Listbox` is annotated
-  as a `LIST` and its *items* are invisible; the same goes for `Treeview` rows
-  and `Notebook` tabs. Exposing them means child ids under one HWND — MSAA's
-  `IAccessible` child model, which is a different piece of machinery from
-  annotating a window handle. This is now also documented as a caveat in the
-  README, because a user reads the shop window rather than the roadmap, and
-  "your listbox is findable and its contents are not" is something to know
-  before adopting rather than after. `describe(root)` now names the affected
-  widgets per path (`ITEMS_NOT_IN_THE_TREE`), which is the same information at
-  the point where an author can act on it.
+  as a `LIST` and its *rows* are invisible; the same goes for `Treeview` rows.
+  Exposing them means child ids under one HWND — MSAA's `IAccessible` child
+  model, which is a different piece of machinery from annotating a window
+  handle. This is documented as a caveat in the README, because a user reads the
+  shop window rather than the roadmap, and "your listbox is findable and its
+  contents are not" is something to know before adopting rather than after.
+  `describe(root)` names the affected widgets per path
+  (`ITEMS_NOT_IN_THE_TREE`), which is the same information at the point where an
+  author can act on it.
+
+  **`Notebook` tabs came off this list in 0.4.0, and how is worth recording.**
+  The assumption above — that reaching *any* compound widget's items needs the
+  server — was not measured, and for tabs it was wrong. A tab is not a window,
+  but nothing stops one being given a window: a `WS_EX_TRANSPARENT`,
+  owner-drawn child positioned over the tab is a real HWND, so the annotation
+  machinery already here applies unchanged, it paints nothing, and a click goes
+  through it to Tk. That does not rescue rows and items — they scroll and there
+  can be thousands of them, where a notebook has four — so the entry above
+  stands. The lesson is narrower and worth keeping: "this needs a different
+  mechanism" was a conclusion nobody had tried to falsify.
+
 - **Publishing to PyPI.** Out of scope for v0.1 by decision, not by omission.
   The name is free.
 

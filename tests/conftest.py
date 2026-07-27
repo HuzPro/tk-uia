@@ -103,13 +103,23 @@ def a_package_that_has_not_been_enabled_yet() -> Iterator[None]:
 @pytest.fixture
 def annotated_app(tmp_path: Path) -> Iterator[RunningApp]:
     """The self-annotating Tk app, up and painted, in a process of its own."""
+    yield from _the_app_in("annotated_app.py", tmp_path)
+
+
+@pytest.fixture
+def notebook_app(tmp_path: Path) -> Iterator[RunningApp]:
+    """The app whose window is a notebook, for the specs about its tabs."""
+    yield from _the_app_in("notebook_app.py", tmp_path)
+
+
+def _the_app_in(fixture_app: str, commands: Path) -> Iterator[RunningApp]:
     # Imported inside the fixture rather than at module scope: conftest is
     # imported on every platform, including the one with no `uiautomation`.
     import uiautomation as auto
 
     title = f"tk-uia fixture {uuid.uuid4()}"
     app = subprocess.Popen(
-        [_INTERPRETER, str(FIXTURE_APPS / "annotated_app.py"), title, str(tmp_path)],
+        [_INTERPRETER, str(FIXTURE_APPS / fixture_app), title, str(commands)],
         stderr=subprocess.PIPE,
         text=True,
     )
@@ -117,7 +127,7 @@ def annotated_app(tmp_path: Path) -> Iterator[RunningApp]:
         window = auto.WindowControl(searchDepth=_TOP_LEVEL_WINDOWS, Name=title)
         if not window.Exists(_READY_TIMEOUT_SECONDS, _HOW_OFTEN_TO_LOOK_FOR_THE_WINDOW):
             pytest.fail(_why_no_window_appeared(app, title))
-        yield RunningApp(window, tmp_path)
+        yield RunningApp(window, commands)
     finally:
         _killed_with_its_children(app)
 

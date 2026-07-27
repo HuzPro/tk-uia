@@ -313,6 +313,55 @@ def test_a_listbox_is_reported_as_findable_with_its_rows_not_in_the_tree_at_all(
     )
 
 
+class TabsThatWereFound:
+    """Whatever the tab handles are keeping, as `describe` reads it."""
+
+    def __init__(self, **by_path: tuple[str, ...]) -> None:
+        self._by_path = by_path
+
+    def refresh(self, widget: object) -> None: ...
+
+    def forget(self, path: str) -> None: ...
+
+    def on(self, path: str) -> tuple[object, ...]:
+        return tuple(
+            type("Tab", (), {"text": text})() for text in self._by_path.get(path, ())
+        )
+
+
+def test_a_notebook_whose_tabs_were_given_handles_is_not_reported_as_hollow() -> None:
+    # Given a notebook whose tabs have been found and given window handles
+    store = RecordingStore()
+    annotator = Annotator(store)
+    notebook = FakeWidget("TNotebook", _A_NOTEBOOK_HANDLE)
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[notebook]
+    )
+    annotator.add(notebook)
+    annotator.set_name(notebook, "Settings")
+
+    # When the application asks what it has told Windows
+    description = describe(
+        root,
+        Installation(
+            Strategy.ANNOTATED,
+            annotator,
+            tabs=TabsThatWereFound(**{str(notebook): ("General", "Paths")}),
+        ),
+    )
+
+    # Then the tabs are named as reachable rather than reported missing. Saying
+    # a notebook is hollow when a client can already see and press every tab on
+    # it would send an author looking for a gap that is not there.
+    said = _what_the_description_says_about(description, str(notebook))
+    assert Gap.ITEMS_NOT_IN_THE_TREE not in said.gaps, (
+        f"a notebook with handles for both its tabs is reported as {said.gaps}"
+    )
+    assert said.tabs == ("General", "Paths"), (
+        f"the report says its tabs are {said.tabs}"
+    )
+
+
 def test_an_annotated_button_is_reported_as_advertising_an_invoke_pattern_that_presses_nothing() -> (
     None
 ):

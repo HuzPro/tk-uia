@@ -19,6 +19,10 @@ class Role(Enum):
     GROUPING = 20
     LIST = 33
     OUTLINE = 35
+    # Deliberately absent from ROLE_FOR_TK_CLASS below: a tab is not a widget
+    # and has no `winfo_class()` to look up. It is written by `tabs.py` onto a
+    # window handle made for it, which is the only reason one exists at all.
+    PAGE_TAB = 37
     STATIC_TEXT = 41
     TEXT = 42
     PUSH_BUTTON = 43

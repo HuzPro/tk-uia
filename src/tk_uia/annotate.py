@@ -19,6 +19,7 @@ from tk_uia.tkversion import Strategy, TkInterpreter, strategy_for
 
 _A_WIDGET_APPEARED = "<Map>"
 _A_WIDGET_DIED = "<Destroy>"
+_THE_TABS_CHANGED = "<<NotebookTabChanged>>"
 
 # Anything else replaces whatever Tk and the application already had bound to
 # the same event, which is a startling amount of a Tk application to break in
@@ -129,6 +130,37 @@ class TkVariable(Protocol):
     def trace_add(self, mode: str, callback: Callable[..., object]) -> str: ...
 
     def trace_remove(self, mode: str, callback_name: str) -> None: ...
+
+
+class TabbedWidgets(Protocol):
+    """Whatever is keeping a notebook's tabs reachable, if anything is.
+
+    A protocol rather than an import: the implementation lives in `tabs`, which
+    already imports this module for its store and its property ids, and one
+    seam declared here is cheaper than untangling that into a third.
+    """
+
+    def refresh(self, widget: TkWidget) -> None: ...
+
+    def forget(self, path: str) -> None: ...
+
+    def on(self, path: str) -> Sequence[object]: ...
+
+
+class NoTabs:
+    """For a Tk that needs none, and for every spec not about tabs.
+
+    Same reason as :class:`InertAnnotator`: the alternative is a "is anything
+    installed" branch at each of the three places a notebook is noticed, and
+    those are the branches only ever wrong on the platform nobody is testing on.
+    """
+
+    def refresh(self, widget: TkWidget) -> None: ...
+
+    def forget(self, path: str) -> None: ...
+
+    def on(self, path: str) -> Sequence[object]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -521,46 +553,59 @@ class Installation:
     # Defaulted so that a spec can build one without naming it, and built at
     # construction rather than at import so it is never the import thread.
     owner: OwningThread = field(default_factory=OwningThread.whichever_is_calling)
+    tabs: TabbedWidgets = field(default_factory=NoTabs)
 
 
 def install(
     root: TkApplication,
     store: AccessibilityStore,
     roles: Mapping[str, Role] | None = None,
+    tabs: TabbedWidgets | None = None,
 ) -> Installation:
     strategy = strategy_for(root.tk)
     owner = OwningThread.whichever_is_calling()
     if strategy is not Strategy.ANNOTATED:
         return Installation(strategy, InertAnnotator(roles), owner)
+    notebooks = tabs if tabs is not None else NoTabs()
     annotator = Annotator(store, roles, owner)
-    _follow_every_widget_tk_maps_or_destroys(root, annotator)
-    _annotate_everything_already_on_screen(root, annotator)
-    return Installation(strategy, annotator, owner)
+    _follow_every_widget_tk_maps_or_destroys(root, annotator, notebooks)
+    _annotate_everything_already_on_screen(root, annotator, notebooks)
+    return Installation(strategy, annotator, owner, notebooks)
 
 
 def _follow_every_widget_tk_maps_or_destroys(
-    root: TkApplication, annotator: Annotator
+    root: TkApplication, annotator: Annotator, notebooks: TabbedWidgets
 ) -> None:
     root.bind_all(
         _A_WIDGET_APPEARED,
-        lambda event: _annotate_if_there_is_still_a_widget(annotator, event.widget),
+        lambda event: _annotate_if_there_is_still_a_widget(
+            annotator, notebooks, event.widget
+        ),
         add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
     )
     root.bind_all(
         _A_WIDGET_DIED,
-        lambda event: annotator.forget(event.widget),
+        lambda event: _let_go_of(annotator, notebooks, event.widget),
+        add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
+    )
+    # A notebook's tabs are not widgets and never map, so `<Map>` says nothing
+    # about one being added, removed or renamed. This is the event that does.
+    root.bind_all(
+        _THE_TABS_CHANGED,
+        lambda event: _refresh_if_there_is_still_a_widget(notebooks, event.widget),
         add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
     )
 
 
 def _annotate_everything_already_on_screen(
-    root: TkApplication, annotator: Annotator
+    root: TkApplication, annotator: Annotator, notebooks: TabbedWidgets
 ) -> None:
     # `<Map>` fires once, on the way up. Every widget showing at the moment
     # accessibility is switched on has already had its, and will not get another.
     for widget in every_widget_under(root):
         if widget.winfo_ismapped():
             annotator.add(widget)
+            notebooks.refresh(widget)
 
 
 def every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
@@ -570,13 +615,31 @@ def every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
 
 
 def _annotate_if_there_is_still_a_widget(
-    annotator: Annotator, widget: TkWidget | str
+    annotator: Annotator, notebooks: TabbedWidgets, widget: TkWidget | str
 ) -> None:
     if isinstance(widget, str):
         # Tk passes the path rather than the object when it can no longer
         # resolve one, and a path answers no question worth asking here.
         return
     annotator.add(widget)
+    notebooks.refresh(widget)
+
+
+def _refresh_if_there_is_still_a_widget(
+    notebooks: TabbedWidgets, widget: TkWidget | str
+) -> None:
+    if isinstance(widget, str):
+        return
+    notebooks.refresh(widget)
+
+
+def _let_go_of(
+    annotator: Annotator, notebooks: TabbedWidgets, widget: TkWidget | str
+) -> None:
+    annotator.forget(widget)
+    # By path, not by widget: `<Destroy>` is the one event that routinely
+    # carries a path whose widget object has already gone.
+    notebooks.forget(str(widget))
 
 
 def _whatever_the_variable_holds(variable: TkVariable) -> str:

@@ -25,6 +25,7 @@ from tk_uia.annotate import (
     Installation,
     Ledger,
     PropId,
+    TabbedWidgets,
     TkWidget,
     Written,
     Wrote,
@@ -84,9 +85,11 @@ class Gap(Enum):
         "confident wrong answer where bare Tk gave none. bind_value_variable()."
     )
     ITEMS_NOT_IN_THE_TREE = (
-        "its rows, tabs or items are not in the accessibility tree at all. MSAA "
-        "child ids are not implemented here, so the widget is findable and its "
-        "contents are not."
+        "its rows or items are not in the accessibility tree at all. MSAA child "
+        "ids are not implemented here, so the widget is findable and its "
+        "contents are not. A notebook is the exception: its tabs are given "
+        "window handles of their own, and this is reported only for one whose "
+        "strip nothing could be found on."
     )
     CANNOT_BE_PRESSED = (
         "advertises an InvokePattern and a DefaultAction that press nothing. Tk "
@@ -120,6 +123,9 @@ class WidgetDescription:
     kept_in_step: tuple[PropId, ...]
     also_written: Mapping[PropId, str | int]
     gaps: tuple[Gap, ...]
+    # A notebook's tabs, which are not widgets and appear nowhere else in this
+    # report — they have window handles of their own and nothing to walk to.
+    tabs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -143,7 +149,7 @@ def describe(root: TkWidget, installation: Installation) -> Description:
     installation.owner.refuse_any_other_caller()
     annotator = installation.annotator
     widgets = tuple(
-        _described(widget, annotator.ledger, annotator.roles)
+        _described(widget, annotator.ledger, annotator.roles, installation.tabs)
         for widget in _the_root_and_everything_under_it(root)
     )
     return Description(
@@ -306,6 +312,8 @@ def _whatever_the_row_had_no_room_for(widget: WidgetDescription) -> Iterator[str
     if widget.kept_in_step:
         following = ", ".join(prop.name.lower() for prop in widget.kept_in_step)
         yield f"{_UNDER_THE_ROW}kept in step with a variable: {following}"
+    if widget.tabs:
+        yield f"{_UNDER_THE_ROW}tabs a client can reach: {', '.join(widget.tabs)}"
     if widget.also_written:
         also = ", ".join(
             f"{prop.name}={value!r}" for prop, value in widget.also_written.items()
@@ -344,7 +352,10 @@ class _AsTheWalkFoundIt:
 
 
 def _described(
-    widget: TkWidget, ledger: Ledger, roles: Mapping[str, Role]
+    widget: TkWidget,
+    ledger: Ledger,
+    roles: Mapping[str, Role],
+    tabs: TabbedWidgets,
 ) -> WidgetDescription:
     found = _AsTheWalkFoundIt(
         widget=widget,
@@ -355,7 +366,7 @@ def _described(
     hwnd = ledger.handle_of(found.path)
     if hwnd is None:
         return _nothing_was_written_about(found, roles)
-    return _what_was_written_about(found, hwnd, ledger)
+    return _what_was_written_about(found, hwnd, ledger, tabs)
 
 
 def _nothing_was_written_about(
@@ -376,9 +387,10 @@ def _nothing_was_written_about(
 
 
 def _what_was_written_about(
-    found: _AsTheWalkFoundIt, hwnd: int, ledger: Ledger
+    found: _AsTheWalkFoundIt, hwnd: int, ledger: Ledger, tabs: TabbedWidgets
 ) -> WidgetDescription:
     said = ledger.about(hwnd)
+    carrying = tuple(str(tab.text) for tab in tabs.on(found.path))
     role = None if PropId.ROLE not in said else Role(said[PropId.ROLE].value)
     written = WidgetDescription(
         path=found.path,
@@ -391,6 +403,7 @@ def _what_was_written_about(
         kept_in_step=_whatever_a_variable_is_keeping_true(said),
         also_written=_whatever_the_columns_have_no_room_for(said),
         gaps=(),
+        tabs=carrying,
     )
     if found.widget.winfo_id() != hwnd:
         # Asked once the ledger has answered, and reported instead of every
@@ -434,6 +447,11 @@ def _what_is_missing_from(
     if written.role in _ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF and written.value is None:
         missing.append(Gap.NO_VALUE)
     if written.role in _ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN:
+        missing.append(Gap.ITEMS_NOT_IN_THE_TREE)
+    # A notebook whose tabs were found and given handles is not hollow. One
+    # whose strip yielded nothing still is, and saying so is the whole point:
+    # the scan can come up empty on a notebook Tk has not laid out yet.
+    if written.role is Role.PAGE_TAB_LIST and not written.tabs:
         missing.append(Gap.ITEMS_NOT_IN_THE_TREE)
     if written.role is Role.PUSH_BUTTON:
         missing.append(Gap.CANNOT_BE_PRESSED)
@@ -501,9 +519,7 @@ _ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF = frozenset({Role.TEXT, Role.COMBO_BOX})
 # The roles whose whole point is what is inside them. Tk gives one window handle
 # per widget and annotation works on handles, so the rows, items and tabs need
 # MSAA's child-id model — a different piece of machinery, and not this one.
-_ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN = frozenset(
-    {Role.LIST, Role.OUTLINE, Role.PAGE_TAB_LIST}
-)
+_ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN = frozenset({Role.LIST, Role.OUTLINE})
 
 
 def _why_nothing_was_written(

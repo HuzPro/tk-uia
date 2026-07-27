@@ -22,6 +22,7 @@ _AN_ID_THE_APPLICATION_CHOSE = 4207
 _A_WIDGET_APPEARED = "<Map>"
 _A_WIDGET_DIED = "<Destroy>"
 _ALONGSIDE = "+"
+_THE_TABS_CHANGED = "<<NotebookTabChanged>>"
 
 
 def test_switching_accessibility_on_where_there_is_none_says_so_and_stays_callable() -> (
@@ -69,8 +70,9 @@ def test_switching_accessibility_on_a_second_time_hands_back_the_installation_al
     assert root.class_bindings == [
         (_A_WIDGET_APPEARED, _ALONGSIDE),
         (_A_WIDGET_DIED, _ALONGSIDE),
+        (_THE_TABS_CHANGED, _ALONGSIDE),
     ], (
-        f"bound {root.class_bindings}; a repeat enable() stacked a second pair "
+        f"bound {root.class_bindings}; a repeat enable() stacked a second set "
         "of bindings over the first"
     )
     assert the_second_time is the_first_time, (

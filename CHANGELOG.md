@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.4.0 — 2026-07-27
+
+A notebook's tabs are now controls a client can see, name and press. Until now
+`enable()` gave you a `TabControl` with nothing inside it: a test could read
+whichever page happened to be open and had no way at all to change which one
+that was, which for a tabbed settings dialog is most of the window.
+
+- **Every `ttk.Notebook` tab is given a window handle of its own.** Tk paints
+  the whole tab strip inside the notebook's own window, so there is no handle
+  for `SetHwndProp` to annotate — which is why the ROADMAP's answer to this was
+  MSAA's child-id model, meaning an `IAccessible` COM server answering
+  `WM_GETOBJECT`. Measured, there is a smaller answer: a real child window over
+  each tab *is* a handle, so the machinery already here annotates it. Each is
+  created `WS_EX_TRANSPARENT` and `SS_OWNERDRAW` with a parent that ignores
+  `WM_DRAWITEM`, so it paints nothing, the strip looks unchanged, and a click at
+  a tab's centre passes straight through to Tk and selects that tab. Runtime
+  dependencies stay at zero; the whole addition is four Win32 calls behind a
+  seam.
+
+- **Two measurements shaped the scan, and both would have been wrong to guess.**
+  ttk draws the *selected* tab standing two pixels proud at the top **and**
+  bottom, so the first row of the strip that answers belongs to that tab alone —
+  a scan across it finds one tab and reports the notebook done. The scan crosses
+  the strip's middle instead, and gives every tab the extent they cover between
+  them rather than its own, so that picking a different tab does not move every
+  rectangle on the strip. Tk also lays a strip out on idle, so a tab added a
+  moment ago is not yet where it will be; the scan lets the layout settle before
+  it measures anything.
+
+- **What announces itself, and what an application has to say.** Tk fires
+  `<<NotebookTabChanged>>` for a change of *selection* and nothing else —
+  measured, adding a tab fires no event of any kind. Selecting a tab and
+  removing the open one are therefore noticed on their own; a tab **added**
+  beside the open one, or **renamed** in place, needs `add_acc_object(notebook)`,
+  which now refreshes a notebook's tabs as well as re-reading its `-text`. This
+  is the same contract a `config(text=...)` has always had.
+
+- **`describe(root)` stops calling a notebook hollow when it is not.**
+  `ITEMS_NOT_IN_THE_TREE` is no longer reported for a notebook whose tabs were
+  found and given handles; the row lists them instead. It is still reported for
+  a `Listbox`, a `Treeview`, and for a notebook whose strip nothing could be
+  found on — which is what a notebook Tk has not laid out yet looks like.
+
+- **The bound of the idea, stated because it is the obvious next question.**
+  This does not generalise to `Listbox` rows or `Treeview` items. Those scroll,
+  there can be thousands, and a window per row would be absurd where a window
+  per tab is four. They still want the server, and are still on the ROADMAP.
+
 ## 0.3.0 — 2026-07-26
 
 One new call, and it answers a question the library previously left an

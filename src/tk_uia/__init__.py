@@ -37,7 +37,7 @@ from tk_uia.tkversion import Strategy
 if TYPE_CHECKING:
     import tkinter
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "ROLE_FOR_TK_CLASS",
@@ -82,20 +82,34 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
     if _installed is not None:
         return _installed.strategy
     from tk_uia._accprop import AccPropServicesStore
+    from tk_uia._overlay import Win32Overlays
+    from tk_uia._tkstrip import TkTabStrip, is_a_notebook
     from tk_uia.annotate import install
+    from tk_uia.tabs import Notebooks, TabHandles
 
-    _installed = install(root, AccPropServicesStore(), roles)
+    store = AccPropServicesStore()
+    notebooks = Notebooks(
+        TabHandles(store, Win32Overlays()),
+        lambda widget: TkTabStrip(widget) if is_a_notebook(widget) else None,
+    )
+    _installed = install(root, store, roles, notebooks)
     return _installed.strategy
 
 
 def add_acc_object(widget: tkinter.Misc) -> None:
-    """Annotate one widget now, re-reading its class and its `-text`.
+    """Annotate one widget now, re-reading its class, its `-text` and its tabs.
 
     `enable()` already does this for everything Tk maps. Call it by hand after
     changing a widget's `-text`, which otherwise leaves the accessible name
     saying whatever the widget said when it was first mapped.
+
+    A notebook needs it after a tab is added, removed or renamed. Tk fires
+    `<<NotebookTabChanged>>` when the *selection* moves and at no other time, so
+    a tab added beside the open one, or a tab renamed in place, announces itself
+    exactly as a `config(text=...)` does: not at all, until this is called.
     """
     _annotator().add(widget)
+    _the_installation().tabs.refresh(widget)
 
 
 def set_acc_role(widget: tkinter.Misc, role: Role) -> None:
