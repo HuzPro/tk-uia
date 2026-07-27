@@ -1,22 +1,11 @@
 """The row-and-label convention a form follows, applied because it was asked for.
 
-`tk_uia.infer_names_from_layout(root)` hands this module the installation
-`enable()` made, and it walks the widget tree naming the controls that have no
-words of their own: an entry after the caption beside it, a "Browse..." button
-after the row it acts on.
-
-**Why this is not in `enable()`.** Everything else in this package is read off
-the widget being annotated: its class, its `-text`, the variable it declared.
-This is read off the widgets *around* it, and nothing in Tk says a label
-captions the entry to its right, only that they were packed next to each other.
-That makes it a guess, and a library that guessed on its own would put names
-into applications whose layout means something else. Asked for explicitly, it is
-a convention the author has recognised in their own window. Measured on a real
-six-tab settings dialog, it takes 83 of its 110 controls addressable to 110.
-
-The walk asks a widget its class, its children, its options and its words, and
-says what it worked out through the annotator, so nothing platform-specific is
-reached from here and the whole convention is specified against doubles.
+`tk_uia.infer_names_from_layout(root)` walks the widget tree naming controls
+that have no words of their own: an entry after the caption beside it, a
+"Browse..." button after the row it acts on. Nothing in Tk says a label captions
+the entry to its right, so this is a guess, which is why `enable()` does not
+make it. Measured on a real six-tab settings dialog: 83 of 110 controls
+addressable, taken to 110.
 """
 
 from __future__ import annotations
@@ -35,42 +24,35 @@ from tk_uia.annotate import (
     words_the_widget_shows,
 )
 
-# A row is a container, and a window is one too: a status bar, or a row of
-# buttons along the bottom, is packed straight onto the toplevel and sits inside
-# no frame at all. Measured: a walk that visited only frames missed exactly the
-# control that reports what went wrong.
+# A window is a row too: a status bar, or a row of buttons along the bottom, is
+# packed straight onto the toplevel and sits inside no frame at all. Measured, a
+# walk that visited only frames missed the control reporting what went wrong.
 ROWS_A_FORM_IS_LAID_OUT_IN = frozenset({"Frame", "TFrame", "Labelframe", "TLabelframe"})
 
 # The classes a caption speaks for: the controls a client asks the contents of,
-# and the ones with no `-text` option to be named from. An entry is the whole
-# reason this exists.
+# and the ones with no `-text` option to be named from.
 WIDGETS_A_CAPTION_SPEAKS_FOR = frozenset(
     {"Entry", "TEntry", "TCombobox", "Spinbox", "TSpinbox"}
 )
 
-# The classes whose words are a caption for the row they are in.
 WIDGETS_THAT_CAPTION_A_ROW = frozenset({"Label", "TLabel"})
 
-# The classes whose words say what pressing them does. Checkbuttons are here
-# because a row's "Reset to Default" is as often one as it is a button, and
-# radiobuttons are not: their caption is the option they select, which already
-# says what it acts on.
+# Checkbuttons are here because a row's "Reset to Default" is as often one as it
+# is a button. Radiobuttons are not: their caption is the option they select,
+# which already says what it acts on.
 WIDGETS_THAT_ACT_ON_A_ROW = frozenset(
     {"Button", "TButton", "Checkbutton", "TCheckbutton"}
 )
 
 # Captions that say what a control does and nothing about what it does it to.
-# Two of these in one window are indistinguishable to a screen reader user
-# choosing between them and to a locator trying to pick one. The dialog this was
-# measured on had six.
+# The dialog this was measured on had six.
 CAPTIONS_THAT_SAY_NOTHING_ON_THEIR_OWN = frozenset(
     {"Browse...", "Browse", "Reset to Default", "...", "?"}
 )
 
 _NO_WORDS_AT_ALL = ""
 
-# What every generic caption becomes: the words it already had, and the row it
-# acts on. Reads as "Browse... for GUI Executable".
+# Reads as "Browse... for GUI Executable".
 _WHAT_A_GENERIC_CAPTION_ACTS_ON = "{caption} for {subject}"
 
 
@@ -83,12 +65,7 @@ class NamedByTheLayout:
 
 
 class NamesWidgets(Protocol):
-    """What the walk needs of an annotator: what a widget is called, and two ways to say.
-
-    Narrower than the annotator on purpose. This module holds the one part of
-    the package that guesses, and a guess may only ask what somebody has already
-    said and speak where nobody has.
-    """
+    """What the walk needs of an annotator: what a widget is called, and two ways to say."""
 
     def name_of(self, widget: TkWidget) -> str | None: ...
 
@@ -109,9 +86,8 @@ def infer_names_from_layout(
     root: TkWidget, installation: Installation
 ) -> tuple[NamedByTheLayout, ...]:
     """Name what the layout says these widgets are, and report what that came to."""
-    # Before the walk asks its first widget anything: this crosses into the Tcl
-    # interpreter four ways per widget, and doing that from a foreign thread
-    # corrupts it quietly instead of raising.
+    # Before anything crosses into the Tcl interpreter, which a foreign thread
+    # corrupts quietly.
     installation.owner.refuse_any_other_caller()
     return tuple(_whatever_the_convention_names(root, installation.annotator))
 
@@ -124,8 +100,8 @@ def _whatever_the_convention_names(
 
 
 def _the_rows_under(root: TkWidget) -> Iterator[TkWidget]:
-    # The root counts whatever class it is: it is where the caller pointed the
-    # walk, and widgets packed straight onto it are a row like any other.
+    # The root counts whatever class it is: widgets packed straight onto it are
+    # a row like any other.
     yield root
     for widget in every_widget_under(root):
         if widget.winfo_class() in ROWS_A_FORM_IS_LAID_OUT_IN or is_a_window(widget):
@@ -138,9 +114,6 @@ def _whatever_this_row_names(
     children = tuple(row.winfo_children())
     subject = _what_this_row_is_about(children)
     if subject is None:
-        # Nothing in the row says what it is for, and a name invented from the
-        # widget's path or its class would be worse than the honest silence a
-        # client already has.
         return
     for child in children:
         yield from _whatever_naming_this_child_comes_to(child, subject, names)
@@ -153,9 +126,8 @@ def _what_this_row_is_about(children: Sequence[TkWidget]) -> _WhatARowIsAbout | 
             child
         ):
             # A label driven by a variable is showing what the row *holds*, not
-            # saying what it is. Measured: taking a subject from one produced a
-            # button announced as "Reset to Default for C:\Example\stopped.ico",
-            # which changes every time the value does.
+            # saying what it is. Measured: a subject taken from one produced a
+            # button announced as "Reset to Default for C:\Example\stopped.ico".
             about = _whatever_words_caption_a_row(child)
             if about is not None:
                 return about
@@ -182,21 +154,17 @@ def _whatever_naming_this_child_comes_to(
         yield from _whatever_captioning_this_control_comes_to(child, subject, names)
     if tk_class in WIDGETS_THAT_ACT_ON_A_ROW:
         yield from _whatever_qualifying_this_button_comes_to(child, subject, names)
-    # A label showing a variable needs nothing from here: `enable()` read the
-    # `-textvariable` the widget declared and is already keeping its name in
-    # step with it, which is a better answer than any convention could reach.
+    # A label showing a variable needs nothing from here: `enable()` is already
+    # keeping its name in step with the `-textvariable` it declared.
 
 
 def _whatever_captioning_this_control_comes_to(
     control: TkWidget, subject: _WhatARowIsAbout, names: NamesWidgets
 ) -> Iterator[NamedByTheLayout]:
     if names.name_of(control) is not None:
-        # Somebody has already said what this is, and they knew something the
-        # layout does not.
         return
-    # Through the association rather than by copying the words across: a caption
-    # this package is already keeping in step with a variable takes the widget
-    # it names along with it.
+    # Through the association rather than by copying the words across, so that a
+    # caption kept in step with a variable takes the widget it names with it.
     names.label_for(subject.widget, control)
     yield from _what_it_is_called_now(control, names)
 
@@ -208,9 +176,8 @@ def _whatever_qualifying_this_button_comes_to(
     if caption not in CAPTIONS_THAT_SAY_NOTHING_ON_THEIR_OWN:
         return
     if button is subject.widget:
-        # The only thing captioning this row is the button about to be qualified
-        # by it, and "Browse... for Browse..." reads to a listener as a fault in
-        # the screen reader.
+        # This button is the only thing captioning its own row, and "Browse...
+        # for Browse..." reads to a listener as a fault in the screen reader.
         return
     if names.name_of(button) not in (None, caption):
         return
@@ -224,10 +191,8 @@ def _whatever_qualifying_this_button_comes_to(
 def _what_it_is_called_now(
     widget: TkWidget, names: NamesWidgets
 ) -> Iterator[NamedByTheLayout]:
-    # Read back rather than reported from what was meant: on a Tk where
-    # `enable()` stood down, nothing was written at all, and a report claiming
-    # names no client can read is the confident wrong answer this package exists
-    # to refuse.
+    # Read back rather than reported from what was meant: where `enable()` stood
+    # down nothing was written, and no name here is readable by a client.
     name = names.name_of(widget)
     if name is None:
         return
@@ -239,10 +204,5 @@ def _shows_a_variable(widget: TkWidget) -> bool:
 
 
 def _the_words(widget: TkWidget) -> str:
-    """A widget's words, with "has none" and "shows none" answered the same way.
-
-    The distinction `words_the_widget_shows` keeps matters to a report about one
-    widget; here a control with no caption and a control whose caption is empty
-    both leave the convention with nothing to go on.
-    """
+    """A widget's words, with "has none" and "shows none" answered the same way."""
     return words_the_widget_shows(widget) or _NO_WORDS_AT_ALL

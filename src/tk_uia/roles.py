@@ -1,8 +1,7 @@
 """The MSAA role numbers Tk widget classes are announced as.
 
 The annotator looks a widget's ``winfo_class()`` up here and writes the number
-it finds as `PROPID_ACC_ROLE`. Nothing else in the package knows what a "button"
-is.
+it finds as `PROPID_ACC_ROLE`.
 """
 
 from __future__ import annotations
@@ -37,19 +36,18 @@ class Role(Enum):
     SLIDER = 51
     SPIN_BUTTON = 52
     PAGE_TAB_LIST = 60
-    # `oleacc.h` calls this SPLITBUTTON. BUTTONMENU (0x39) reads as the more
-    # obviously named thing and measures as a `MenuItemControl`, which would
-    # have a screen reader announce a menu *item* for a button that is not in a
-    # menu at all. This one reads as `SplitButtonControl`: a button with a menu
-    # attached, which is what a Menubutton is.
+    # `oleacc.h` calls this SPLITBUTTON. BUTTONMENU (0x39) is the temptingly
+    # named alternative and measures as a `MenuItemControl`, announcing a menu
+    # *item* for a button that is in no menu. This one reads as
+    # `SplitButtonControl`, which is what a Menubutton is.
     MENU_BUTTON = 62
 
 
 ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
     {
-        # Classic tk and themed ttk are listed side by side rather than derived
-        # from one another: `ttk.Treeview` answers "Treeview", not "TTreeview",
-        # so the leading T is a convention and not a rule.
+        # Listed side by side rather than derived from one another:
+        # `ttk.Treeview` answers "Treeview", not "TTreeview", so the leading T
+        # is a convention and not a rule.
         "Button": Role.PUSH_BUTTON,
         "TButton": Role.PUSH_BUTTON,
         "Label": Role.STATIC_TEXT,
@@ -77,9 +75,8 @@ ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
         "TProgressbar": Role.PROGRESS_BAR,
         "TNotebook": Role.PAGE_TAB_LIST,
         "Treeview": Role.OUTLINE,
-        # A drawing surface, and honestly so: what a canvas shows is paint, and
         # `GRAPHIC` is the one number measured to reach a client as anything
-        # other than the anonymous pane it already was.
+        # other than the anonymous pane a canvas already was.
         "Canvas": Role.GRAPHIC,
         "Menubutton": Role.MENU_BUTTON,
         "TMenubutton": Role.MENU_BUTTON,

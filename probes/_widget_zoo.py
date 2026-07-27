@@ -1,21 +1,11 @@
 """Scaffolding the two widget-zoo apps share: layout, facts, and the handshake.
 
-`every_classic_tk_widget.py` and `every_ttk_widget.py` each build their own
-widgets and hand them here; `coverage_matrix.py` drives both.
-
-Two things in here are load-bearing.
-
-**The window is never given a fixed geometry.** A `geometry()` call makes the Tk
-packer silently drop whatever will not fit, `<Map>` never fires for those
-widgets, and nothing raises anywhere. In this survey that would read as
-"unsupported" for a reason that has nothing to do with support, so the window
-asks for the room it needs and `every_widget_is_up` refuses to go on if Tk
-dropped one anyway.
-
-**The process is made DPI-aware before Tk starts.** UI Automation reports
-rectangles in physical pixels and a Tk that is not DPI-aware reports logical
-ones, so on a scaled display every rectangle recorded here would miss the
-control it belongs to. Correlation is by rectangle, so this is not cosmetic.
+Two things here are load-bearing. The window is never given a fixed geometry: a
+`geometry()` call makes the Tk packer silently drop whatever will not fit, and
+`<Map>` never fires for those widgets. And the process is made DPI-aware before
+Tk starts, because UI Automation reports rectangles in physical pixels where a
+Tk that is not DPI-aware reports logical ones, and correlation here is by
+rectangle.
 """
 
 from __future__ import annotations
@@ -50,8 +40,7 @@ class WidgetFact:
     tk_class: str
     path: str
     mapped: bool
-    # Screen coordinates, which is what UI Automation answers in too, and the
-    # only thing the two views of this window can be joined on.
+    # Screen coordinates, which is what UI Automation answers in too.
     left: int
     top: int
     right: int
@@ -117,10 +106,8 @@ def _fact_about(kind: str, widget: tk.Misc) -> WidgetFact:
 def every_widget_is_up(facts: list[WidgetFact], never_shows: frozenset[str]) -> None:
     """Refuse to survey a window Tk has quietly dropped widgets from.
 
-    `never_shows` is the short list of widgets that legitimately do not map, a
-    menu being posted rather than laid out. Every one of them is named rather
-    than inferred, so a widget going missing for any *other* reason fails here
-    instead of becoming a row that reads "unsupported".
+    `never_shows` names the widgets that legitimately do not map, so a widget
+    missing for any other reason fails here instead of reading as unsupported.
     """
     missing = [
         fact.kind
@@ -201,13 +188,7 @@ def _say_everything(
     built: dict[str, tk.Misc],
     say_everything: Callable[[dict[str, tk.Misc]], None],
 ) -> None:
-    """The third state: what a well-behaved application adds on top of enable().
-
-    `enable()` names a widget from its own words, and most widgets have none.
-    Everything applied here is the application saying what only the application
-    knows, so the gap between this state and the one before it is the work
-    adopting this asks of you.
-    """
+    """The third state: what a well-behaved application adds on top of enable()."""
     import tk_uia
 
     say_everything(built)
@@ -248,9 +229,8 @@ def started_from(argv: list[str]) -> tuple[str, Path]:
 def name_everything(built: dict[str, tk.Misc], names: dict[str, str]) -> None:
     """Give each widget the name only the application could know.
 
-    Refusals are swallowed on purpose: a window is named by `wm title` and says
-    so, and a widget that never mapped was never annotated. Both are the package
-    answering correctly.
+    Refusals are swallowed: a window is named by `wm title`, and a widget that
+    never mapped was never annotated.
     """
     import tk_uia
     from tk_uia import AnnotationRefused

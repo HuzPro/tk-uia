@@ -1,20 +1,12 @@
 """How much of Tkinter a Windows accessibility client can actually see.
 
-Nothing imports this. It launches the two widget zoos beside it, reads each
-window through UI Automation twice, once as bare Tk and once after `enable()`,
-and writes a table saying what a client gets for every widget class Tk has.
-
     python probes/coverage_matrix.py
 
-The two views are joined **by rectangle**, not by name. Matching on a name
-collapses exactly where the interesting answers are: a widget whose class has no
-role is never annotated, so it has no name to match on, and those are the rows
-this exists to find. Every widget has a rectangle.
-
-The `a test writes` column is read by shelling out to a sibling `pytest-uia`
-checkout, because asking it directly is the only way to be sure the answer is
-not this file's own copy of a table that could drift. Without one the column is
-left out and the report says so.
+Launches the two widget zoos beside it, reads each window through UI Automation
+as bare Tk and again after `enable()`, and writes COVERAGE.md. The two views are
+joined by rectangle, not by name: a widget whose class has no role is never
+annotated, so it has no name to match on, and those are the rows this exists to
+find.
 """
 
 from __future__ import annotations
@@ -45,8 +37,8 @@ from _widget_zoo import (
 HERE = Path(__file__).parent
 OUT = HERE.parent / "COVERAGE.md"
 
-# Where a sibling checkout of the other half usually is. Only ever used to run
-# its dump; nothing here imports it, and the report is written either way.
+# Only ever used to run its dump; nothing here imports it, and the report is
+# written either way.
 A_SIBLING_PYTEST_UIA = (
     HERE.parent.parent / "pytest-uia" / ".venv" / "Scripts" / "python.exe"
 )
@@ -189,8 +181,7 @@ def _what_a_client_sees(title: str) -> list[Seen]:
     """Every control under this survey's windows, both of them where there are two.
 
     A `Toplevel` is a window of its own rather than a control inside the first,
-    so a reader that walked only the main window would report it as absent and
-    the row would read as unsupported.
+    so walking only the main window would report it as absent.
     """
     import uiautomation as auto
 
@@ -233,7 +224,7 @@ def _patterns_on(control: Any) -> tuple[str, ...]:
         try:
             if control.GetPattern(pattern_id) is not None:
                 offered.append(name)
-        except Exception:  # noqa: BLE001, S112 -- see below
+        except Exception:  # noqa: BLE001, S112
             # A provider that raises when asked is one that does not offer the
             # pattern, and comtypes reports that as any of half a dozen
             # HRESULTs.
@@ -279,7 +270,7 @@ def _written(reports: list[tuple[str, dict[str, Any]]]) -> str:
         "",
         "The two views are joined by rectangle rather than by name, because a",
         "widget whose class has no role is never annotated and so has no name to",
-        "join on — and those are the rows worth having.",
+        "join on, and those are the rows worth having.",
         "",
         "The `a test writes` column is the query",
         "[pytest-uia](https://github.com/HuzPro/pytest-uia) offers for that",
@@ -313,8 +304,8 @@ def _a_table(label: str, survey: dict[str, Any]) -> list[str]:
                 bare=_as_cell(bare),
                 now=_as_cell(now),
                 full=_as_cell(full),
-                patterns=", ".join(full.patterns) if full else "—",
-                gaps=", ".join(survey["gaps"].get(fact["path"], [])) or "—",
+                patterns=", ".join(full.patterns) if full else "-",
+                gaps=", ".join(survey["gaps"].get(fact["path"], [])) or "-",
                 query=_query_for(full, queries),
             )
         )
@@ -355,8 +346,8 @@ def _the_tally(label: str, survey: dict[str, Any]) -> list[str]:
         "",
         f"| of {how_many} on screen | typed | named | queryable |",
         "|---|---|---|---|",
-        f"| bare Tk | {typed(at('bare'))} | {named(at('bare'))} | — |",
-        f"| after `enable()` | {typed(at('annotated'))} | {named(at('annotated'))} | — |",
+        f"| bare Tk | {typed(at('bare'))} | {named(at('bare'))} | - |",
+        f"| after `enable()` | {typed(at('annotated'))} | {named(at('annotated'))} | - |",
         f"| **+ what the app says** | **{typed(full)}** | **{named(full)}** | **{queryable(full)}** |",
     ]
 
@@ -371,7 +362,7 @@ def _best_match(seen: list[Seen], fact: dict[str, Any]) -> Seen | None:
     if not matching:
         return None
     # A frame and the single widget filling it can share a rectangle to the
-    # pixel. The smaller one is the widget; the larger is what it sits in.
+    # pixel. The smaller one is the widget.
     return min(matching, key=lambda one: one.area)
 
 
@@ -381,22 +372,20 @@ def _as_cell(seen: Seen | None) -> str:
     return (
         f"`{seen.control_type}` {seen.name!r}"
         if seen.name
-        else f"`{seen.control_type}` —"
+        else f"`{seen.control_type}` -"
     )
 
 
 def _query_for(seen: Seen | None, queries: dict[str, Any] | None) -> str:
     """The line a test would really write, taken from the list pytest-uia offers.
 
-    Built from the offered list rather than from the node's role, which is not
-    the same question: a control can carry `Role.TEXTBOX` and still authorise
-    nothing, because it has no accessible name to match on. Deriving the query
-    from the role would print `app.textbox("")` for every unnamed entry.
+    Not derived from the node's role: a control can carry `Role.TEXTBOX` and
+    still authorise nothing, having no accessible name to match on.
     """
     if queries is None:
         return "*n/a*"
     if seen is None:
-        return "—"
+        return "-"
     offered = set(queries["queries"])
     for node in queries["nodes"]:
         if node["control_type"] != seen.control_type or node["name"] != seen.name:

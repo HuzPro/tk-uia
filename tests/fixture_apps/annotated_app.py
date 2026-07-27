@@ -1,18 +1,10 @@
 """A Tk application that annotates itself, for the gui specs to read back.
 
-Launched as a subprocess by `tests/conftest.py`, then read through UI Automation
-from the pytest process. Only a client outside this process can prove Windows
-really bridged an annotation to UI Automation.
-
 Classic `tk` throughout, never `ttk`: measured against every ttk widget type,
 each one is an anonymous `PaneControl` and `ttk.Button` has no InvokePattern at
-all, so ttk is the worse starting point.
-
-The window titles itself from `argv`, so several runs, or a window left behind
-by a crashed one, can never be mistaken for each other. It also takes a
-directory to watch: a spec that needs the application to *do* something asks by
-dropping a named file there, because the one thing a client cannot do to a Tk
-window is press its buttons.
+all. It titles itself from `argv`, so a window left behind by a crashed run can
+never be mistaken for this one, and takes a directory to watch, because the one
+thing a client cannot do to a Tk window is press its buttons.
 """
 
 from __future__ import annotations
@@ -30,8 +22,7 @@ NEW_TASK = "New Task"
 HEADLINE = "Task list"
 TITLE = "Title"
 
-# The form row: what the caption says, and what the entry beside it is therefore
-# called. The colon is on the label and not on the name.
+# The colon is on the label and not on the name.
 HOST_CAPTION = "Host:"
 HOST = "Host"
 DRAFT = "Write the report"
@@ -44,18 +35,14 @@ TASK_CREATED = "task created"
 PRESSES = "presses"
 TRACES = "traces"
 
-# The two widgets nothing in this application says one word about. Both are
-# built with a `textvariable` and neither is ever passed to `bind_text_variable`
-# or `bind_value_variable`, so what a client reads back is what `enable()` alone
-# worked out from what the widget declared.
+# The two widgets nothing here binds: what a client reads came from `enable()` alone.
 UNBOUND_STATUS = "nobody bound this"
 UNBOUND_STATUS_MOVED = "and it followed anyway"
 UNBOUND_DRAFT = "typed into an unbound entry"
 UNBOUND_DRAFT_REVISED = "retyped, still unbound"
 UNBOUND_ENTRY_NAME = "Unbound"
 
-# Chosen by this application, never by the package: an id derived from a widget
-# path would make every repack a breaking change for whoever locates by it.
+# Chosen by this application: an id from a widget path would break on every repack.
 NEW_TASK_NUMBER = 4207
 
 FORGET_THE_DISPOSABLE_WIDGETS = "forget"
@@ -83,13 +70,7 @@ def presses(count: int) -> str:
 
 
 def traces(count: int) -> str:
-    """How many write traces are still registered on the status variable.
-
-    Reported into the window rather than asserted in-process, because the gui
-    specs read every claim from outside. A trace is registered on the
-    *variable*, which outlives every widget that displays it, so this is the
-    number that says whether a destroyed widget let go.
-    """
+    """How many write traces are still registered on the status variable."""
     return f"{TRACES} {count}"
 
 
@@ -118,8 +99,7 @@ class Widgets:
 
 def main(title: str, commands: Path) -> None:
     widgets = _a_window_of_classic_tk_widgets(title)
-    # Realised and mapped before accessibility is switched on, so the path under
-    # test is the sweep over what is already on screen.
+    # Mapped before accessibility is switched on: the path under test is the sweep.
     widgets.root.update()
 
     _accessibility_switched_on(widgets.root)
@@ -132,8 +112,7 @@ def main(title: str, commands: Path) -> None:
 def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     root = tk.Tk()
     root.title(title)
-    # Tall enough for every widget below to be laid out: the Tk packer silently
-    # drops whatever it cannot fit, and `<Map>` never fires for those.
+    # Tall enough for every widget below: the Tk packer drops what it cannot fit.
     root.geometry("420x520")
 
     tk.Label(root, text=HEADLINE).pack(pady=10)
@@ -157,9 +136,7 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     disposable_entry = tk.Entry(root, width=20)
     disposable_entry.pack()
 
-    # A form row exactly as Tk lays one out: a caption and the entry it
-    # captions, side by side. Nothing in the toolkit records that the two have
-    # anything to do with each other, so the application says so once, below.
+    # Nothing in Tk records that a caption and its entry are related.
     row = tk.Frame(root)
     row.pack(pady=10)
     host_caption = tk.Label(row, text=HOST_CAPTION)
@@ -167,19 +144,13 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
     host = tk.Entry(row, width=20)
     host.pack(side=tk.LEFT)
 
-    # The pair nothing below ever mentions again: an ordinary Tk label and an
-    # ordinary Tk entry, neither bound to anything by this application. Whatever
-    # a client reads out of these two came from the widget's own
-    # `-textvariable`.
     unbound_status = tk.StringVar(value=UNBOUND_STATUS)
     tk.Label(root, textvariable=unbound_status).pack()
     unbound_draft = tk.StringVar(value=UNBOUND_DRAFT)
     unbound_entry = tk.Entry(root, width=30, textvariable=unbound_draft)
     unbound_entry.pack()
 
-    # The control group: a widget of somebody's own class, which is the only
-    # thing `enable()` walks past. It stays exactly as bare Tk left it, in the
-    # same window and the same process as everything annotated around it.
+    # The control group: a class `enable()` walks past, left exactly as bare Tk left it.
     tk.Frame(root, class_=A_CLASS_NOBODY_HAS_A_ROLE_FOR, width=200, height=40).pack(
         pady=10
     )
@@ -208,9 +179,7 @@ def _a_window_of_classic_tk_widgets(title: str) -> Widgets:
 
 
 def _an_entry_holding_a_draft(root: tk.Tk, draft: tk.StringVar) -> tk.Entry:
-    # A frame deep on purpose: `enable()`'s sweep of what is already on screen
-    # has to descend, and a widget only reachable by recursion is the one that
-    # proves it does.
+    # A frame deep on purpose: only recursion reaches this entry.
     frame = tk.Frame(root)
     frame.pack(pady=10)
     entry = tk.Entry(frame, width=30, textvariable=draft)
@@ -221,9 +190,7 @@ def _an_entry_holding_a_draft(root: tk.Tk, draft: tk.StringVar) -> tk.Entry:
 def _accessibility_switched_on(root: tk.Tk) -> None:
     strategy = tk_uia.enable(root)
     if strategy is not Strategy.ANNOTATED:
-        # Loudly, and before the window is worth reading: a gate that mis-fires
-        # leaves every widget as bare Tk left it, which a suite asserting only
-        # "the name is right" would report as an ordinary miss.
+        # Loudly: a mis-fired gate leaves every widget as bare Tk left it.
         raise SystemExit(
             f"tk_uia.enable reported {strategy}, not {Strategy.ANNOTATED}: "
             "nothing in this window has been annotated, so the gui specs "
@@ -232,25 +199,18 @@ def _accessibility_switched_on(root: tk.Tk) -> None:
 
 
 def _the_things_no_widget_can_say_for_itself(widgets: Widgets) -> None:
-    # An entry has no `-text` to be named from, and a name invented from its Tk
-    # path would be worse than none, so this is the application's job.
+    # An entry has no `-text` to be named from, so this is the application's job.
     tk_uia.set_acc_name(widgets.title_entry, TITLE)
     tk_uia.set_acc_name(widgets.disposable_entry, SCRATCH)
-    # Its *name* and nothing else. What is in this entry is in the variable it
-    # declares, and saying who it is must not stop that being read.
+    # Its *name* and nothing else: what is in it comes from the variable it declares.
     tk_uia.set_acc_name(widgets.unbound_entry, UNBOUND_ENTRY_NAME)
-    # The one thing an entry's caption cannot say for itself: in Tk it is a
-    # sibling label, and nothing in the toolkit records which widget it speaks
-    # for.
     tk_uia.label_for(widgets.host_caption, widgets.host)
-    # A widget showing a `textvariable` has no `-text` either, so the widgets
-    # whose job is to report what just happened would otherwise say nothing.
+    # A widget showing a `textvariable` has no `-text` to be named from either.
     tk_uia.bind_text_variable(widgets.status_label, widgets.status)
     tk_uia.bind_text_variable(widgets.tally, widgets.pressed)
     tk_uia.bind_text_variable(widgets.trace_tally, widgets.still_traced)
     _report_what_is_still_traced(widgets)
-    # And what a client reads out of the entry is what is in the variable
-    # behind it, from now on rather than only at startup.
+    # From now on rather than only at startup.
     tk_uia.bind_value_variable(widgets.title_entry, widgets.draft)
     tk_uia.set_automation_id(widgets.new_task, NEW_TASK_NUMBER)
 
@@ -260,36 +220,20 @@ def _report_what_is_still_traced(widgets: Widgets) -> None:
 
 
 def _destroy_the_status_label(widgets: Widgets) -> None:
-    """Kill a bound widget, then write the variable it was following.
-
-    The order is the whole spec. If the binding did not let go, the write below
-    fires a trace at a window path Tk no longer has, and the `TclError` raised
-    inside Tcl's own callback stops this handler before it can report.
-    """
+    """Kill a bound widget, then write the variable it was following."""
     widgets.status_label.destroy()
     widgets.status.set(TASK_CREATED)
     _report_what_is_still_traced(widgets)
 
 
 def _move_what_nobody_bound(widgets: Widgets) -> None:
-    """Write the two variables this application declared and never bound.
-
-    Ordinary `StringVar.set` calls, of the kind an application makes all day.
-    Nothing here mentions tk-uia, which is exactly what a client reading the new
-    words back has to be evidence of.
-    """
+    """Write the two variables this application declared and never bound."""
     widgets.unbound_status.set(UNBOUND_STATUS_MOVED)
     widgets.unbound_draft.set(UNBOUND_DRAFT_REVISED)
 
 
 def _write_the_description(widgets: Widgets, commands: Path) -> None:
-    """Leave what tk-uia believes it wrote where a client outside can read it.
-
-    Two files, both the same description: the report a reader would print, and
-    the names it claims, as data. The spec comparing every claimed name against
-    the real UI Automation tree consumes the second, because re-parsing a table
-    this process has just formatted would test the formatter twice.
-    """
+    """Leave what tk-uia believes it wrote where a client outside can read it."""
     description = tk_uia.describe(widgets.root)
     (commands / THE_REPORT).write_text(str(description), encoding="utf-8")
     (commands / THE_NAMES_IT_CLAIMS).write_text(
@@ -303,9 +247,7 @@ def _write_the_description(widgets: Widgets, commands: Path) -> None:
 
 
 def _count_a_press(pressed: tk.StringVar) -> None:
-    # The displayed tally is the count, rather than a second copy kept alongside
-    # it: two numbers that have to agree are one more thing to get wrong in a
-    # fixture whose job is to be believed.
+    # The displayed tally is the count, rather than a second copy kept alongside it.
     already = int(pressed.get().split()[-1])
     pressed.set(presses(already + 1))
 
@@ -320,9 +262,7 @@ def _watching_for_commands(widgets: Widgets, commands: Path) -> None:
         DESTROY_THE_STATUS_LABEL: lambda: _destroy_the_status_label(widgets),
         REVISE_THE_DRAFT: lambda: widgets.draft.set(REVISION),
         MOVE_WHAT_NOBODY_BOUND: lambda: _move_what_nobody_bound(widgets),
-        # Tk's own invoke, which really does run the command. The control that
-        # stops "the counter never moved" being mistaken for "the counter could
-        # never have moved".
+        # Tk's own invoke, which really does run the command.
         PRESS_THE_BUTTON: widgets.new_task.invoke,
         WRITE_THE_DESCRIPTION: lambda: _write_the_description(widgets, commands),
     }
@@ -331,8 +271,7 @@ def _watching_for_commands(widgets: Widgets, commands: Path) -> None:
         for name, act in handlers.items():
             request = commands / name
             if request.exists():
-                # Removed before acting, so the command runs exactly once
-                # however long the act takes.
+                # Removed before acting, so the command runs exactly once.
                 request.unlink()
                 act()
         widgets.root.after(_HOW_OFTEN_TO_CHECK_FOR_A_COMMAND_MS, look)

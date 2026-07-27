@@ -1,9 +1,7 @@
 """Behavioral spec for what a widget tells Windows about itself once annotated.
 
-Everything here runs against a recording store and fake widgets. The annotator
-holds every decision the package makes, and none of them needs a display, a Tk
-build or Windows to be specified. What is left underneath is three vtable slots
-into `oleacc`, which hold no decision at all.
+Runs against a recording store and fake widgets: no display, no Tk build, no
+Windows. What is left underneath is three vtable slots into `oleacc`.
 """
 
 from __future__ import annotations
@@ -32,8 +30,7 @@ _MSAA_STATE_UNAVAILABLE = 0x1
 _NO_CONTROL_ID_AT_ALL = 0
 _AN_ID_THE_APPLICATION_CHOSE = 4207
 _AN_ID_WIN32_IS_USING = 1101
-# What UI Automation renders an id as, and what an application reaches for
-# first because of it: `GWLP_ID` underneath holds a number and nothing else.
+# `GWLP_ID` underneath holds a number and nothing else.
 _AN_ID_SPELT_AS_A_NAME = "save-button"
 
 # ROLE_SYSTEM_PUSHBUTTON, which is what `describe()` prints beside the member.
@@ -42,8 +39,7 @@ _A_NUMBER_NO_ROLE_CARRIES = 7
 
 _NOT_A_WIDGET_AT_ALL = "oops"
 
-# What Tcl calls the first `StringVar` an application makes, and what
-# `cget("textvariable")` answers with once a widget has been given it.
+# What Tcl calls the first `StringVar` an application makes.
 _THE_VARIABLE_THE_WIDGET_DECLARES = "PY_VAR0"
 _A_SECOND_VARIABLE = "PY_VAR1"
 _DECLARED_BY_NOBODY = ""
@@ -63,9 +59,7 @@ def test_annotating_a_widget_writes_its_role_and_the_name_from_its_text_into_the
     # When the annotator is told about the widget
     annotator.add(button)
 
-    # Then the store holds both halves against that widget's own handle: what it
-    # is, and what to call it. Neither was there before, and bare Tk hands a
-    # client an unnamed control no name-based query can reach.
+    # Then the store holds both halves against that widget's own handle
     assert store.properties(_A_BUTTON_HANDLE) == {
         PropId.ROLE: Role.PUSH_BUTTON.value,
         PropId.NAME: "New Task",
@@ -83,9 +77,7 @@ def test_a_widget_with_no_text_of_its_own_is_given_a_role_but_never_an_invented_
     # When the annotator is told about it
     annotator.add(entry)
 
-    # Then it is announced as editable text and left unnamed. The tempting
-    # fallback is the widget's path, and it would make `app.textbox(".!entry")`
-    # appear to work: a locator nobody wrote down, that every repack breaks.
+    # Then it is announced as editable text and left unnamed
     assert store.properties(_AN_ENTRY_HANDLE) == {PropId.ROLE: Role.TEXT.value}, (
         "an unnamed widget must stay unnamed; an honest miss is findable, a "
         "name the application never chose is not"
@@ -96,21 +88,17 @@ def test_a_widget_with_no_text_of_its_own_is_given_a_role_but_never_an_invented_
 
 
 def test_a_name_the_application_chose_survives_the_widget_being_mapped_again() -> None:
-    # Given a button the application has deliberately named something other than
-    # its caption: `Button(text="OK")` announced as "Confirm order", which the
-    # README encourages
+    # Given a button deliberately named something other than its caption
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="OK")
     annotator.add(button)
     annotator.set_name(button, "Confirm order")
 
-    # When Tk maps it again, a notebook tab reopened or a pack_forget undone,
-    # and the automatic annotation runs over it a second time
+    # When Tk maps it again and the automatic annotation runs over it
     annotator.add(button)
 
-    # Then the application's name is still there. An inferred name overwriting a
-    # chosen one loses it silently, on an event the application never sees.
+    # Then the application's name is still there
     assert store.properties(_A_BUTTON_HANDLE)[PropId.NAME] == "Confirm order", (
         "the caption overwrote the name the application chose: "
         f"{store.properties(_A_BUTTON_HANDLE)}"
@@ -118,8 +106,7 @@ def test_a_name_the_application_chose_survives_the_widget_being_mapped_again() -
 
 
 def test_a_role_the_application_chose_survives_the_widget_being_mapped_again() -> None:
-    # Given a widget the application has given a role of its own, over the one
-    # its class would infer
+    # Given a widget the application has given a role of its own
     store = RecordingStore()
     annotator = Annotator(store)
     label = FakeWidget("Label", _A_LABEL_HANDLE, text="12 unread")
@@ -129,16 +116,14 @@ def test_a_role_the_application_chose_survives_the_widget_being_mapped_again() -
     # When Tk maps it again
     annotator.add(label)
 
-    # Then the chosen role stands. Same rule as the name: the application said
-    # so, and a `<Map>` is not the application saying anything at all.
+    # Then the chosen role stands
     assert store.properties(_A_LABEL_HANDLE)[PropId.ROLE] == Role.PROGRESS_BAR.value, (
         f"the inferred role came back: {store.properties(_A_LABEL_HANDLE)}"
     )
 
 
 def test_naming_a_root_with_an_application_chosen_class_is_still_refused() -> None:
-    # Given a root whose class the application named, as tk.Tk(className=...)
-    # does. It is exactly as much a window as a plain root.
+    # Given a root whose class the application named, as tk.Tk(className=...) does
     from tests.doubles import FakeInterpreter, FakeRoot
 
     store = RecordingStore()
@@ -146,17 +131,14 @@ def test_naming_a_root_with_an_application_chosen_class_is_still_refused() -> No
     root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), tk_class="Idle")
 
     # When something tries to name it anyway
-    # Then the window refusal fires, for the reason it exists: winfo_id() on a
-    # toplevel answers with the container pane, so the write would land where a
-    # client reads a confident wrong answer.
+    # Then the window refusal fires just as it does for a plain root
     with pytest.raises(AnnotationRefused):
         annotator.set_name(root, "the app")
     assert store.writes == [], f"the pane behind the window was written: {store.writes}"
 
 
 def test_a_scale_is_named_from_the_label_option_it_keeps_its_words_in() -> None:
-    # Given a classic Scale, which has no `-text` at all: measured, its options
-    # carry `-label` and nothing else that holds words a person reads
+    # Given a classic Scale, whose options carry `-label` and no `-text` at all
     store = RecordingStore()
     annotator = Annotator(store)
     scale = FakeWidget("Scale", _A_SCALE_HANDLE, label="Volume")
@@ -164,9 +146,7 @@ def test_a_scale_is_named_from_the_label_option_it_keeps_its_words_in() -> None:
     # When the annotator meets it
     annotator.add(scale)
 
-    # Then it is named from there. Reading only `-text` would leave the one
-    # widget whose caption Tk keeps somewhere else announced as an unnamed
-    # slider.
+    # Then it is named from there
     assert store.properties(_A_SCALE_HANDLE)[PropId.NAME] == "Volume", (
         f"a labelled Scale was left unnamed: {store.properties(_A_SCALE_HANDLE)}"
     )
@@ -175,9 +155,7 @@ def test_a_scale_is_named_from_the_label_option_it_keeps_its_words_in() -> None:
 def test_a_widget_class_the_role_table_has_never_heard_of_is_left_exactly_as_tk_left_it() -> (
     None
 ):
-    # Given a widget of a class nobody has decided a role for. Every class both
-    # toolkits ship has one, so this is somebody's own widget, registered under
-    # a class name this package has never seen.
+    # Given a widget of a class nobody has decided a role for
     store = RecordingStore()
     annotator = Annotator(store)
     homemade = FakeWidget("SparklineChart", _A_CANVAS_HANDLE, text="not really a label")
@@ -185,8 +163,7 @@ def test_a_widget_class_the_role_table_has_never_heard_of_is_left_exactly_as_tk_
     # When the annotator meets it
     annotator.add(homemade)
 
-    # Then nothing is written. Guessing a role invents a control that is not
-    # there; a client would go looking for text it can never read.
+    # Then nothing is written
     assert store.writes == [], (
         f"a class with no role must be passed over, not guessed at: {store.writes}"
     )
@@ -201,9 +178,7 @@ def test_a_toplevel_is_never_annotated_even_when_the_role_table_is_told_to() -> 
     annotator.add(FakeWidget("Tk", _A_ROOT_HANDLE))
     annotator.add(FakeWidget("Toplevel", _A_DIALOG_HANDLE))
 
-    # Then neither is touched. `wm title` already gives a window a correct
-    # accessible name, and overriding it breaks finding the window by its title,
-    # which is the query everything downstream starts from.
+    # Then neither is touched: `wm title` already names a window correctly
     assert store.writes == [], (
         f"a window's own title must be left to speak for it: {store.writes}"
     )
@@ -218,21 +193,16 @@ def test_annotating_a_window_by_hand_is_refused_rather_than_naming_the_pane_behi
     root = FakeWidget("Tk", _A_ROOT_HANDLE)
     dialog = FakeWidget("Toplevel", _A_DIALOG_HANDLE)
 
-    # When it tries to say what the window is called, which is the obvious
-    # reading of a surface whose other calls all take a widget
+    # When it tries to say what the window is called
     with pytest.raises(AnnotationRefused) as refusal:
         annotator.set_name(root, "Tasks")
 
-    # Then it is told, rather than the name landing somewhere that looks right
-    # and is not. `winfo_id()` on a Tk root returns the container child, not the
-    # toplevel, so the name would go on an inner pane while every assertion
-    # about it appeared to pass.
+    # Then it is told: `winfo_id()` on a Tk root returns the container child
     assert store.writes == [], f"the window's pane was annotated anyway: {store.writes}"
     assert "wm title" in str(refusal.value), (
         f"the refusal must point at what already names a window: {refusal.value}"
     )
 
-    # And the rule holds for every property and for both kinds of window
     with pytest.raises(AnnotationRefused):
         annotator.set_value(dialog, "anything")
     with pytest.raises(AnnotationRefused):
@@ -250,8 +220,7 @@ def test_an_explicit_name_or_role_overrides_the_one_derived_from_the_widget() ->
     annotator.set_name(button, "Create a task")
     annotator.set_role(button, Role.CHECK_BUTTON)
 
-    # Then the application wins on both counts. Inference is a default for the
-    # widgets nobody thought about, never a ceiling on the ones somebody did.
+    # Then the application wins on both counts
     assert store.properties(_A_BUTTON_HANDLE) == {
         PropId.NAME: "Create a task",
         PropId.ROLE: Role.CHECK_BUTTON.value,
@@ -269,8 +238,7 @@ def test_a_caller_supplied_role_table_adds_to_the_built_in_one_rather_than_repla
     annotator.add(FakeWidget("Canvas", _A_CANVAS_HANDLE))
     annotator.add(FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task"))
 
-    # Then the addition is honoured and everything else still works. Naming one
-    # class must not silently un-announce every widget the caller did not list.
+    # Then the addition is honoured and everything else still works
     assert store.properties(_A_CANVAS_HANDLE)[PropId.ROLE] == Role.STATIC_TEXT.value
     assert store.properties(_A_BUTTON_HANDLE)[PropId.ROLE] == Role.PUSH_BUTTON.value, (
         "adding one class to the table dropped every class already in it"
@@ -285,12 +253,10 @@ def test_annotating_the_same_widget_twice_writes_nothing_the_second_time() -> No
     annotator.add(button)
     after_the_first_time = list(store.writes)
 
-    # When the same widget is offered again, as `<Map>` will do on every unhide,
-    # every notebook tab change and every geometry manager shuffle
+    # When the same widget is offered again, as `<Map>` does on every unhide
     annotator.add(button)
 
-    # Then not one call crosses into COM: the difference between annotating a
-    # window once and annotating it on every repaint forever.
+    # Then not one call crosses into COM
     assert store.writes == after_the_first_time, (
         f"re-announcing an unchanged widget cost {len(store.writes) - len(after_the_first_time)} "
         "extra cross-process writes"
@@ -309,9 +275,7 @@ def test_a_widget_whose_words_have_changed_is_announced_again_with_the_new_ones(
     # When the application changes what it says
     annotator.set_name(label, "task created")
 
-    # Then the change reaches the store. The ledger exists to skip repeats, and
-    # one that skipped changes too would leave a screen reader announcing the
-    # first thing an application ever said.
+    # Then the change reaches the store
     assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "task created", (
         "the ledger swallowed a real change"
     )
@@ -320,8 +284,7 @@ def test_a_widget_whose_words_have_changed_is_announced_again_with_the_new_ones(
 def test_a_destroyed_widget_has_its_annotations_cleared_before_windows_can_reuse_its_handle() -> (
     None
 ):
-    # Given an annotated button that Tk is now tearing down. By the time
-    # `<Destroy>` runs the widget is already half gone and `winfo_id` raises.
+    # Given an annotated button Tk is tearing down, whose `winfo_id` already raises
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -331,9 +294,7 @@ def test_a_destroyed_widget_has_its_annotations_cleared_before_windows_can_reuse
     # When the annotator is told the widget is going
     annotator.forget(button)
 
-    # Then the annotations come off the handle it had when it was alive.
-    # Windows reissues window handles: an annotation left on a dead one names
-    # whatever gets that handle next, and reads exactly like a flaky locator.
+    # Then the handle it had while alive is cleared: Windows reissues handles
     assert store.cleared == [_A_BUTTON_HANDLE], (
         f"expected the handle cached while the widget lived, cleared {store.cleared}"
     )
@@ -345,8 +306,7 @@ def test_a_destroyed_widget_has_its_annotations_cleared_before_windows_can_reuse
 def test_a_widget_rebuilt_at_the_same_path_lets_go_of_the_handle_it_used_to_have() -> (
     None
 ):
-    # Given an annotated button that Tk has since rebuilt at the same path,
-    # which happens whenever a frame is torn down and laid out again
+    # Given an annotated button Tk has since rebuilt at the same path
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -356,9 +316,7 @@ def test_a_widget_rebuilt_at_the_same_path_lets_go_of_the_handle_it_used_to_have
     # When it is annotated again on its new handle
     annotator.add(button)
 
-    # Then the handle it left behind is released first, and the new one carries
-    # the annotation. Without the release the old handle keeps a name nothing
-    # will ever clear: the `<Destroy>` that would have is already past.
+    # Then the handle it left behind is released and the new one carries the name
     assert store.cleared == [_A_BUTTON_HANDLE], (
         f"the abandoned handle was left annotated; cleared {store.cleared}"
     )
@@ -368,8 +326,7 @@ def test_a_widget_rebuilt_at_the_same_path_lets_go_of_the_handle_it_used_to_have
 def test_setting_a_widgets_value_writes_it_where_a_client_reads_an_edit_controls_content() -> (
     None
 ):
-    # Given an annotated entry, which the role alone has just given a
-    # ValuePattern it did not have before
+    # Given an annotated entry, which the role alone has given a ValuePattern
     store = RecordingStore()
     annotator = Annotator(store)
     entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
@@ -378,8 +335,7 @@ def test_setting_a_widgets_value_writes_it_where_a_client_reads_an_edit_controls
     # When the application says what is currently in it
     annotator.set_value(entry, "typed words")
 
-    # Then it is the value that carries the contents, and the name is left
-    # alone. A client asks a text box its value and its label separately.
+    # Then the value carries the contents and the name is left alone
     assert store.properties(_AN_ENTRY_HANDLE) == {
         PropId.ROLE: Role.TEXT.value,
         PropId.VALUE: "typed words",
@@ -399,9 +355,7 @@ def test_every_property_a_client_can_ask_for_lands_in_its_own_slot() -> None:
     annotator.set_help(button, "keyboard shortcut is Ctrl+N")
     annotator.set_state(button, _MSAA_STATE_UNAVAILABLE)
 
-    # Then all six sit side by side. They are separate questions a screen reader
-    # asks in sequence, and the failure this pins down is a routing mistake in
-    # the property table underneath, which returns S_OK either way.
+    # Then all six sit side by side
     assert store.properties(_A_BUTTON_HANDLE) == {
         PropId.ROLE: Role.PUSH_BUTTON.value,
         PropId.NAME: "New Task",
@@ -426,11 +380,7 @@ def test_the_only_automation_id_a_widget_gets_is_the_one_an_application_asked_fo
     annotator.add(never_asked_about)
     annotator.set_automation_id(button, _AN_ID_THE_APPLICATION_CHOSE)
 
-    # Then that one carries it and the other is untouched. An automation id is
-    # `GWLP_ID`, the control id Win32 puts in `WM_COMMAND.wParam` and
-    # `WM_DRAWITEM.idCtl`, and every Tk button is owner-drawn so it receives
-    # `WM_DRAWITEM`. Deriving ids from widget paths would also make every repack
-    # a breaking change for whoever writes the locators.
+    # Then that one carries it and the other is untouched
     assert store.control_id(_A_BUTTON_HANDLE) == _AN_ID_THE_APPLICATION_CHOSE
     assert store.control_id(_AN_ENTRY_HANDLE) == _NO_CONTROL_ID_AT_ALL, (
         "an id was handed out that nobody asked for, into the field Win32 uses "
@@ -451,9 +401,7 @@ def test_an_automation_id_is_refused_rather_than_written_over_one_windows_is_usi
     with pytest.raises(AnnotationRefused) as refusal:
         annotator.set_automation_id(button, _AN_ID_THE_APPLICATION_CHOSE)
 
-    # Then it is told, rather than the id being quietly replaced. Overwriting it
-    # redirects the messages that widget is drawn by, and the symptom would be a
-    # button that stops painting, a long way from the line that caused it.
+    # Then it is told, rather than the id being quietly replaced
     assert store.control_id(_A_BUTTON_HANDLE) == _AN_ID_WIN32_IS_USING, (
         "the control id Windows was using has been overwritten"
     )
@@ -465,8 +413,7 @@ def test_an_automation_id_is_refused_rather_than_written_over_one_windows_is_usi
 def test_a_role_given_as_the_number_behind_it_is_refused_and_told_which_member_that_is() -> (
     None
 ):
-    # Given an application reaching for the number, which is a fair guess: the
-    # number is what gets written, and `describe()` prints it in every row
+    # Given an application reaching for the number behind the member
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -475,10 +422,7 @@ def test_a_role_given_as_the_number_behind_it_is_refused_and_told_which_member_t
     with pytest.raises(TypeError) as complaint:
         annotator.set_role(button, _THE_NUMBER_A_PUSH_BUTTON_IS)
 
-    # Then it is a TypeError and not an AnnotationRefused, because nothing was
-    # refused: the call never said anything a widget could be annotated with.
-    # And it names the member meant, which is the whole difference between a
-    # rejection and an answer.
+    # Then it is a TypeError, naming the member that was meant
     assert "Role.PUSH_BUTTON" in str(complaint.value), (
         f"the reader has to be told what to write instead: {complaint.value}"
     )
@@ -497,8 +441,7 @@ def test_a_role_given_as_a_number_no_role_carries_is_told_the_contract_and_nothi
     with pytest.raises(TypeError) as complaint:
         annotator.set_role(button, _A_NUMBER_NO_ROLE_CARRIES)
 
-    # Then the contract is stated and no member is invented for it. A guess at
-    # which role was meant is the confident wrong answer in a new place.
+    # Then the contract is stated and no member is invented for it
     assert "Role" in str(complaint.value) and "int" in str(complaint.value), (
         f"the complaint has to say what the parameter takes: {complaint.value}"
     )
@@ -508,8 +451,7 @@ def test_a_role_given_as_a_number_no_role_carries_is_told_the_contract_and_nothi
 def test_an_automation_id_given_as_text_is_refused_before_windows_is_asked_anything() -> (
     None
 ):
-    # Given the natural first attempt, since a client reads an AutomationId back
-    # as text and every example in the guide shows one quoted
+    # Given the natural first attempt, since a client reads an AutomationId as text
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -518,9 +460,7 @@ def test_an_automation_id_given_as_text_is_refused_before_windows_is_asked_anyth
     with pytest.raises(TypeError) as complaint:
         annotator.set_automation_id(button, _AN_ID_SPELT_AS_A_NAME)
 
-    # Then the call is stopped at the door, and told why the id is a number:
-    # underneath it is `GWLP_ID`, the Win32 control id, and a string reaches
-    # ctypes as an argument error from a stack frame nobody here wrote.
+    # Then the call is stopped at the door: underneath the id is `GWLP_ID`
     assert "GWLP_ID" in str(complaint.value), (
         f"the complaint has to say why an id here is a number: {complaint.value}"
     )
@@ -532,8 +472,7 @@ def test_an_automation_id_given_as_text_is_refused_before_windows_is_asked_anyth
 def test_a_call_handed_something_that_is_not_a_widget_says_which_parameter_it_was() -> (
     None
 ):
-    # Given an application that has passed a widget's name, or its path, where
-    # the widget itself belongs
+    # Given an application that has passed a string where the widget belongs
     store = RecordingStore()
     annotator = Annotator(store)
     caption = FakeWidget("Label", _A_LABEL_HANDLE, text="Host:")
@@ -544,8 +483,7 @@ def test_a_call_handed_something_that_is_not_a_widget_says_which_parameter_it_wa
     with pytest.raises(TypeError) as associated:
         annotator.label_for(caption, _NOT_A_WIDGET_AT_ALL)
 
-    # Then each says which parameter it was and what arrived, rather than
-    # failing several frames down on an attribute a string does not have.
+    # Then each says which parameter it was and what arrived
     assert "widget" in str(named.value) and "str" in str(named.value), (
         f"the complaint names neither the parameter nor the type: {named.value}"
     )
@@ -559,8 +497,7 @@ def test_a_call_handed_something_that_is_not_a_widget_says_which_parameter_it_wa
 def test_annotating_from_a_thread_other_than_the_one_that_owns_the_widgets_is_refused() -> (
     None
 ):
-    # Given an annotator built on the thread that owns the widgets, as it is
-    # whenever `enable()` is called from the thread running Tk's event loop
+    # Given an annotator built on the thread that owns the widgets
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -568,11 +505,7 @@ def test_annotating_from_a_thread_other_than_the_one_that_owns_the_widgets_is_re
     # When a background worker tries to annotate
     refusal = the_failure_raised_on_another_thread(lambda: annotator.add(button))
 
-    # Then it is stopped at the door, before a single Tk call. `add` asks the
-    # widget its class, its options and its text, and each crosses into the Tcl
-    # interpreter, which is the half of this that corrupts rather than merely
-    # misplaces. The widget double refuses a foreign caller so that reaching it
-    # fails this spec.
+    # Then it is stopped before a single Tk call: Tcl corrupts rather than raises
     assert isinstance(refusal, AnnotationRefused), (
         f"a foreign thread got through to Tk with {refusal!r}; the guard must "
         "refuse before winfo_class(), keys() or cget() is called"
@@ -584,8 +517,7 @@ def test_annotating_from_a_thread_other_than_the_one_that_owns_the_widgets_is_re
 
 
 def test_a_widget_bound_to_a_variable_re_announces_itself_whenever_it_changes() -> None:
-    # Given a status label whose words come from a variable rather than from
-    # `-text`, bound so that the annotation follows it
+    # Given a status label whose words come from a variable rather than `-text`
     store = RecordingStore()
     annotator = Annotator(store)
     label = FakeWidget("Label", _A_LABEL_HANDLE)
@@ -597,9 +529,7 @@ def test_a_widget_bound_to_a_variable_re_announces_itself_whenever_it_changes() 
     # When the application puts something new in the variable
     status.set("task created")
 
-    # Then that is what a client now reads. A `textvariable` label has no
-    # `-text` to infer from, so without this the widget whose purpose is to say
-    # what just happened says nothing.
+    # Then that is what a client now reads
     assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "task created", (
         "the annotation is stuck on whatever the label said first"
     )
@@ -619,9 +549,7 @@ def test_a_value_bound_to_a_variable_is_written_as_soon_as_it_is_bound() -> None
     # When its value is bound to that variable
     annotator.bind_value_variable(entry, draft)
 
-    # Then what is already in the box is readable straight away, and it is the
-    # value that carries it. A trace only fires on the *next* write, so a
-    # binding that waited for one would announce nothing until somebody typed.
+    # Then it is readable straight away: a trace only fires on the *next* write
     assert store.properties(_AN_ENTRY_HANDLE) == {
         PropId.ROLE: Role.TEXT.value,
         PropId.VALUE: "Write the report",
@@ -640,9 +568,7 @@ def test_a_bound_value_follows_the_variable_when_the_application_changes_it() ->
     # When the application puts something else in the variable
     draft.set("Write the quarterly report")
 
-    # Then that is what a client now reads out of the edit control, with the
-    # application saying nothing further. A value is the property a client
-    # re-reads most, and a stale one reads exactly like a true one.
+    # Then that is what a client now reads out of the edit control
     assert store.properties(_AN_ENTRY_HANDLE)[PropId.VALUE] == (
         "Write the quarterly report"
     ), "the value is stuck on whatever the entry held when it was bound"
@@ -651,8 +577,7 @@ def test_a_bound_value_follows_the_variable_when_the_application_changes_it() ->
 def test_a_forgotten_widget_stops_being_re_announced_when_its_variable_changes() -> (
     None
 ):
-    # Given a status label whose annotation follows a variable, which the
-    # application has since taken back
+    # Given a status label whose annotation follows a variable, since taken back
     store = RecordingStore()
     annotator = Annotator(store)
     label = FakeWidget("Label", _A_LABEL_HANDLE)
@@ -664,9 +589,7 @@ def test_a_forgotten_widget_stops_being_re_announced_when_its_variable_changes()
     # When the variable moves on, as a running application's status variable does
     status.set("task created")
 
-    # Then the widget stays forgotten. A trace that outlives `forget` puts the
-    # annotation back on the next write, with no call of the caller's anywhere
-    # in the traceback.
+    # Then the widget stays forgotten
     assert store.properties(_A_LABEL_HANDLE) == {}, (
         f"forget() left the variable trace in place, so the next write "
         f"re-announced the widget: {store.properties(_A_LABEL_HANDLE)}"
@@ -674,9 +597,7 @@ def test_a_forgotten_widget_stops_being_re_announced_when_its_variable_changes()
 
 
 def test_a_destroyed_widgets_variable_can_still_be_written_without_raising() -> None:
-    # Given a label bound to a variable, and destroyed without the annotator
-    # being told: a `<Destroy>` handler that raised, or a widget whose parent
-    # went first
+    # Given a label bound to a variable and destroyed without the annotator knowing
     store = RecordingStore()
     annotator = Annotator(store)
     label = FakeWidget("Label", _A_LABEL_HANDLE)
@@ -686,15 +607,11 @@ def test_a_destroyed_widgets_variable_can_still_be_written_without_raising() -> 
     label.destroy()
     while_it_was_alive = list(store.writes)
 
-    # When the variable goes on changing, as an application's variables do long
-    # after the widget that displayed them has gone
+    # When the variable goes on changing
     status.set("task created")
     status.set("second task created")
 
-    # Then not one of those writes raises, and none of them reaches the store. A
-    # trace firing at a dead window path raises inside Tcl's own callback, where
-    # the application has no call of its own to wrap it in: an unhandled
-    # traceback on stderr, on every write, for the life of the process.
+    # Then nothing raises: a trace at a dead widget path raises inside Tcl's callback
     assert store.writes == while_it_was_alive, (
         "a widget that no longer exists was annotated anyway: "
         f"{store.writes[len(while_it_was_alive) :]}"
@@ -704,8 +621,7 @@ def test_a_destroyed_widgets_variable_can_still_be_written_without_raising() -> 
 def test_a_label_that_declares_a_textvariable_is_named_from_it_and_kept_in_step() -> (
     None
 ):
-    # Given the ordinary way a Tk status line is written: a label handed a
-    # variable at construction, and not one word said to this package about it
+    # Given a label handed a variable at construction and nothing said about it
     store = RecordingStore()
     status = FakeVariable("ready")
     annotator = Annotator(
@@ -720,9 +636,7 @@ def test_a_label_that_declares_a_textvariable_is_named_from_it_and_kept_in_step(
     named_when_annotated = store.properties(_A_LABEL_HANDLE).get(PropId.NAME)
     status.set("task created")
 
-    # Then it announced itself straight away and follows the variable from then
-    # on. The widget already told Tk which variable drives it, so an application
-    # that had to repeat itself here would be answering a question Tk can.
+    # Then it announced itself straight away and follows the variable after
     assert named_when_annotated == "ready", (
         f"the label was annotated {named_when_annotated!r} rather than with what "
         "the variable it declares already held"
@@ -734,9 +648,7 @@ def test_a_label_that_declares_a_textvariable_is_named_from_it_and_kept_in_step(
 
 
 def test_an_entry_that_declares_a_textvariable_has_that_read_as_its_value() -> None:
-    # Given an entry driven by a variable, which is how a Tk form is written and
-    # the one case where annotating alone leaves a confident wrong answer: the
-    # role gives the entry a ValuePattern reading '' until something writes it
+    # Given an entry driven by a variable, whose ValuePattern reads '' until written
     store = RecordingStore()
     draft = FakeVariable("Write the report")
     annotator = Annotator(
@@ -749,9 +661,7 @@ def test_an_entry_that_declares_a_textvariable_has_that_read_as_its_value() -> N
     # When the annotator meets it
     annotator.add(entry)
 
-    # Then what the entry holds is its *value*, and it is left unnamed. The same
-    # option means different things in different widgets: a status label's
-    # variable is what the label says, and an entry's is what somebody typed.
+    # Then what the entry holds is its *value*, and it is left unnamed
     assert store.properties(_AN_ENTRY_HANDLE) == {
         PropId.ROLE: Role.TEXT.value,
         PropId.VALUE: "Write the report",
@@ -761,8 +671,7 @@ def test_an_entry_that_declares_a_textvariable_has_that_read_as_its_value() -> N
 def test_the_widgets_role_decides_whether_its_variable_is_its_value_or_its_name() -> (
     None
 ):
-    # Given two widgets of the sixteen classes that carry `-textvariable`, one
-    # of which a client will ask the contents of and one of which it will not
+    # Given two of the sixteen classes that carry `-textvariable`
     store = RecordingStore()
     chosen = FakeVariable("Weekly")
     labelled = FakeVariable("Filter")
@@ -783,9 +692,7 @@ def test_the_widgets_role_decides_whether_its_variable_is_its_value_or_its_name(
     annotator.add(combobox)
     annotator.add(menubutton)
 
-    # Then the combobox's variable is read as its contents and the menubutton's
-    # as its name. The option is spelled the same on both, and the role is the
-    # only thing that says what it means.
+    # Then the combobox's variable is its contents and the menubutton's is its name
     assert store.properties(_AN_ENTRY_HANDLE).get(PropId.VALUE) == "Weekly", (
         f"a combobox's selection is its value: {store.properties(_AN_ENTRY_HANDLE)}"
     )
@@ -796,9 +703,7 @@ def test_the_widgets_role_decides_whether_its_variable_is_its_value_or_its_name(
 
 
 def test_a_widget_that_declares_no_variable_is_left_exactly_as_it_was() -> None:
-    # Given two widgets neither of which has a variable to follow: one whose
-    # class has no `-textvariable` option at all, and one whose option is there
-    # and empty, which is every widget an application drives by `-text`
+    # Given two widgets with no variable to follow: no option at all, and an empty one
     store = RecordingStore()
     annotator = Annotator(
         store,
@@ -815,9 +720,7 @@ def test_a_widget_that_declares_no_variable_is_left_exactly_as_it_was() -> None:
     annotator.add(text_box)
     annotator.add(plain_label)
 
-    # Then each is left exactly as it was. An empty `-textvariable` is Tk's
-    # answer for "nobody filled this in", and following it would replace a
-    # label's real caption with the empty string.
+    # Then each is left as it was: an empty `-textvariable` means nobody filled it in
     assert store.properties(_AN_ENTRY_HANDLE) == {PropId.ROLE: Role.TEXT.value}
     assert store.properties(_A_LABEL_HANDLE) == {
         PropId.ROLE: Role.STATIC_TEXT.value,
@@ -844,9 +747,7 @@ def test_annotating_a_widget_again_follows_the_variable_it_declares_only_once() 
     annotator.add(label)
     annotator.add(label)
 
-    # Then there is one registration on the variable, not three. A trace lives
-    # on the variable for the life of the process, so stacking one per `<Map>`
-    # leaves a long-running application paying for every repaint it ever did.
+    # Then there is one registration on the variable, not three
     assert status.traces_left() == _ONE_REGISTRATION, (
         f"{status.traces_left()} traces are registered on a variable one widget "
         "declares, so every write to it now announces the widget that many times"
@@ -869,17 +770,12 @@ def test_a_widget_pointed_at_a_different_variable_lets_go_of_the_one_it_had() ->
     )
     annotator.add(label)
 
-    # When the application points the widget at another variable and says so the
-    # way it says everything else: `config(textvariable=...)`, then the
-    # `add_acc_object` the README already prescribes for a re-read
+    # When the application points the widget at another variable and says so
     label.declares_a_different_variable(_A_SECOND_VARIABLE)
     annotator.add(label)
     was.set("stale")
 
-    # Then the widget announces the variable it declares now, and the one it
-    # used to declare has been let go of entirely. Left on the old one, both
-    # would fire in registration order, so the widget would read as whichever
-    # variable was written last.
+    # Then the widget announces the variable it declares now and lets go of the old
     assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "busy", (
         "the widget is still announcing the variable it stopped declaring: "
         f"{store.properties(_A_LABEL_HANDLE)}"
@@ -894,9 +790,7 @@ def test_a_widget_pointed_at_a_different_variable_lets_go_of_the_one_it_had() ->
 def test_a_name_the_application_says_itself_is_never_taken_back_by_a_declared_variable() -> (
     None
 ):
-    # Given a label following the variable it declares, which the application
-    # then names something of its own: a variable holding a raw status code,
-    # announced as a sentence
+    # Given a label following its declared variable, then named by the application
     store = RecordingStore()
     status = FakeVariable("ready")
     annotator = Annotator(
@@ -913,9 +807,7 @@ def test_a_name_the_application_says_itself_is_never_taken_back_by_a_declared_va
     annotator.add(label)
     status.set("second task created")
 
-    # Then the application's name stands, on both counts. The binding has to be
-    # released rather than merely outranked, because it fires from inside Tcl on
-    # an event the application never sees.
+    # Then the application's name stands, on both counts
     assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "waiting for you", (
         "the declared variable took back the name the application chose: "
         f"{store.properties(_A_LABEL_HANDLE)}"
@@ -929,9 +821,7 @@ def test_a_name_the_application_says_itself_is_never_taken_back_by_a_declared_va
 def test_a_variable_the_application_binds_by_hand_replaces_the_one_the_widget_declares() -> (
     None
 ):
-    # Given a label following the variable it declares, and an application that
-    # wants a different one announced: a widget showing a code, and a variable
-    # holding the sentence for it
+    # Given a label following its declared variable, and an application wanting another
     store = RecordingStore()
     declared = FakeVariable("ready")
     what_the_application_would_rather_say = FakeVariable("waiting for you")
@@ -948,9 +838,7 @@ def test_a_variable_the_application_binds_by_hand_replaces_the_one_the_widget_de
     declared.set("busy")
     what_the_application_would_rather_say.set("still working")
 
-    # Then only the application's binding is left. Two bindings on one property
-    # do not compose: they take turns, and the widget reads as whichever
-    # variable happened to be written last.
+    # Then only the application's binding is left
     assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "still working", (
         "the variable the widget declares is still overwriting the one the "
         f"application bound: {store.properties(_A_LABEL_HANDLE)}"
@@ -962,8 +850,7 @@ def test_a_variable_the_application_binds_by_hand_replaces_the_one_the_widget_de
 
 
 def test_a_widget_named_after_a_label_is_called_what_that_label_says() -> None:
-    # Given a form row exactly as Tk lays one out: a caption, the entry it
-    # captions, and nothing anywhere recording that the two belong together
+    # Given a form row: a caption, the entry it captions, and nothing linking them
     store = RecordingStore()
     annotator = Annotator(store)
     caption = FakeWidget("Label", _A_LABEL_HANDLE, text="Host:")
@@ -974,8 +861,7 @@ def test_a_widget_named_after_a_label_is_called_what_that_label_says() -> None:
     # When the application says which widget that label is the caption for
     annotator.label_for(caption, entry)
 
-    # Then the entry answers to the words beside it, without the colon that
-    # punctuates a form and names nothing.
+    # Then the entry answers to the words beside it, without the colon
     assert store.properties(_AN_ENTRY_HANDLE)[PropId.NAME] == "Host", (
         "the entry is not called what the label beside it says: "
         f"{store.properties(_AN_ENTRY_HANDLE)}"
@@ -985,8 +871,7 @@ def test_a_widget_named_after_a_label_is_called_what_that_label_says() -> None:
 def test_a_widget_named_after_a_label_that_shows_a_variable_follows_that_variable() -> (
     None
 ):
-    # Given a caption whose words come from a variable rather than from `-text`,
-    # which is how an application that retitles its own rows is written
+    # Given a caption whose words come from a variable rather than from `-text`
     store = RecordingStore()
     what_the_caption_says = FakeVariable("Host:")
     annotator = Annotator(
@@ -1007,9 +892,7 @@ def test_a_widget_named_after_a_label_that_shows_a_variable_follows_that_variabl
     named_when_associated = store.properties(_AN_ENTRY_HANDLE).get(PropId.NAME)
     what_the_caption_says.set("Server:")
 
-    # Then the entry is named from the variable straight away and follows it
-    # from then on, tidied the same way each time. The association is between
-    # the two widgets, not between a widget and a string somebody read once.
+    # Then the entry is named from the variable and follows it from then on
     assert named_when_associated == "Host", (
         f"the entry was named {named_when_associated!r} rather than from what "
         "the variable its caption declares already held"
@@ -1021,8 +904,7 @@ def test_a_widget_named_after_a_label_that_shows_a_variable_follows_that_variabl
 
 
 def test_naming_a_widget_after_a_label_again_reads_what_that_label_says_now() -> None:
-    # Given an entry named after a caption that has since been changed by a
-    # plain `config(text=...)`, which re-announces nothing in this package
+    # Given an entry named after a caption a plain `config(text=...)` has changed
     store = RecordingStore()
     annotator = Annotator(store)
     caption = FakeWidget("Label", _A_LABEL_HANDLE, text="Host:")
@@ -1030,13 +912,10 @@ def test_naming_a_widget_after_a_label_again_reads_what_that_label_says_now() ->
     annotator.label_for(caption, entry)
     caption.says_something_else("Hostname:")
 
-    # When the application says the association again, which is the escape hatch
-    # every other caption in this package already has
+    # When the application says the association again
     annotator.label_for(caption, entry)
 
-    # Then the new words reach the entry. A name read off a `-text` goes stale
-    # exactly as `add_acc_object`'s does, and the fix has to be the same shape:
-    # say it again, or drive the caption from a variable.
+    # Then the new words reach the entry
     assert store.properties(_AN_ENTRY_HANDLE)[PropId.NAME] == "Hostname", (
         "re-associating did not re-read the caption: "
         f"{store.properties(_AN_ENTRY_HANDLE)}"
@@ -1044,8 +923,7 @@ def test_naming_a_widget_after_a_label_again_reads_what_that_label_says_now() ->
 
 
 def test_naming_a_widget_after_a_label_with_nothing_to_say_is_refused() -> None:
-    # Given a label showing no words and declaring no variable: an empty cell in
-    # a grid, or a caption an application has not filled in yet
+    # Given a label showing no words and declaring no variable
     store = RecordingStore()
     annotator = Annotator(store)
     says_nothing = FakeWidget("Label", _A_LABEL_HANDLE, text="")
@@ -1055,9 +933,7 @@ def test_naming_a_widget_after_a_label_with_nothing_to_say_is_refused() -> None:
     with pytest.raises(AnnotationRefused) as refusal:
         annotator.label_for(says_nothing, entry)
 
-    # Then it is told, and the entry stays unnamed. Naming it `''` would leave a
-    # client a confident, empty answer where an honest miss is at least
-    # findable.
+    # Then it is told, and the entry stays unnamed
     assert PropId.NAME not in store.properties(_AN_ENTRY_HANDLE), (
         f"the entry was named anyway: {store.properties(_AN_ENTRY_HANDLE)}"
     )
@@ -1069,9 +945,7 @@ def test_naming_a_widget_after_a_label_with_nothing_to_say_is_refused() -> None:
 def test_naming_a_widget_after_an_entry_is_refused_because_an_entry_holds_contents() -> (
     None
 ):
-    # Given a form row and an application that has said the two arguments the
-    # wrong way round. An entry declares a `-textvariable` exactly as a caption
-    # driven by one does, so nothing about the call looks unusual.
+    # Given an application that has said the two arguments the wrong way round
     store = RecordingStore()
     what_somebody_typed = FakeVariable("build.example.com")
     annotator = Annotator(
@@ -1089,10 +963,7 @@ def test_naming_a_widget_after_an_entry_is_refused_because_an_entry_holds_conten
     with pytest.raises(AnnotationRefused) as refusal:
         annotator.label_for(entry, caption)
 
-    # Then nothing was said about the caption and nothing is listening to the
-    # variable. Taken at its word the call announces the caption as whatever
-    # somebody typed into the box, and follows it keystroke by keystroke, which
-    # reads back as a confident answer to a question nobody asked.
+    # Then nothing was said about the caption and nothing is listening
     assert store.properties(_A_LABEL_HANDLE) == {}, (
         f"the caption was named after the entry's contents anyway: "
         f"{store.properties(_A_LABEL_HANDLE)}"
@@ -1107,8 +978,7 @@ def test_naming_a_widget_after_an_entry_is_refused_because_an_entry_holds_conten
 
 
 def test_naming_a_widget_after_a_combobox_is_refused_the_same_way() -> None:
-    # Given the other everyday shape of the same mistake: a themed combobox,
-    # whose variable is the option somebody chose rather than a caption
+    # Given a themed combobox, whose variable is the option somebody chose
     store = RecordingStore()
     chosen = FakeVariable("High")
     annotator = Annotator(
@@ -1123,9 +993,7 @@ def test_naming_a_widget_after_a_combobox_is_refused_the_same_way() -> None:
     with pytest.raises(AnnotationRefused) as refusal:
         annotator.label_for(combobox, caption)
 
-    # Then it is refused by what the widget *is*, not by what it happens to
-    # declare, so the whole family is covered rather than the one class that
-    # prompted this.
+    # Then it is refused by what the widget *is*, not by what it declares
     assert store.properties(_A_LABEL_HANDLE) == {}, (
         f"the caption was named after the chosen option: "
         f"{store.properties(_A_LABEL_HANDLE)}"
@@ -1139,8 +1007,7 @@ def test_naming_a_widget_after_a_combobox_is_refused_the_same_way() -> None:
 
 
 def test_naming_a_widget_after_a_text_widget_is_refused_for_holding_contents() -> None:
-    # Given a `tk.Text`, which has no `-textvariable` option at all and whose
-    # words are still the contents of the control rather than a caption
+    # Given a `tk.Text`, which has no `-textvariable` option at all
     store = RecordingStore()
     annotator = Annotator(store)
     notes = FakeWidget("Text", _A_TEXT_HANDLE)
@@ -1150,9 +1017,7 @@ def test_naming_a_widget_after_a_text_widget_is_refused_for_holding_contents() -
     with pytest.raises(AnnotationRefused) as refusal:
         annotator.label_for(notes, entry)
 
-    # Then it is refused for holding contents rather than for showing no words.
-    # The two refusals send a reader to opposite places: one says give the label
-    # some words, and here that is exactly the wrong thing to do.
+    # Then it is refused for holding contents rather than for showing no words
     assert "contents" in str(refusal.value), (
         f"the refusal reads as though the widget merely said nothing: {refusal.value}"
     )
@@ -1162,8 +1027,7 @@ def test_naming_a_widget_after_a_text_widget_is_refused_for_holding_contents() -
 
 
 def test_a_name_taken_from_a_label_survives_the_widget_being_mapped_again() -> None:
-    # Given the ordinary shape of a form row: an entry named after its caption,
-    # and holding what somebody typed in a variable of its own
+    # Given an entry named after its caption and holding what somebody typed
     store = RecordingStore()
     draft = FakeVariable("localhost")
     annotator = Annotator(
@@ -1180,9 +1044,7 @@ def test_a_name_taken_from_a_label_survives_the_widget_being_mapped_again() -> N
     annotator.add(entry)
     draft.set("build.example.com")
 
-    # Then it still answers to its caption, and what it holds is still read as
-    # its value. The application said this association out loud, so it outranks
-    # what the automatic annotation works out on an event nobody sees.
+    # Then it still answers to its caption, and what it holds is still its value
     assert store.properties(_AN_ENTRY_HANDLE)[PropId.NAME] == "Host", (
         f"the entry lost the name its caption gave it: {store.properties(_AN_ENTRY_HANDLE)}"
     )
@@ -1193,8 +1055,7 @@ def test_a_name_taken_from_a_label_survives_the_widget_being_mapped_again() -> N
 
 
 def test_a_label_association_replaces_the_variable_the_widget_itself_declared() -> None:
-    # Given a menubutton showing a variable instead of a caption, which
-    # `enable()` follows into its name with no call at all
+    # Given a menubutton showing a variable instead of a caption
     store = RecordingStore()
     showing = FakeVariable("Weekly")
     annotator = Annotator(
@@ -1206,16 +1067,12 @@ def test_a_label_association_replaces_the_variable_the_widget_itself_declared() 
     )
     annotator.add(menubutton)
 
-    # When the application says which label names it, Tk maps it again, and the
-    # variable it declares moves on
+    # When the application says which label names it, and the variable moves on
     annotator.label_for(caption, menubutton)
     annotator.add(menubutton)
     showing.set("Monthly")
 
     # Then the caption stands, and the automatic binding has been let go of
-    # rather than merely outranked. The traffic runs one way: an association the
-    # application declared beats what the widget said about itself, and nothing
-    # the widget says takes it back.
     assert store.properties(_A_BUTTON_HANDLE)[PropId.NAME] == "Report period", (
         "the variable the widget declares took back the name its label gave it: "
         f"{store.properties(_A_BUTTON_HANDLE)}"
@@ -1237,14 +1094,11 @@ def test_what_a_widget_is_called_can_be_read_back_before_anything_is_written_ove
     annotator.add(entry)
     annotator.add(button)
 
-    # When something working out names from the widgets around them asks what
-    # each is called already
+    # When something asks what each is called already
     unnamed = annotator.name_of(entry)
     named = annotator.name_of(button)
 
-    # Then it can tell them apart. `None` rather than `''`, because a widget
-    # named the empty string and a widget nothing has named are different states
-    # with different fixes.
+    # Then it can tell them apart: `None` rather than `''` for a widget nothing named
     assert (unnamed, named) == (None, "New Task"), (
         f"asked what they are called, an unnamed entry answered {unnamed!r} and "
         f"a named button {named!r}"
@@ -1254,8 +1108,7 @@ def test_what_a_widget_is_called_can_be_read_back_before_anything_is_written_ove
 def test_forgetting_a_widget_releases_the_variable_it_was_following_on_its_own() -> (
     None
 ):
-    # Given a label following the variable it declares, which the application
-    # has since taken every annotation back off
+    # Given a label following the variable it declares, since forgotten
     store = RecordingStore()
     status = FakeVariable("ready")
     annotator = Annotator(
@@ -1267,13 +1120,10 @@ def test_forgetting_a_widget_releases_the_variable_it_was_following_on_its_own()
     annotator.add(label)
     annotator.forget(label)
 
-    # When the variable goes on being written, as an application's own variables
-    # do long after any widget showing them has been let go of
+    # When the variable goes on being written
     status.set("task created")
 
-    # Then nothing is listening and nothing came back. A binding an application
-    # never asked for is one it will never think to unbind either, so `forget()`
-    # has to release those as well as the manual ones.
+    # Then nothing is listening and nothing came back
     assert status.traces_left() == _NOTHING_STILL_LISTENING, (
         f"{status.traces_left()} trace(s) outlived forget(), and each one will "
         "go on announcing a widget the application took back"

@@ -1,13 +1,9 @@
 """Behavioral spec for what a Windows accessibility client sees in an annotated Tk.
 
-Everything above :mod:`tk_uia._accprop` is decided against a recording double,
-and that double would agree just as happily with a COM call that returned `S_OK`
-and did nothing. So the proof has to come from outside: a real Tk window in a
-process of its own, read back through UI Automation from this one.
-
-They cost a real window on the developer's desktop and a second or so each.
-Nothing here touches the mouse or the foreground, so they are safe to run while
-somebody is working.
+A recording double would agree just as happily with a COM call that returned
+`S_OK` and did nothing, so the proof has to come from outside: a real Tk window
+in a process of its own, read back through UI Automation from this one. Nothing
+here touches the mouse or the foreground.
 """
 
 from __future__ import annotations
@@ -59,20 +55,16 @@ _AN_EDIT = "EditControl"
 
 _THE_CANVAS_AND_THE_CLEARED_ENTRY = 2
 
-# The application checks for a command a few times a second; anything near this
-# means it stopped checking.
+# The application checks for a command a few times a second.
 _A_REACTION_TIMEOUT_SECONDS = 5.0
 _HOW_OFTEN_TO_LOOK_AGAIN_SECONDS = 0.1
 
-# Generous for a Tk command that does one addition: an unnoticed press would
-# have landed many times over.
+# Generous for a Tk command that does one addition.
 _LONG_ENOUGH_FOR_A_REACTION_THAT_WILL_NOT_COME_SECONDS = 1.0
 
 _NEVER = 0
 _ONCE = 1
 
-# What `bind_text_variable` registers on the status variable, and what is left
-# once the widget it was registered for has been destroyed.
 _ONE_BINDING = 1
 _NOTHING_STILL_LISTENING = 0
 
@@ -118,10 +110,7 @@ def _settled_or_still_being_rebuilt(settled: Callable[[], bool]) -> bool:
 
     A spec that destroys a widget races every walk of the tree: the control is
     enumerated, the application destroys it, and asking the handle for its type
-    raises `COMError`. That is the ordinary condition of a live application, so
-    it means look again. It cannot hide a failure: only a complete, successful
-    read satisfies the caller's question, and a tree that stayed unreadable
-    still runs out the deadline.
+    raises `COMError`.
     """
     import comtypes
 
@@ -140,7 +129,7 @@ def test_an_annotated_button_announces_its_name_to_a_client_in_another_process(
     # When a client asks it for a push button called "New Task"
     button = auto.ButtonControl(searchFromControl=annotated_app.window, Name=NEW_TASK)
 
-    # Then the button answers to its own name, which bare Tk leaves empty
+    # Then the button answers to its own name
     assert button.Exists(0), (
         "no button in the window carries the name the application gave it; "
         "without the annotation Tk offers a ButtonControl whose Name is ''"
@@ -156,9 +145,7 @@ def test_an_annotated_label_is_read_as_text_rather_than_as_a_picture(
     # When a client looks for text saying them
     headline = auto.TextControl(searchFromControl=annotated_app.window, Name=HEADLINE)
 
-    # Then the label is text, and says so. Bare Tk registers its labels under
-    # the Win32 `Static` class with SS_OWNERDRAW, which the MSAA bridge reports
-    # as an `ImageControl`: a picture, with nothing to read.
+    # Then the label is text, and says so
     assert headline.Exists(0), (
         "the label is not readable as text: bare Tk offers it as an "
         "ImageControl, and no query for text can reach a picture"
@@ -174,16 +161,13 @@ def test_an_annotated_entry_is_read_as_an_edit_control_whose_value_a_client_can_
     # When a client asks for the edit control the label calls "Title"
     entry = auto.EditControl(searchFromControl=annotated_app.window, Name=TITLE)
 
-    # Then it is an edit control at all. Bare Tk offers an anonymous
-    # `PaneControl` here, and a pane is not something a client types into.
+    # Then it is an edit control at all
     assert entry.Exists(0), (
         "the entry is not reachable as an edit control; annotating its role is "
         "what turns Tk's anonymous PaneControl into one"
     )
 
-    # And its contents can be read, through a ValuePattern that did not exist
-    # until the role was annotated. A role is not a label on an existing object:
-    # it decides which patterns the bridge offers for it at all.
+    # And its contents can be read, through a ValuePattern the role brought with it
     assert entry.GetValuePattern().Value == DRAFT, (
         "the entry offers no readable value; setting role 42 (ROLE_SYSTEM_TEXT) "
         "is what makes the bridge give this control a ValuePattern"
@@ -193,24 +177,19 @@ def test_an_annotated_entry_is_read_as_an_edit_control_whose_value_a_client_can_
 def test_an_entry_named_after_its_caption_answers_to_the_label_beside_it(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the form row in that window: a caption, the entry it captions, and
-    # one `label_for` call, with the application saying nothing else about either
+    # Given the form row: a caption, the entry it captions, and one `label_for` call
     import uiautomation as auto
 
     # When a client asks for the edit control by the words on the label
     entry = auto.EditControl(searchFromControl=annotated_app.window, Name=HOST)
 
-    # Then it is there, under the caption without its colon. In Tk the caption
-    # is a sibling widget and the relationship is recorded nowhere, so this is
-    # the one name in a form no amount of reading the entry could ever find.
+    # Then it is there, under the caption without its colon
     assert entry.Exists(0), (
         f"no edit control in the window answers to {HOST!r}, so the association "
         "between the label and the entry reached no client"
     )
 
-    # And the label goes on saying what it says on screen, colon and all. The
-    # association names the widget it speaks for and changes nothing about the
-    # widget doing the speaking.
+    # And the label goes on saying what it says on screen, colon and all
     shown = _what_the_application_shows(annotated_app.window)
 
     assert (_TEXT, HOST_CAPTION) in shown, (
@@ -218,24 +197,15 @@ def test_an_entry_named_after_its_caption_answers_to_the_label_beside_it(
     )
 
 
-# `infer_names_from_layout` has no gui spec of its own, deliberately: every name
-# it writes goes through `label_for` above or through `set_acc_name`, and both
-# are read back from another process here. What the convention adds is only
-# which widgets it picks and what it calls them, which is a decision about a
-# widget tree and is specified in `tests/test_layout.py` against doubles.
 def test_a_widget_left_unannotated_still_looks_anonymous_to_a_client(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the same window, which also holds a widget of a class this package
-    # has never heard of: the only kind it walks past
+    # Given the same window, which also holds a widget of a class nobody knows
 
     # When every widget the application itself put on screen is listed
     widgets = the_widgets_the_application_shows(annotated_app.window)
 
-    # Then exactly one of them is still what the bridge hands out for a window
-    # it has been told nothing about: a pane with no name. Without this control
-    # the specs above prove the widgets read correctly, but not that annotating
-    # is what made them.
+    # Then exactly one of them is still a pane with no name
     anonymous = [
         (control.ControlTypeName, control.Name)
         for control in widgets
@@ -261,10 +231,7 @@ def test_clearing_a_widgets_annotations_returns_it_to_looking_anonymous(
     # When the application takes both annotations back
     annotated_app.ask_for(FORGET_THE_DISPOSABLE_WIDGETS)
 
-    # Then each goes back to exactly what bare Tk offers for it: the label to a
-    # picture with nothing to read, the entry to an anonymous pane. Windows
-    # reuses window handles, so an annotation left on a destroyed widget's
-    # handle would eventually put a dead label's name on an unrelated control.
+    # Then each goes back to exactly what bare Tk offers for it
     _eventually_stops_showing(
         annotated_app.window,
         (_TEXT, DISPOSABLE),
@@ -292,13 +259,10 @@ def test_a_name_bound_to_a_tk_variable_follows_it_when_the_application_changes_i
         f"the status label never took its name from the variable it displays: {at_rest}"
     )
 
-    # When the application writes a new value into that variable, and says
-    # nothing to this package about it
+    # When the application writes that variable, saying nothing to this package
     annotated_app.ask_for(ADVANCE_THE_STATUS)
 
-    # Then what a client reads follows. A widget with a `textvariable` has no
-    # `-text` to be named from, so the widget whose job is to say what just
-    # happened is the one that would otherwise stay silent.
+    # Then what a client reads follows
     _eventually_shows(
         annotated_app.window,
         (_TEXT, TASK_CREATED),
@@ -310,8 +274,7 @@ def test_a_name_bound_to_a_tk_variable_follows_it_when_the_application_changes_i
 def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_it(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the entry whose contents come from a Tk variable, reading back to a
-    # client as the words the application started it with
+    # Given the entry whose contents come from a Tk variable
     import uiautomation as auto
 
     entry = auto.EditControl(searchFromControl=annotated_app.window, Name=TITLE)
@@ -321,13 +284,10 @@ def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_
         f"the entry never took its value from the variable it displays: {at_rest!r}"
     )
 
-    # When the application rewrites that variable, and says nothing to this
-    # package about it
+    # When the application rewrites that variable, saying nothing to this package
     annotated_app.ask_for(REVISE_THE_DRAFT)
 
-    # Then what a client reads out of the edit control follows. A value is the
-    # property a screen reader and a test tool re-read most, and a stale one
-    # reads exactly like a true one.
+    # Then what a client reads out of the edit control follows
     _eventually(
         lambda: entry.GetValuePattern().Value == REVISION,
         f"the entry still reads {DRAFT!r} rather than {REVISION!r}, so the "
@@ -338,9 +298,7 @@ def test_a_value_bound_to_a_tk_variable_follows_it_when_the_application_changes_
 def test_a_label_that_declares_a_textvariable_is_named_from_it_with_no_binding_call(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the one label in that window nothing ever said a word about: built
-    # with a `textvariable` like any Tk status line, and never passed to
-    # `bind_text_variable`
+    # Given a label built with a `textvariable` and never passed to `bind_text_variable`
     at_rest = _what_the_application_shows(annotated_app.window)
 
     assert (_TEXT, UNBOUND_STATUS) in at_rest, (
@@ -348,13 +306,10 @@ def test_a_label_that_declares_a_textvariable_is_named_from_it_with_no_binding_c
         f"`enable()` never read the `-textvariable` the widget declares: {at_rest}"
     )
 
-    # When the application writes that variable, and says nothing to this
-    # package before, during or after
+    # When the application writes that variable, saying nothing to this package
     annotated_app.ask_for(MOVE_WHAT_NOBODY_BOUND)
 
-    # Then a client in another process reads the new words. This is the half a
-    # double cannot fake: the trace behind it is a Tcl command registered
-    # against a variable this package deliberately does not own.
+    # Then a client in another process reads the new words
     _eventually_shows(
         annotated_app.window,
         (_TEXT, UNBOUND_STATUS_MOVED),
@@ -366,8 +321,7 @@ def test_a_label_that_declares_a_textvariable_is_named_from_it_with_no_binding_c
 def test_an_entry_that_declares_a_textvariable_reads_back_its_contents_with_no_binding_call(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the entry nothing ever bound either: named by the application,
-    # because no entry has words of its own, and nothing more than named
+    # Given the entry nothing ever bound either, named by the application and no more
     import uiautomation as auto
 
     entry = auto.EditControl(
@@ -377,16 +331,14 @@ def test_an_entry_that_declares_a_textvariable_reads_back_its_contents_with_no_b
 
     assert at_rest == UNBOUND_DRAFT, (
         f"the unbound entry reads {at_rest!r}: annotating alone leaves a "
-        "ValuePattern that answers '' — a confident wrong answer where bare Tk "
-        "gave none — and the variable the widget declares is what fills it"
+        "ValuePattern that answers '', a confident wrong answer where bare Tk "
+        "gave none, and the variable the widget declares is what fills it"
     )
 
     # When the application rewrites the variable behind it
     annotated_app.ask_for(MOVE_WHAT_NOBODY_BOUND)
 
-    # Then what a client reads out of the edit control follows, and the name the
-    # application set by hand is untouched. The two properties are separate
-    # questions, and saying one must not stop the other being kept true.
+    # Then what a client reads follows, and the name set by hand is untouched
     _eventually(
         lambda: entry.GetValuePattern().Value == UNBOUND_DRAFT_REVISED,
         f"the unbound entry still reads {UNBOUND_DRAFT!r} rather than "
@@ -401,9 +353,7 @@ def test_an_entry_that_declares_a_textvariable_reads_back_its_contents_with_no_b
 def test_a_destroyed_widget_lets_go_of_the_variable_its_annotation_was_following(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the status label, whose name follows a `StringVar` the application
-    # owns and that will outlive it. The application reports how many write
-    # traces are registered on that variable, and starts at one.
+    # Given the status label, whose name follows a `StringVar` that will outlive it
     _eventually_shows(
         annotated_app.window,
         (_TEXT, traces(_ONE_BINDING)),
@@ -414,11 +364,7 @@ def test_a_destroyed_widget_lets_go_of_the_variable_its_annotation_was_following
     # When the application destroys that label and then writes the variable
     annotated_app.ask_for(DESTROY_THE_STATUS_LABEL)
 
-    # Then the trace is off the variable. A trace lives on the variable, not on
-    # the widget, and nothing in Tk takes it off when the widget dies. The write
-    # in that command is why this count can move at all: had the binding not let
-    # go, the `TclError` would stop the command before it reported and this
-    # would stay at one.
+    # Then the trace is off the variable, which nothing in Tk does when a widget dies
     _eventually_shows(
         annotated_app.window,
         (_TEXT, traces(_NOTHING_STILL_LISTENING)),
@@ -439,7 +385,7 @@ def test_an_explicitly_numbered_widget_reports_that_number_as_its_automation_id(
     # When a client asks for the id a suite would pin its locator to
     automation_id = button.AutomationId
 
-    # Then it is the number the application chose, never one invented here.
+    # Then it is the number the application chose, never one invented here
     assert automation_id == str(NEW_TASK_NUMBER), (
         f"the button reports AutomationId {automation_id!r}, not the "
         f"{NEW_TASK_NUMBER} the application set"
@@ -458,27 +404,21 @@ def test_an_annotated_button_still_cannot_be_pressed_through_its_invoke_pattern(
         annotated_app.window
     ), "the fixture app is not counting presses, so this spec can prove nothing"
 
-    # When a client does both of the things assistive technology and test tools
-    # do to press a button, and each returns without complaint
+    # When a client does both of the things assistive technology does to press a button
     button.GetInvokePattern().Invoke()
     button.GetLegacyIAccessiblePattern().DoDefaultAction()
     time.sleep(_LONG_ENOUGH_FOR_A_REACTION_THAT_WILL_NOT_COME_SECONDS)
 
-    # Then the button's command never ran. Tk paints its buttons owner-drawn,
-    # and the generic MSAA proxy answering for them synthesises Invoke from a
-    # posted BM_CLICK, which for Tk is a message into the void: no exception, no
-    # press. Annotating makes a widget findable and readable, not activatable.
+    # Then the command never ran: Invoke is a posted BM_CLICK, a message into the void
     assert (_TEXT, presses(_NEVER)) in _what_the_application_shows(
         annotated_app.window
     ), (
-        "InvokePattern.Invoke() reached the Tk command — which would be very "
+        "InvokePattern.Invoke() reached the Tk command. That would be very "
         "good news, and means the README's central caveat, and pytest-uia's "
         "click-through-the-mouse rule, both now need revisiting"
     )
 
-    # And the counter is not merely stuck: when the application presses its own
-    # button, it moves. Without this the spec above would pass against a fixture
-    # that could never have counted anything.
+    # And the counter is not merely stuck: when the application presses, it moves
     annotated_app.ask_for(PRESS_THE_BUTTON)
 
     _eventually_shows(

@@ -1,21 +1,9 @@
 """tk-uia: make Tkinter widgets visible to Windows accessibility clients.
 
 Tk 8.6 gives every widget an empty accessible name and mostly the wrong control
-type, so a screen reader announces nothing and UI Automation sees a window full
-of anonymous panes. `enable(root)` annotates each widget through MSAA, which
-Windows bridges to UI Automation, and the tree starts telling the truth.
-
-The names re-exported here are the whole public surface, and they deliberately
-mirror TIP 733, Tk 9.1's own accessibility API, so that moving to it later is
-close to a rename. `enable()` returns which of the three things it did, because
-"annotated" and "the version gate mis-fired and this did nothing at all" are
-otherwise the same silence.
-
-Importing this module reaches for neither `tkinter` nor `ctypes.windll`: the
-type names below are only needed by a type checker, and the platform is not
-touched until `enable()` runs. That is what lets the whole spec suite run on a
-machine with no Tk, no display and no Windows, where a Linux CPython is not
-guaranteed to carry `_tkinter` at all.
+type. `enable(root)` annotates each widget through MSAA, which Windows bridges
+to UI Automation. Importing this reaches for neither `tkinter` nor
+`ctypes.windll`, so the platform is untouched until `enable()` runs.
 """
 
 from __future__ import annotations
@@ -76,18 +64,8 @@ _installed: Installation | None = None
 def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> Strategy:
     """Annotate this application's widgets, and say which way it went.
 
-    A widget driven by a `textvariable` is followed from here on: the widget
-    already told Tk which variable it shows, so its name stays in step with no
-    further call. Where a client asks the contents of the control, the variable
-    is read as its value instead. Saying something yourself takes it back,
-    permanently.
-
     Idempotent: a second call reports what the first one did and installs
-    nothing further. `bind_all` binds on the `all` bindtag, so one installation
-    already covers every window the application will ever open. A second would
-    stack another pair of `<Map>`/`<Destroy>` bindings, leave a stale annotator
-    auto-annotating widgets that `forget()` can no longer reach, and leak one
-    more `IAccPropServices` that nothing releases.
+    nothing further. One installation covers every window the application opens.
     """
     global _installed
     if _installed is not None:
@@ -111,33 +89,22 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
 def add_acc_object(widget: tkinter.Misc) -> None:
     """Annotate one widget now, re-reading its class, its `-text` and its tabs.
 
-    `enable()` already does this for everything Tk maps. Call it by hand after
-    changing a widget's `-text`, which otherwise leaves the accessible name
-    saying whatever the widget said when it was first mapped.
-
-    A notebook needs it after a tab is added, removed or renamed. Tk fires
-    `<<NotebookTabChanged>>` when the *selection* moves and at no other time, so
-    a tab added beside the open one, or a tab renamed in place, announces itself
-    exactly as a `config(text=...)` does: not at all, until this is called.
+    Needed after `config(text=...)`, and after a tab is added, removed or
+    renamed: Tk announces neither, so nothing re-annotates without this call.
     """
     _annotator().add(widget)
     _the_installation().tabs.refresh(widget)
 
 
 def set_acc_role(widget: tkinter.Misc, role: Role) -> None:
-    """Say what kind of control this is, overriding the inferred role.
-
-    A role is not a label on an existing object: it decides which patterns the
-    MSAA-to-UIA bridge offers for the widget at all.
-    """
+    """Say what kind of control this is, overriding the inferred role."""
     _annotator().set_role(widget, role)
 
 
 def set_acc_name(widget: tkinter.Misc, name: str) -> None:
     """Say what a screen reader should call this widget.
 
-    Needed for anything with no `-text` to infer a name from. Raises
-    `AnnotationRefused` for a toplevel, which is named by `wm title` instead.
+    Raises `AnnotationRefused` for a toplevel, which `wm title` names instead.
     """
     _annotator().set_name(widget, name)
 
@@ -145,17 +112,9 @@ def set_acc_name(widget: tkinter.Misc, name: str) -> None:
 def label_for(label: tkinter.Misc, widget: tkinter.Misc) -> None:
     """Say that this label is the caption for that widget, and name it accordingly.
 
-    The Tk answer to Qt's `QLabel.setBuddy` and HTML's `<label for=...>`. An
-    entry has no words of its own, and in Tk its caption is a *sibling* that
-    nothing in the toolkit records a relationship to. Said once here, the widget
-    answers to the label's words, without the colon a caption ends with:
-    `label_for(tk.Label(text="Host:"), entry)` names the entry `'Host'`.
-
-    Where the label declares a `-textvariable`, the name follows that variable
-    from then on. Where it does not, the words are read once and go stale on the
-    next `config(text=...)`, exactly as `add_acc_object`'s do; call this again
-    to re-read them. A label showing nothing at all raises `AnnotationRefused`
-    rather than naming the widget the empty string.
+    `label_for(tk.Label(text="Host:"), entry)` names the entry `'Host'`, and
+    follows the label's `-textvariable` where it declares one. A label showing
+    nothing at all raises `AnnotationRefused`.
     """
     _annotator().label_for(label, widget)
 
@@ -163,25 +122,14 @@ def label_for(label: tkinter.Misc, widget: tkinter.Misc) -> None:
 def infer_names_from_layout(root: tkinter.Misc) -> tuple[NamedByTheLayout, ...]:
     """Name what the layout of this window says its controls are, and report what it did.
 
-    The retrofit: every entry is named after the caption beside it, and every
-    "Browse..." button is qualified with the row it acts on. Deliberately not
-    part of `enable()`. This reads a widget's name off the widgets *around* it,
-    which Tk records nothing about, so it is a guess rather than a reading. The
-    library never guesses on its own; this is a convention you have recognised
-    in your own window and asked to have applied.
-
-    Nothing an application named itself is touched, whether it said so before
-    this call or after. What comes back is every widget this named and what it
-    called it; `describe(root)` is still the full picture.
+    A guess read off the widgets *around* each control, which is why `enable()`
+    does not do it. Nothing an application named itself is touched.
     """
     return _names_the_layout_implies(root, _the_installation())
 
 
 def set_acc_value(widget: tkinter.Misc, value: str) -> None:
-    """Say what a client reads out of this widget, as an edit control's contents.
-
-    Written once, where `bind_value_variable` keeps it true from then on.
-    """
+    """Say what a client reads out of this widget, as an edit control's contents."""
     _annotator().set_value(widget, value)
 
 
@@ -194,7 +142,7 @@ def set_acc_action(widget: tkinter.Misc, action: str) -> None:
     """Say what activating this widget would do, as a verb ("Press").
 
     Advertising it does not make it activatable: `InvokePattern` on a Tk button
-    returns cleanly and presses nothing. See the README's central caveat.
+    returns cleanly and presses nothing.
     """
     _annotator().set_action(widget, action)
 
@@ -208,8 +156,7 @@ def set_acc_state(widget: tkinter.Misc, state: int) -> None:
     """Say what state this widget is in, as `oleacc.h`'s `STATE_SYSTEM_*` bits.
 
     Written once and never tracked: nothing here notices a widget being
-    disabled or re-enabled, so an application that says this has to keep
-    saying it.
+    disabled or re-enabled.
     """
     _annotator().set_state(widget, state)
 
@@ -217,30 +164,22 @@ def set_acc_state(widget: tkinter.Misc, state: int) -> None:
 def bind_text_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> None:
     """Keep a widget's accessible name in step with a variable of your choosing.
 
-    The variable a widget declares in its `-textvariable` is followed by
-    `enable()` already. This is for the widget that declares none, and for the
-    application whose announced name is not the one on screen. It replaces the
-    automatic binding rather than joining it.
+    Replaces the binding `enable()` made from the widget's own `-textvariable`
+    rather than joining it.
     """
     _annotator().bind_text_variable(widget, variable)
 
 
 def bind_value_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> None:
-    """Keep a widget's accessible value in step with a variable of your choosing.
-
-    The same override as `bind_text_variable`, for what a client reads out of an
-    edit control: needed where the entry holds its contents somewhere this
-    package cannot see, and not needed for one driven by a `textvariable`.
-    """
+    """Keep a widget's accessible value in step with a variable of your choosing."""
     _annotator().bind_value_variable(widget, variable)
 
 
 def set_automation_id(widget: tkinter.Misc, automation_id: int) -> None:
     """Give this widget a stable id for a test suite to pin a locator to.
 
-    Explicit only, and never invented. Writes `GWLP_ID`, the control id Win32
-    puts in `WM_COMMAND.wParam` and `WM_DRAWITEM.idCtl`; a non-zero existing id
-    raises `AnnotationRefused` rather than being overwritten.
+    Writes `GWLP_ID`, the control id Win32 puts in `WM_COMMAND.wParam`; a
+    non-zero existing id raises `AnnotationRefused` rather than being overwritten.
     """
     _annotator().set_automation_id(widget, automation_id)
 
@@ -258,13 +197,8 @@ def describe(root: tkinter.Misc) -> Description:
     """Say what this application has told Windows about the widgets under `root`.
 
     Reports what tk-uia believes it wrote, which is not evidence that a client
-    can read it; see the caveat the report closes with. `print()` it for the
-    report, or read `.widgets` for the same thing as data.
-
-    Reads the ledger `enable()` installed, so it raises `AnnotationRefused`
-    where `enable()` has never run: there would be no honest strategy to head
-    the report with. After `enable()` it touches no COM and no UI Automation,
-    which is what lets the call stay in a production build.
+    can read it. `print()` it for the report, or read `.widgets` for the same
+    thing as data. Raises `AnnotationRefused` where `enable()` has never run.
     """
     return _describe(root, _the_installation())
 

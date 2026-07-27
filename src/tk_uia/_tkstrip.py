@@ -1,11 +1,5 @@
 """A real `ttk.Notebook`, answering the three questions the tab scan asks.
 
-`enable()` wraps each notebook it meets in one of these and hands it to
-`tabs_on`. The only decision in it is that a point Tk refuses to name a tab for
-is a point with no tab on it, which is the reason the seam exists: `tabs.py`
-cannot catch a `TclError` without importing tkinter, and the package's Linux
-lane proves it does not.
-
 There is no public API for a tab's rectangle. `index @x,y` is the same question
 Tk answers for a real mouse click, so scanning with it is the one measurement
 that cannot disagree with where the tab actually is.
@@ -50,12 +44,10 @@ def is_a_notebook(widget: object) -> bool:
     """Whether this widget is one whose tabs need handles of their own.
 
     Asked of Tk, never of Python's type system. `isinstance` against
-    `ttk.Notebook` breaks the moment a host re-imports `tkinter.ttk`, which
-    re-executes the module and makes a second, distinct class: IDLE's own
-    `idlelib/run.py` does exactly that, and every notebook it builds afterwards
-    failed the check while carrying the right class name all along. The role
-    table already keys on `winfo_class()`, so this is also the same question
-    the rest of the package asks.
+    `ttk.Notebook` breaks the moment a host re-imports `tkinter.ttk` and makes
+    a second, distinct class: IDLE's `idlelib/run.py` does exactly that, and
+    every notebook it builds failed the check while carrying the right class
+    name all along.
     """
     winfo_class = getattr(widget, "winfo_class", None)
     return winfo_class is not None and winfo_class() == "TNotebook"

@@ -1,16 +1,8 @@
 """Behavioral spec for the description, against a real Tk and a real client.
 
-Two things the doubles cannot reach. The first is contact with real tkinter:
-`keys()` really returns a list, `cget` really hands back a Tcl object, and
-`winfo_children()` on a root really includes the toplevels and menus Tk put
-there. A description specified only against `FakeWidget` would be specified
-against a widget somebody wrote to make it pass.
-
-The second is the point of the feature. The description says what tk-uia
-*believes* it wrote, and every failure mode this package has returns `S_OK` and
-does nothing. So the second spec reads the description out of a live
-application, reads the same window back through UI Automation from this process,
-and checks the claim against what a client can actually see.
+The description says what tk-uia *believes* it wrote, and every failure mode
+this package has returns `S_OK` and does nothing. So these read it out of a live
+application and check the claim against what a client can actually see.
 """
 
 from __future__ import annotations
@@ -30,8 +22,7 @@ from tests.fixture_apps.annotated_app import (
     WRITE_THE_DESCRIPTION,
 )
 
-# The application checks for a command a few times a second; anything near this
-# means it stopped checking.
+# The application checks for a command a few times a second.
 _A_REACTION_TIMEOUT_SECONDS = 5.0
 _HOW_OFTEN_TO_LOOK_AGAIN_SECONDS = 0.1
 
@@ -52,8 +43,7 @@ def test_describing_a_real_tk_window_names_its_widgets_by_their_real_tk_classes_
     # Given the fixture application, which annotated itself at startup
     annotated_app.ask_for(WRITE_THE_DESCRIPTION)
 
-    # When it is asked to say what it has told Windows, from inside its own
-    # process, where the widgets and the ledger both are
+    # When it is asked to say what it has told Windows, from inside its own process
     report = _whatever_the_application_wrote(annotated_app, THE_REPORT)
 
     # Then the widgets are named by their real Tk classes and their real paths
@@ -62,15 +52,13 @@ def test_describing_a_real_tk_window_names_its_widgets_by_their_real_tk_classes_
         f"something other than a live Tk:\n{report}"
     )
 
-    # And the one class the role table has never heard of is reported as
-    # carrying nothing, with the reason
+    # And the class the role table has never heard of is reported as carrying nothing
     assert "NO_ROLE_FOR_ITS_CLASS" in report, (
         f"the unknown_class_widget this application deliberately leaves unannotated is not "
         f"reported as unwritten:\n{report}"
     )
 
-    # And the button carries both the name it was given and the number the
-    # application chose, which is what a suite pins its locators to
+    # And the button carries the number the application chose
     button_row = _the_row_carrying(report, NEW_TASK)
 
     assert str(NEW_TASK_NUMBER) in button_row, (
@@ -81,8 +69,7 @@ def test_describing_a_real_tk_window_names_its_widgets_by_their_real_tk_classes_
 def test_every_name_the_description_says_it_wrote_is_a_name_a_client_in_another_process_can_read(
     annotated_app: RunningApp,
 ) -> None:
-    # Given the description the application wrote about itself, listing every
-    # widget it believes it named
+    # Given the description the application wrote about itself
     annotated_app.ask_for(WRITE_THE_DESCRIPTION)
     claimed = _the_names_the_description_claims(annotated_app)
 
@@ -94,11 +81,7 @@ def test_every_name_the_description_says_it_wrote_is_a_name_a_client_in_another_
         for control in the_widgets_the_application_shows(annotated_app.window)
     }
 
-    # Then every name the description claims is one a client really sees. This
-    # is the only thing that catches the failure this package is built around:
-    # `IAccPropServices` accepts a write to a window handle nobody owns, answers
-    # `S_OK`, and changes nothing, after which the description goes on reporting
-    # a name no client will ever read.
+    # Then every name the description claims is one a client really sees
     unread = {path: name for path, name in claimed.items() if name not in readable}
 
     assert unread == {}, (
@@ -131,8 +114,7 @@ def _whatever_the_application_wrote(app: RunningApp, filename: str) -> str:
 
 
 def _there_and_complete(left_behind: Path) -> bool:
-    # Non-empty as well as present: `write_text` creates the file before it
-    # fills it, so a reader that only checked existence would race it.
+    # Non-empty as well as present: `write_text` creates the file before it fills it.
     return left_behind.exists() and left_behind.stat().st_size > 0
 
 

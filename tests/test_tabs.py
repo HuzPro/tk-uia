@@ -1,9 +1,4 @@
-"""A notebook's tabs, which have no window handle until this gives them one.
-
-Everything specified here decides *what* handles should exist and what each
-should say. Making one is four lines of Win32 behind a seam, and the gui specs
-are what prove a client can read them.
-"""
+"""A notebook's tabs, which have no window handle until this gives them one."""
 
 from __future__ import annotations
 
@@ -16,9 +11,7 @@ from tk_uia.tabs import Tab, TabHandles, tabs_on
 class FakeStrip:
     """A tab strip, answering the two questions the scan asks of a real one.
 
-    Tabs sit side by side along the top of the notebook and share a height,
-    which is how ttk lays a strip out. `tab_at` answers None off the strip,
-    where the real one raises; the seam is what turns one into the other.
+    `tab_at` answers None off the strip, where the real one raises.
     """
 
     def __init__(
@@ -36,9 +29,7 @@ class FakeStrip:
         self._top, self._bottom = strip
         self.measurements_before_settling = 0
         self._settled = False
-        # Which tab, if any, is the selected one. Measured on Tk 8.6.15: ttk
-        # draws the selected tab standing two pixels proud at the top *and*
-        # bottom, so no single row of the strip crosses every tab.
+        # Which tab, if any, is the selected one.
         self._taller = taller
 
     def settle(self) -> None:
@@ -70,8 +61,6 @@ class FakeStrip:
 
 
 class RecordingWindows:
-    """The Win32 seam: handles made, moved and destroyed, in the order it happened."""
-
     def __init__(self) -> None:
         self.made: list[tuple[int, tuple[int, int, int, int]]] = []
         self.moved: list[tuple[int, tuple[int, int, int, int]]] = []
@@ -94,7 +83,6 @@ class RecordingWindows:
 
 
 def a_strip_of(*names: str) -> FakeStrip:
-    """Tabs laid out left to right, 40 wide each, as ttk packs them."""
     return FakeStrip(
         spans={index: (index * 40, index * 40 + 40) for index in range(len(names))},
         texts=dict(enumerate(names)),
@@ -114,9 +102,7 @@ _HOW_FAR_A_SELECTED_TAB_STANDS_PROUD = 2
 
 
 def test_a_strip_whose_selected_tab_stands_proud_still_yields_every_tab() -> None:
-    # Given the strip ttk really draws: the selected tab is taller than its
-    # neighbours at both ends, so the topmost row crosses that tab and no other.
-    # Measured on Tk 8.6.15: tab 0 ran rows 0..23, the rest 2..21.
+    # Given the strip ttk really draws: on Tk 8.6.15 tab 0 ran rows 0..23, others 2..21
     strip = FakeStrip(
         spans={index: (index * 40, index * 40 + 40) for index in range(3)},
         texts={0: "Alpha", 1: "Beta", 2: "Gamma"},
@@ -125,15 +111,12 @@ def test_a_strip_whose_selected_tab_stands_proud_still_yields_every_tab() -> Non
 
     found = tabs_on(strip)
 
-    # Then all three are found. A scan that measured across the first row that
-    # answered would report one tab and call the notebook done, leaving a client
-    # able to see the selected page and never leave it.
+    # Then all three are found
     assert [tab.text for tab in found] == ["Alpha", "Beta", "Gamma"], (
         f"found {[tab.text for tab in found]}; the scan crossed a row that only "
         "the selected tab reaches"
     )
-    # And every tab is given the strip's full extent rather than its own, so
-    # that selecting a different one does not move every rectangle on the strip.
+    # And every tab is given the strip's full extent rather than its own
     assert {(tab.top, tab.height) for tab in found} == {(0, 24)}
 
 
@@ -152,8 +135,7 @@ def test_the_layout_is_left_to_settle_before_a_single_thing_is_measured() -> Non
 
     tabs_on(strip)
 
-    # Then nothing was. Tk lays a strip out on idle: measured, adding a tab and
-    # scanning straight afterwards finds the strip exactly as it was.
+    # Then nothing was: Tk lays a strip out on idle, so an immediate scan finds it stale
     assert strip.measurements_before_settling == 0, (
         f"{strip.measurements_before_settling} measurements were taken against a "
         "layout Tk had not finished"
@@ -189,9 +171,7 @@ def test_a_strip_that_has_not_changed_costs_nothing_to_refresh() -> None:
 
     handles.refresh(_A_NOTEBOOK, _ITS_HANDLE, tabs_on(a_strip_of("Alpha", "Beta")))
 
-    # `<<NotebookTabChanged>>` fires on every tab *selection*, not only on the
-    # ones that change the strip. Without this the cost of a notebook is paid
-    # again every time a user clicks a tab, for no change to what a client reads.
+    # `<<NotebookTabChanged>>` fires on every tab *selection*, not only on real changes
     assert list(handles.handles(_A_NOTEBOOK)) == already
     assert len(windows.made) == 2
     assert windows.moved == []
@@ -234,8 +214,7 @@ def test_a_surrendered_window_is_cleared_before_windows_can_hand_it_out_again() 
 
     handles.refresh(_A_NOTEBOOK, _ITS_HANDLE, tabs_on(a_strip_of("Alpha")))
 
-    # Cleared, and cleared *first*: Windows hands the same handle out again, and
-    # here the package owns the handle rather than merely borrowing it.
+    # Cleared, and cleared *first*: Windows hands the same handle out again
     assert store.cleared == [surplus]
     assert store.properties(surplus) == {}
 

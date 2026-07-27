@@ -1,11 +1,5 @@
 """The `oleacc` calls an annotation is actually made of.
 
-The one implementation of :class:`~tk_uia.annotate.AccessibilityStore`, and the
-only module in the package that knows COM exists. A humble object by design: no
-branch worth a unit test, only ctypes plumbing that cannot run without a Windows
-desktop. Its correctness is proven by the gui specs, which read the properties
-back out of a live window from a separate process.
-
 Two details here return `S_OK` and do nothing at all when they are wrong, so
 neither is guessed at:
 
@@ -16,9 +10,7 @@ neither is guessed at:
   pointer compiles, runs, returns `S_OK`, and annotates nothing.
 
 `ctypes.HRESULT` and `ctypes.WINFUNCTYPE` do not exist off Windows, so every
-prototype is built on first use rather than at import. That is what lets this
-module be imported, and `enable()` be called, on a machine that has no MSAA to
-reach for.
+prototype is built on first use rather than at import.
 """
 
 from __future__ import annotations
@@ -54,14 +46,13 @@ _SPI_GETSCREENREADER = 0x0046
 
 _WINDOWS = "win32"
 
-# The HRESULT every one of these methods returns, taken as a plain number rather
-# than as `ctypes.HRESULT`. That type looks like the honest choice and is the
-# wrong one here: ctypes raises an `OSError` of its own on any negative HRESULT
-# *before* the caller sees the value, so `_checked` never runs and the message
-# an application gets is a bare "[WinError -2147024891] Access is denied" with
-# no way to tell which of eleven identical-looking annotation calls refused.
-# Read as a number, the code reaches `_checked`, which names the call and also
-# catches the positive non-`S_OK` answers `ctypes.HRESULT` lets through.
+# A plain number rather than `ctypes.HRESULT`, which looks like the honest
+# choice and is the wrong one: ctypes raises an `OSError` of its own on any
+# negative HRESULT *before* the caller sees the value, so `_checked` never runs
+# and the application gets a bare "[WinError -2147024891] Access is denied" with
+# no way to tell which of eleven annotation calls refused. Read as a number, the
+# code reaches `_checked`, which also catches the positive non-`S_OK` answers
+# `ctypes.HRESULT` lets through.
 _HOWEVER_COM_ANSWERED = ctypes.c_long
 
 
@@ -128,9 +119,8 @@ class AccPropServicesStore:
     """Annotations, written where the MSAA-to-UIA bridge reads them."""
 
     def __init__(self) -> None:
-        # Nothing is reached for here. `enable()` builds one of these before the
-        # version gate has run, and on a machine with no MSAA at all it is then
-        # never used, so constructing it must cost nothing.
+        # Nothing is reached for here: `enable()` builds one of these before the
+        # version gate has run, and on a machine with no MSAA it is never used.
         self._services: ctypes.c_void_p | None = None
 
     def set_string(self, hwnd: int, prop: PropId, value: str) -> None:
@@ -207,10 +197,9 @@ def screen_reader_running() -> bool:
 def _acc_prop_services() -> ctypes.c_void_p:
     ole32 = ctypes.windll.ole32
     started = ole32.CoInitializeEx(None, _COINIT_APARTMENTTHREADED)
-    # S_FALSE means this thread was already in an apartment, and
-    # RPC_E_CHANGED_MODE means it is in a different one. Both are fine, and both
-    # are somebody else's apartment to close, which is why CoUninitialize is
-    # never called anywhere in this package.
+    # S_FALSE means this thread was already in an apartment and
+    # RPC_E_CHANGED_MODE means it is in a different one. Both are somebody
+    # else's apartment to close, which is why CoUninitialize is never called.
     if started not in (_S_OK, _S_FALSE) and (started & 0xFFFFFFFF) != (
         _RPC_E_CHANGED_MODE
     ):

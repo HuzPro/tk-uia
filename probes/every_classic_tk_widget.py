@@ -1,22 +1,10 @@
 """One window holding every widget classic Tkinter has, for the survey to read.
 
-`coverage_matrix.py` launches this, reads the window through UI Automation
-before and after `enable()`, and joins the two by rectangle. Also runnable on
-its own if you just want to look at it:
-
     python probes/every_classic_tk_widget.py "classic tk zoo" .
 
-Every widget class `tkinter` exposes is here, including the three that do not
-behave like ordinary children:
-
-- `Menu` is posted rather than laid out. One is attached to the window as its
-  menubar and one to the `Menubutton`, and neither ever maps.
-- `Toplevel` is a window of its own, which tk-uia deliberately refuses to
-  annotate because `wm title` already names it correctly.
-- `Canvas` draws its own contents, so there is nothing under it to expose.
-
-`OptionMenu` is included even though it is a `Menubutton` underneath, because
-what an application writes is `tk.OptionMenu`.
+`coverage_matrix.py` launches this and reads the window through UI Automation
+before and after `enable()`. A `Menu` is posted rather than laid out and a
+`Toplevel` is a window of its own, so neither ever maps.
 """
 
 from __future__ import annotations
@@ -32,20 +20,16 @@ from _widget_zoo import (
 
 TITLE = "tk-uia classic widget zoo"
 
-# The widgets that legitimately never map, so that anything *else* going missing
-# fails the run instead of quietly becoming a row that reads "unreachable".
+# The widgets that legitimately never map, so anything *else* going missing
+# fails the run instead of becoming a row that reads "unreachable".
 NEVER_SHOWS = frozenset(
     {"tk.Menu (menubar)", "tk.Menu (on a Menubutton)", "tk.Toplevel"}
 )
 
 
-# What only the application knows. `enable()` names a widget from its own words,
-# and most of these have none.
-#
-# The decorative widgets are named too, which a real application should not do:
-# a separator exists to be looked at, not announced, and naming it makes a
-# screen reader read out furniture. They are named here because the survey's job
-# is to show every widget *can* be reached.
+# The decorative widgets are named here so the survey can show every widget can
+# be reached. A real application should not: naming a separator makes a screen
+# reader read out furniture.
 WHAT_TO_CALL_THEM = {
     "tk.Entry": "Task title",
     "tk.Text": "Notes",

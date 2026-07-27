@@ -1,22 +1,10 @@
 """One window holding every widget `ttk` has, for the survey to read.
 
-The themed half of what `coverage_matrix.py` measures. Also runnable on its own:
-
     python probes/every_ttk_widget.py "ttk zoo" .
 
-Every widget class `tkinter.ttk` exposes is here. Three are worth knowing about
-before reading the results:
-
-- `ttk.LabeledScale` and `ttk.OptionMenu` are *composites*: a `TFrame` and a
-  `TMenubutton` with widgets inside them. What a client sees is the container,
-  and the survey reports the container's class rather than pretending otherwise.
-- `ttk.Notebook` is the one widget whose contents this package reaches, each tab
-  being given a window handle of its own.
-- `ttk.Sizegrip` and `ttk.Separator` show nothing and do nothing; they are here
-  because a survey that quietly dropped the boring ones would not be a survey.
-
-There is no themed `Text`, `Listbox`, `Canvas` or `Message`: ttk does not
-replace those, and an application that wants them uses the classic widget.
+The themed half of what `coverage_matrix.py` measures. `ttk.LabeledScale` and
+`ttk.OptionMenu` are composites, so what a client sees is the container, and the
+survey reports the container's class.
 """
 
 from __future__ import annotations

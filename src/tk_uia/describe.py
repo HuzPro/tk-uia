@@ -1,14 +1,8 @@
 """What this application has told Windows about its widgets, and what it has not.
 
-`tk_uia.describe(root)` hands this module the installation `enable()` made, and
-it reads two things: the annotator's ledger, for what was written, and the live
-widget tree, for what was never reached. It touches neither COM nor
-`uiautomation`, so nothing here is evidence that a client can read what was
-written. The report says so in as many words.
-
-One accepted blind spot follows from that. `forget(widget)` clears the recorded
-automation id, and nothing in Win32 resets `GWLP_ID`, so a forgotten widget goes
-on carrying its control id while this stops reporting it.
+`tk_uia.describe(root)` reads the annotator's ledger for what was written and
+the live widget tree for what was never reached. It touches neither COM nor
+`uiautomation`, so nothing here is evidence that a client can read any of it.
 """
 
 from __future__ import annotations
@@ -38,13 +32,8 @@ from tk_uia.tkversion import Strategy
 class Gap(Enum):
     """Something a client will not get from a widget, and why.
 
-    The member name is the stable identity: a client-side dump comparing what
-    was written against what it can read matches on it. The value is the
-    sentence the report prints, held here rather than in a lookup table so that
-    the reason cannot fall out of step with the member.
-
-    Every member corresponds to a caveat the README already documents, which is
-    what keeps the catalogue closed.
+    The member name is the stable identity a client-side dump matches on; the
+    value is the sentence the report prints.
     """
 
     NO_ROLE_FOR_ITS_CLASS = (
@@ -122,9 +111,6 @@ class Gap(Enum):
     )
 
 
-# The one reason in the catalogue that is not a fault to fix. It is reported
-# rather than left out because a description that silently dropped every window
-# would read as having lost them.
 ON_PURPOSE: frozenset[Gap] = frozenset({Gap.NAMED_BY_ITS_TITLE, Gap.MENUS_ARE_NATIVE})
 
 
@@ -142,11 +128,9 @@ class WidgetDescription:
     kept_in_step: tuple[PropId, ...]
     also_written: Mapping[PropId, str | int]
     gaps: tuple[Gap, ...]
-    # A notebook's tabs, which are not widgets and appear nowhere else in this
-    # report. They have window handles of their own and nothing to walk to.
+    # Not widgets, so they appear nowhere else in this report and there is
+    # nothing to walk to.
     tabs: tuple[str, ...] = ()
-    # Structural, not a class name: a client scopes queries to a window, and a
-    # root's class is whatever the application passed as className=.
     is_window: bool = False
 
 
@@ -165,9 +149,8 @@ class Description:
 
 def describe(root: TkWidget, installation: Installation) -> Description:
     """Say what this application has told Windows about the widgets under `root`."""
-    # Before the walk asks its first widget anything: describing crosses into
-    # the Tcl interpreter six ways per widget, and doing that from a foreign
-    # thread corrupts it quietly rather than raising.
+    # Before anything crosses into the Tcl interpreter, which a foreign thread
+    # corrupts quietly.
     installation.owner.refuse_any_other_caller()
     annotator = installation.annotator
     widgets = _and_whichever_of_them_a_client_cannot_tell_apart(
@@ -189,11 +172,8 @@ def _and_whichever_of_them_a_client_cannot_tell_apart(
 ) -> tuple[WidgetDescription, ...]:
     """Add NAME_NOT_UNIQUE to every widget another widget answers to as well.
 
-    A pass of its own, after every widget has been described, because nothing
-    about a widget on its own says this: both of the "Browse..." buttons are
-    correctly typed and correctly named, and the fault is that they are named
-    the same thing. Here rather than in the renderer, so that `.widgets` carries
-    it too.
+    A pass of its own because nothing about a widget on its own says this: both
+    "Browse..." buttons are correct, and the fault is that they are the same.
     """
     windows = _the_windows_a_client_scopes_a_query_to(widgets)
     asked_for = tuple(
@@ -207,8 +187,7 @@ def _and_whichever_of_them_a_client_cannot_tell_apart(
 
 
 def _carrying_the_ambiguity_as_well(widget: WidgetDescription) -> WidgetDescription:
-    # Appended rather than replacing, which is where this differs from
-    # UNMAPPED_SINCE_ANNOTATED: two buttons a client cannot tell apart are still
+    # Appended, not replacing: two buttons a client cannot tell apart are still
     # two buttons it cannot press.
     return replace(widget, gaps=(*widget.gaps, Gap.NAME_NOT_UNIQUE))
 
@@ -217,10 +196,8 @@ def _carrying_the_ambiguity_as_well(widget: WidgetDescription) -> WidgetDescript
 class _WhatAClientWouldAskFor:
     """A window, a control type and a name: the whole of an ordinary query.
 
-    Two widgets answering to one of these is the ambiguity. The window is part
-    of it because a client scopes a query to one, resolving it by title and
-    searching inside it. So a dialog's "Confirm" and the main window's are two
-    answers to two different questions and not a collision.
+    The window is part of it because a client scopes a query to one, so a
+    dialog's "Confirm" and the main window's are not a collision.
     """
 
     window: str
@@ -232,9 +209,7 @@ def _how_a_client_would_ask_for(
     widget: WidgetDescription, windows: tuple[str, ...]
 ) -> _WhatAClientWouldAskFor | None:
     # A widget with no role or no name cannot be asked for at all, and is
-    # already reported as whichever of those it is missing. Calling every
-    # anonymous pane a duplicate of every other would put most of an
-    # unannotated window under a heading whose advice does not apply.
+    # already reported as whichever of those it is missing.
     if widget.role is None or widget.name is None:
         return None
     return _WhatAClientWouldAskFor(
@@ -255,17 +230,12 @@ def _the_queries_more_than_one_widget_answers_to(
 def _the_windows_a_client_scopes_a_query_to(
     widgets: tuple[WidgetDescription, ...],
 ) -> tuple[str, ...]:
-    # Read out of the walk rather than asked of Tk, which would be a seventh
-    # kind of trip into the interpreter for something already in hand: the
-    # widgets that name themselves are the toplevels, by definition.
     return tuple(widget.path for widget in widgets if widget.is_window)
 
 
 def _the_window_holding(path: str, windows: tuple[str, ...]) -> str:
-    # The nearest one, so that a dialog opened from a dialog scopes to itself
-    # rather than to the window behind it. A walk that started below every
-    # toplevel, as `describe(some_frame)` does, finds none, and everything it
-    # reached is inside one window anyway.
+    # The nearest one, so a dialog opened from a dialog scopes to itself rather
+    # than to the window behind it.
     return max(
         (window for window in windows if _is_inside(path, window)),
         key=len,
@@ -275,8 +245,7 @@ def _the_window_holding(path: str, windows: tuple[str, ...]) -> str:
 
 def _is_inside(path: str, window: str) -> bool:
     # On the segment boundary and not on the characters: `.!toplevel22.!button`
-    # begins with the whole of `.!toplevel2` and is in a different window
-    # entirely. The root is `.`, which is the separator already.
+    # begins with the whole of `.!toplevel2` and is a different window.
     within = (
         window
         if window.endswith(_HOW_TK_SEPARATES_A_PATH)
@@ -293,7 +262,7 @@ def _annotations_this_walk_never_reached(
 
 
 def _report(description: Description) -> str:
-    """Render a description as the text an author reads. Not a method: see the module."""
+    """Render a description as the text an author reads."""
     return "\n".join(
         [
             *_the_headline(description),
@@ -309,7 +278,7 @@ def _report(description: Description) -> str:
 
 def _the_headline(description: Description) -> Iterator[str]:
     # Imported here rather than at module scope, where it would be a cycle: the
-    # package imports this module in order to re-export `describe`.
+    # package imports this module to re-export `describe`.
     from tk_uia import __version__
 
     yield f"tk-uia {__version__} -- {_WHAT_THIS_IS}"
@@ -320,9 +289,8 @@ def _how_it_went(description: Description) -> Iterator[str]:
     written_to = sum(1 for widget in description.widgets if widget.role is not None)
     how_many = len(description.widgets)
     if description.strategy is not Strategy.ANNOTATED:
-        # First, and before a single row: a window where the gate stood down
-        # renders as a page of blanks, which an author could read as a clean
-        # bill of health.
+        # Before a single row: a window where the gate stood down renders as a
+        # page of blanks, which reads as a clean bill of health.
         yield textwrap.fill(
             f"enable() reported {description.strategy.name}, so nothing here was "
             f"annotated: every one of the {how_many} widgets under "
@@ -370,9 +338,8 @@ def _whatever_this_walk_never_reached(description: Description) -> Iterator[str]
 def _the_widgets_behind_each_gap(
     widgets: tuple[WidgetDescription, ...],
 ) -> dict[Gap, list[WidgetDescription]]:
-    # Keyed by `Gap` in declaration order, which is the reading order: total
-    # failures first, then wrong answers, then missing ones, then the limits
-    # that are inherent. Top to bottom it goes from broken to how it is.
+    # Declaration order is the reading order: total failures first, then wrong
+    # answers, then missing ones, then the limits that are inherent.
     behind = {gap: [w for w in widgets if gap in w.gaps] for gap in Gap}
     return {gap: found for gap, found in behind.items() if found}
 
@@ -401,8 +368,6 @@ def _a_section(
 
 
 def _and_what_the_widget_shows_now(gap: Gap, widget: WidgetDescription) -> str:
-    # Only worth saying where the two disagreeing is the complaint: a reader
-    # deciding whether a name went stale needs both halves on one line.
     if gap is not Gap.NAME_MAY_BE_STALE:
         return ""
     return f"   -text now says {widget.shows_now!r}"
@@ -410,8 +375,7 @@ def _and_what_the_widget_shows_now(gap: Gap, widget: WidgetDescription) -> str:
 
 def _the_table(widgets: tuple[WidgetDescription, ...]) -> Iterator[str]:
     rows = [_the_cells_of(widget) for widget in widgets]
-    # Sized to content and never truncated: a shortened Tk path cannot be
-    # grepped for, and finding the widget in your own source is the point.
+    # Never truncated: a shortened Tk path cannot be grepped for.
     widths = [len(max(column, key=len)) for column in zip(_COLUMNS, *rows)]
     yield _laid_out(_COLUMNS, widths)
     yield _laid_out(tuple("-" * width for width in widths), widths)
@@ -453,15 +417,12 @@ def _laid_out(cells: tuple[str, ...], widths: list[int]) -> str:
 
 
 def _as_it_reads(written: str | None) -> str:
-    # Quoted rather than bare, so that a name which is empty, or which is all
-    # spaces, is visibly different from one that was never written.
+    # Quoted, so a name that is empty or all spaces is visibly different from
+    # one that was never written.
     return _NOTHING if written is None else repr(written)
 
 
 def _the_root_and_everything_under_it(root: TkWidget) -> Iterator[TkWidget]:
-    # The root is described alongside its children rather than treated as a
-    # frame around them: it is a widget an author put on screen, and one whose
-    # accessible name comes from somewhere else entirely.
     yield root
     yield from every_widget_under(root)
 
@@ -535,16 +496,13 @@ def _what_was_written_about(
         tabs=carrying,
     )
     if not found.widget.winfo_ismapped():
-        # Ahead of the handle check and instead of every per-property reason:
-        # "no accessible name" is not what an author needs to hear about a
-        # widget a client cannot see at all, and the two have opposite fixes.
-        # Measured against a real tabbed dialog, this is 23 widgets after one
-        # tab change, every annotation intact and every one of them unreadable.
+        # Instead of every per-property reason, which has the opposite fix.
+        # Measured against a real tabbed dialog: 23 widgets after one tab
+        # change, every annotation intact and every one of them unreadable.
         return replace(written, gaps=(Gap.UNMAPPED_SINCE_ANNOTATED,))
     if found.widget.winfo_id() != hwnd:
-        # Asked once the ledger has answered, and reported instead of every
-        # other reason rather than alongside them: each of those is true of a
-        # window handle nobody is reading any more.
+        # Instead of every other reason, each of which is true of a window
+        # handle nobody is reading any more.
         return replace(written, gaps=(Gap.ANNOTATED_ON_A_HANDLE_IT_NO_LONGER_HAS,))
     return replace(written, gaps=_what_is_missing_from(written, said))
 
@@ -584,9 +542,8 @@ def _what_is_missing_from(
         missing.append(Gap.NO_VALUE)
     if written.role in _ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN:
         missing.append(Gap.ITEMS_NOT_IN_THE_TREE)
-    # A notebook whose tabs were found and given handles is not hollow. One
-    # whose strip yielded nothing still is: the scan can come up empty on a
-    # notebook Tk has not laid out yet.
+    # A notebook given handles is not hollow; one whose strip yielded nothing
+    # still is, which the scan reports for a notebook Tk has not laid out yet.
     if written.role is Role.PAGE_TAB_LIST and not written.tabs:
         missing.append(Gap.ITEMS_NOT_IN_THE_TREE)
     if written.role is Role.PUSH_BUTTON:
@@ -600,9 +557,8 @@ def _the_name_no_longer_matches_the_caption_it_came_from(
     name, shows_now = written.name, written.shows_now
     if name is None or shows_now is None:
         return False
-    # Only a name this package read off the widget can have gone stale. A name
-    # the application chose over a shorter caption is meant to differ, and
-    # calling it stale is how a diagnostic teaches its reader to ignore it.
+    # Only a name this package read off the widget can have gone stale: one the
+    # application chose over a shorter caption is meant to differ.
     return said[PropId.NAME].source is Wrote.INFERRED and name != shows_now
 
 
@@ -613,12 +569,11 @@ _UNDER_THE_ROW = "    "
 _UNDER_THE_REASON = "      "
 _NOTHING = "-"
 
-# What Tk puts between the segments of a widget path, and what the root is
-# called: `.`, then `.!toplevel`, then `.!toplevel.!button`.
+# `.`, then `.!toplevel`, then `.!toplevel.!button`.
 _HOW_TK_SEPARATES_A_PATH = "."
 
-# What a walk that began below every toplevel scopes to. Everything it reached
-# shares it, which is the truth: they are all in whatever window it started in.
+# What a walk that began below every toplevel scopes to, shared by everything
+# it reached.
 _WHATEVER_WINDOW_THIS_WALK_STARTED_IN = ""
 
 _ONE_WIDGET_IS_NEVER_AMBIGUOUS = 1
@@ -628,13 +583,11 @@ _WHAT_A_CLIENT_WILL_NOT_GET = "WHAT A CLIENT WILL NOT GET, AND WHY"
 _LEFT_ALONE_ON_PURPOSE = "LEFT ALONE ON PURPOSE"
 _ANNOTATED_AND_NOT_UNDER_THIS_ROOT = "ANNOTATED, AND NOT UNDER THIS ROOT"
 
-# Narrower than the table, which sizes itself to the longest Tk path: the table
-# is scanned and the reasons are read, and prose does not read at 200 columns.
+# Narrower than the table, which sizes itself to the longest Tk path: prose
+# does not read at 200 columns.
 _HOW_WIDE_THE_REASONS_READ = 74
 
-# The last word, always, and there is a spec that fails if it ever goes: every
-# row above it is what this package believes it wrote, and the difference
-# between that and what a client reads is the whole class of bug it has.
+# The last word, always, and there is a spec that fails if it ever goes.
 _THE_CAVEAT_THIS_REPORT_CARRIES = textwrap.fill(
     "Everything above is what tk-uia believes it wrote. It is not evidence "
     "that a client can read it: IAccPropServices accepts a write to a window "
@@ -644,40 +597,34 @@ _THE_CAVEAT_THIS_REPORT_CARRIES = textwrap.fill(
     width=_HOW_WIDE_THE_REASONS_READ,
 )
 
-# Everything else a widget can be annotated with goes on an indented sub-line
-# instead, so that the table stays narrow enough for the paths in it never to
-# need truncating.
 _THE_PROPERTIES_THE_TABLE_HAS_A_COLUMN_FOR = frozenset(
     {PropId.ROLE, PropId.NAME, PropId.VALUE}
 )
 
-# The roles a missing name is not worth reporting for. A frame never has one and
-# does not need one, and flagging every container in a window would bury the one
-# entry that genuinely needs `set_acc_name` under a list nobody will read.
+# The roles a missing name is not worth reporting for: flagging every container
+# would bury the one entry that genuinely needs `set_acc_name`.
 _ROLES_NOBODY_ANNOUNCES = frozenset({Role.GROUPING, Role.SCROLL_BAR})
 
 # The roles the MSAA-to-UIA bridge hands a ValuePattern to, which answers `''`
-# until an application says otherwise. Read off COVERAGE.md's `patterns` column
-# rather than reasoned about: every one of those cells was read back from
-# another process. `ttk.Progressbar` is here because it fails the same way, not
-# because it holds a number a client can reach; its ValuePattern answers `''`
-# with nothing written, and still `''` after the widget's own `-value` moved.
+# until an application says otherwise. Read off COVERAGE.md's `patterns` column,
+# every cell of which was read back from another process. `ttk.Progressbar` is
+# here because it fails the same way: its ValuePattern answers `''` with nothing
+# written, and still `''` after the widget's own `-value` moved.
 _ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF = frozenset(
     {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON, Role.PROGRESS_BAR}
 )
 
-# The roles whose whole point is what is inside them. Tk gives one window handle
-# per widget and annotation works on handles, so the rows, items and tabs would
-# need MSAA's child-id model, which is a different piece of machinery.
+# The roles whose whole point is what is inside them. Annotation works on window
+# handles and Tk gives one per widget, so rows, items and tabs would need MSAA's
+# child-id model instead.
 _ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN = frozenset({Role.LIST, Role.OUTLINE})
 
 
 def _why_nothing_was_written(
     found: _AsTheWalkFoundIt, roles: Mapping[str, Role]
 ) -> tuple[Gap, ...]:
-    # Ordered, and the order is the answer: a widget is routinely both role-less
-    # and never mapped, as every `tk.Menu` is, and "no role for class 'Menu'" is
-    # what a reader can act on where "never mapped" is trivia.
+    # The order is the answer: a widget is routinely both role-less and never
+    # mapped, as every `tk.Menu` is, and only the first is worth acting on.
     if found.is_window:
         return (Gap.NAMED_BY_ITS_TITLE,)
     if found.tk_class == "Menu":

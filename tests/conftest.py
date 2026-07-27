@@ -1,14 +1,9 @@
 """Keeps the specs independent of each other, and launches the one real window.
 
-`enable()` records what it installed on the package, because the surface an
-application calls is `tk_uia.set_acc_name(widget, ...)` and not a handle it has
-to carry around. That module state is the one thing a spec can leave behind for
-the next one, so it is put back after every one of them.
-
-The rest of this file belongs to the gui specs: the fixture application is
-launched into a process of its own and handed back as the window a UI Automation
-client sees, because an annotation read back inside the process that wrote it
-proves nothing about the bridge.
+`enable()` records what it installed on the package, and that module state is
+the one thing a spec can leave behind, so it is put back after each. The gui
+fixtures launch the application into a process of its own, because an annotation
+read back inside the process that wrote it proves nothing about the bridge.
 """
 
 from __future__ import annotations
@@ -42,8 +37,7 @@ _TOP_LEVEL_WINDOWS = 1
 _SHUTDOWN_GRACE_SECONDS = 10.0
 
 # Tk gives its toplevel one container child, under which every widget lives.
-# Everything else directly under the window is chrome Windows drew: a title bar
-# with its own system menu and three real ButtonControls.
+# Everything else directly under the window is chrome Windows drew.
 _THE_TK_CONTAINER = "TkChild"
 
 # Deliberately `sys.executable`, which inside a virtual environment on Windows
@@ -67,21 +61,13 @@ class RunningApp:
         """Have the application do something to itself, and say when it did.
 
         A dropped file rather than a click, because a click is the one thing a
-        UI Automation client cannot make a Tk button feel. A spec that drove
-        this channel with the mouse would be asserting on the very thing
-        `test_an_annotated_button_still_cannot_be_pressed_through_its_invoke_pattern`
-        measures.
+        UI Automation client cannot make a Tk button feel.
         """
         (self.commands / command).write_text("", encoding="utf-8")
 
 
 def the_widgets_the_application_shows(window: Any) -> list[Any]:
-    """Every control under Tk's own container, and none of Windows' chrome.
-
-    Here rather than in one spec module because two of them need it: the
-    annotations are read back this way, and so is the description's claim that a
-    client can see the names it says it wrote.
-    """
+    """Every control under Tk's own container, and none of Windows' chrome."""
     # Imported inside the function: this module is imported on platforms with no
     # `uiautomation`.
     import uiautomation as auto

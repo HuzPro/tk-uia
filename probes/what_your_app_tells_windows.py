@@ -1,20 +1,10 @@
 """Prints the description of a deliberately mixed Tk window, gaps and all.
 
-Nothing imports this. It is the script behind the report in the README's *"What
-your own application tells Windows"* section, so a reader who doubts a line of
-it can re-run it rather than take it on trust.
-
-The window contains one of everything worth reporting: a label named from its
-own caption, a button named and numbered by hand, an entry nobody named, an
-entry whose value follows a variable, a label driven by a `textvariable`, a
-canvas no role table has heard of, a listbox whose rows are invisible, ttk
-widgets, a notebook whose second tab has never been shown, a frame that is never
-packed, a label whose caption moved on after annotation, and a second window.
-
-It reads nothing back from Windows and asks no UI Automation client anything.
-The report says so in its own last paragraph.
-
     python probes/what_your_app_tells_windows.py
+
+The script behind the report in the README. The window holds one of everything
+worth reporting, from a canvas no role table has heard of to a notebook whose
+second tab has never been shown. Nothing is read back from Windows.
 """
 
 from __future__ import annotations
@@ -36,9 +26,8 @@ IN_PROGRESS = "in progress"
 # Chosen by the application, never by the package.
 NEW_TASK_NUMBER = 4207
 
-# Small on purpose. The packer drops whatever it cannot fit and `<Map>` never
-# fires for it, raising nothing anywhere: the failure this report exists to make
-# visible.
+# Small on purpose: the packer drops whatever it cannot fit and `<Map>` never
+# fires for it, raising nothing anywhere.
 _A_WINDOW_TOO_SMALL_FOR_EVERYTHING_IN_IT = "360x420"
 
 
@@ -57,15 +46,13 @@ class Widgets:
 
 def main() -> None:
     widgets = _a_window_with_one_of_everything_worth_reporting()
-    # Realised and mapped before accessibility is switched on, so the path taken
-    # is the sweep over what is already on screen, and so whatever the geometry
-    # manager could not fit has already failed to map.
+    # Mapped before accessibility is switched on, so the path taken is the sweep
+    # over what is already on screen.
     widgets.root.update()
 
     tk_uia.enable(widgets.root)
     _the_things_no_widget_can_say_for_itself(widgets)
-    # After annotation, and with no re-announcement: this is the caveat the
-    # README documents, and the report should catch it by path.
+    # After annotation and with no re-announcement, so the report catches it.
     widgets.restyled.config(text=IN_PROGRESS)
 
     print(tk_uia.describe(widgets.root))
@@ -101,8 +88,7 @@ def _a_window_with_one_of_everything_worth_reporting() -> Widgets:
     ttk.Combobox(root, values=("high", "low")).pack()
     _a_notebook_whose_second_tab_nobody_has_opened(root)
 
-    # Built and never packed, so Tk never maps it and neither it nor anything
-    # inside it ever fires `<Map>`.
+    # Never packed, so neither it nor anything inside it ever fires `<Map>`.
     never_packed = tk.Frame(root)
     tk.Label(never_packed, text="never shown").pack()
 

@@ -1,9 +1,7 @@
 """Behavioral spec for putting the annotator in the path of a running Tk.
 
-Two halves, and both are needed: a binding for everything Tk maps from now on,
-and a sweep of everything already on screen. `<Map>` fires once per widget, on
-the way up, so a window already showing when `enable()` is called will never
-fire it again and without the sweep stays anonymous forever.
+`<Map>` fires once per widget, on the way up, so a window already showing when
+`enable()` is called never fires it again and without the sweep stays anonymous.
 """
 
 from __future__ import annotations
@@ -43,28 +41,23 @@ def test_enabling_accessibility_on_tk_eight_six_installs_the_class_bindings_and_
     # When it is switched on
     installation = install(root, store)
 
-    # Then the caller is told which of the three things happened, which is the
-    # only way a suite can tell "annotated" from "the gate mis-fired and this
-    # did nothing at all"
+    # Then the caller is told which of the three things happened
     assert installation.strategy is Strategy.ANNOTATED, (
         f"reported {installation.strategy} for a Tk that has no accessibility"
     )
 
-    # And Tk will hand over every widget it maps or destroys from here on,
-    # without displacing the bindings Tk and the application already have
+    # And Tk will hand over every widget it maps or destroys from here on
     assert root.class_bindings == [
         ("<Map>", "+"),
         ("<Destroy>", "+"),
-        # A notebook's tabs are not widgets, so they never map and `<Map>` says
-        # nothing about one being added or removed. This is the event that does.
+        # A notebook's tabs are not widgets, so they never fire `<Map>`.
         ("<<NotebookTabChanged>>", "+"),
     ], (
         f"bound {root.class_bindings}; anything but `add='+'` silently replaces "
         "whatever else was listening for the same event"
     )
 
-    # And the widget that was already up has been annotated, because its own
-    # `<Map>` came and went before any of this was listening
+    # And the widget that was already up has been annotated
     assert store.properties(_A_BUTTON_HANDLE)[PropId.NAME] == "New Task", (
         "every widget on screen at the moment enable() is called stays anonymous"
     )
@@ -94,12 +87,10 @@ def test_a_widget_destroyed_after_enabling_gives_its_handle_back_clean() -> None
     label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
     root.announce("<Map>", label)
 
-    # When Tk destroys it, passing only the path, which is all `<Destroy>`
-    # carries once the widget object has already gone
+    # When Tk destroys it, passing only the path, which is all `<Destroy>` carries
     root.announce("<Destroy>", str(label))
 
-    # Then the handle is released, so whatever Windows issues it to next is not
-    # wearing a dead label's name
+    # Then the handle is released
     assert store.cleared == [_A_LABEL_HANDLE], (
         f"the destroyed widget's handle was left annotated: cleared {store.cleared}"
     )
@@ -117,16 +108,12 @@ def test_a_widget_destroyed_after_enabling_lets_go_of_the_variable_it_was_follow
     root.announce("<Map>", label)
     installation.annotator.bind_text_variable(label, status)
 
-    # When Tk destroys the label and the variable goes on being written, as a
-    # variable does: it belongs to the application, not to the widget, and
-    # routinely outlives every widget that ever displayed it
+    # When Tk destroys the label and the variable goes on being written
     label.destroy()
     root.announce("<Destroy>", str(label))
     status.set("task created")
 
-    # Then the trace is off the variable rather than merely inert. A guard that
-    # declined to announce would leave the registration in place for the life of
-    # the process, firing on every write.
+    # Then the trace is off the variable rather than merely inert
     assert status.traces_left() == _NOTHING_STILL_LISTENING, (
         f"{status.traces_left()} trace(s) outlived the widget they were "
         "registered for, and will go on firing at a dead window path forever"
@@ -136,8 +123,7 @@ def test_a_widget_destroyed_after_enabling_lets_go_of_the_variable_it_was_follow
 def test_a_widget_already_showing_follows_the_variable_it_declares_from_the_start() -> (
     None
 ):
-    # Given a status label on screen before accessibility is switched on, driven
-    # by a variable the application never mentions to this package
+    # Given a status label on screen before accessibility is switched on
     store = RecordingStore()
     status = FakeVariable("ready")
     label = FakeWidget("Label", _A_LABEL_HANDLE, textvariable=_A_DECLARED_VARIABLE)
@@ -147,9 +133,7 @@ def test_a_widget_already_showing_follows_the_variable_it_declares_from_the_star
     install(root, store, variables=VariablesByName({_A_DECLARED_VARIABLE: status}))
     status.set("task created")
 
-    # Then the label announces what the variable says now. The widget told Tk
-    # which variable drives it when it was built, so the wiring from `enable()`
-    # down to the trace has to be real for an application to say nothing.
+    # Then the label announces what the variable says now
     assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "task created", (
         "the variable the widget declares is not being followed at all: "
         f"{store.properties(_A_LABEL_HANDLE)}"
@@ -165,9 +149,7 @@ def test_a_tk_that_answers_for_itself_is_neither_bound_to_nor_written_to() -> No
     # When accessibility is switched on
     installation = install(root, store)
 
-    # Then nothing is bound and nothing is written. Standing aside has to mean
-    # standing aside: a binding left in place would keep annotating over an
-    # implementation that is already answering correctly.
+    # Then nothing is bound and nothing is written
     assert installation.strategy is Strategy.NATIVE
     assert root.class_bindings == [], f"bound anyway: {root.class_bindings}"
     assert store.writes == [], f"annotated over a native Tk: {store.writes}"
@@ -189,9 +171,7 @@ def test_the_whole_surface_can_still_be_called_where_there_is_nothing_to_annotat
     installation.annotator.set_automation_id(label, 4207)
     installation.annotator.forget(label)
 
-    # Then every one of them is a no-op rather than an error. An application
-    # guarding each call in a platform check will get one of them wrong, and the
-    # failure only ever shows up on the other platform.
+    # Then every one of them is a no-op rather than an error
     assert installation.strategy is Strategy.UNSUPPORTED
     assert store.writes == [], (
         f"reached for MSAA on a machine without it: {store.writes}"

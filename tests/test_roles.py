@@ -2,9 +2,7 @@
 
 Tk tells Windows nothing about what a widget *is*: measured against a live
 window, the MSAA proxy reports `tk.Label` as an image and `tk.Entry` as a bare
-pane. The role number written here is why a screen reader says "button" and a UI
-Automation client sees a `ButtonControl` with a ValuePattern where there was
-none.
+pane.
 """
 
 from __future__ import annotations
@@ -46,10 +44,7 @@ _ONLY_IN_ONE_TOOLKIT = [
     ("TSizegrip", Role.GRIP),
 ]
 
-# What the MSAA-to-UIA bridge was measured to make of each number. A role the
-# bridge does not recognise comes through as PaneControl, which is what these
-# widgets already were: the wrong number looks like success from inside this
-# process and changes nothing a client can read.
+# What the MSAA-to-UIA bridge was measured to make of each number.
 _MEASURED_AGAINST_THE_BRIDGE = [
     (Role.GRAPHIC, 40, "ImageControl"),
     (Role.MENU_BUTTON, 62, "SplitButtonControl"),
@@ -69,8 +64,7 @@ def test_a_button_widget_is_given_the_role_a_screen_reader_announces_for_a_push_
     # When the role table is asked what that class is
     role = ROLE_FOR_TK_CLASS[tk_class]
 
-    # Then it is MSAA's push button, by the number oleacc defines, because the
-    # bridge reads the number and nothing else
+    # Then it is MSAA's push button, by the number oleacc defines
     assert role is Role.PUSH_BUTTON, f"a Button must be a push button, not {role}"
     assert role.value == _MSAA_PUSHBUTTON, (
         "the value is what reaches Windows: any other number announces a "
@@ -87,8 +81,7 @@ def test_a_ttk_widget_maps_to_the_same_role_as_the_classic_widget_it_replaces(
     themed_role = ROLE_FOR_TK_CLASS.get(themed)
     classic_role = ROLE_FOR_TK_CLASS.get(classic)
 
-    # Then they are announced identically, because swapping `tk` for `ttk` is a
-    # visual decision and a user of a screen reader must not be able to tell
+    # Then they are announced identically
     assert themed_role is classic_role, (
         f"{themed} is announced as {themed_role} but {classic} as {classic_role}"
     )
@@ -103,10 +96,7 @@ def test_a_label_and_an_entry_are_split_by_the_two_roles_that_mean_read_and_writ
     label = ROLE_FOR_TK_CLASS["Label"]
     entry = ROLE_FOR_TK_CLASS["Entry"]
 
-    # Then the label is static text and the entry is editable text. Measured: 41
-    # turns the label from an `ImageControl` into a `TextControl`, and 42 turns
-    # the entry into an `EditControl` carrying a ValuePattern that did not exist
-    # before it.
+    # Then the entry is editable text: 42 was measured to add a ValuePattern
     assert (label.value, entry.value) == (_MSAA_STATICTEXT, _MSAA_TEXT), (
         f"label is {label.value} and entry is {entry.value}; a client reads the "
         "number to decide whether a control can be written to"
@@ -119,10 +109,7 @@ def test_a_label_and_an_entry_are_split_by_the_two_roles_that_mean_read_and_writ
 def test_each_role_carries_the_number_that_was_measured_to_produce_its_control_type(
     role: Role, number: int, control_type: str
 ) -> None:
-    # Then the number that reaches Windows is the measured one. `DIAGRAM`,
-    # `CLIENT` and `PANE` were all tried for the canvas and every one came back
-    # as the anonymous `PaneControl` the widget already was, with `S_OK` and no
-    # complaint from anywhere.
+    # Then the number is the measured one: a wrong one answers S_OK and changes nothing
     assert role.value == number, (
         f"{role.name} carries {role.value}; {number} is the number measured to "
         f"reach a client as {control_type}"
@@ -138,5 +125,4 @@ def test_a_widget_that_exists_in_only_one_toolkit_is_still_announced_as_what_it_
     role = ROLE_FOR_TK_CLASS.get(tk_class)
 
     # Then it is announced as the thing it is, rather than left out of the table
-    # and reaching a client as the anonymous pane Tk hands over by default
     assert role is expected, f"{tk_class} is announced as {role}, wanted {expected}"

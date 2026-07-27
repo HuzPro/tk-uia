@@ -1,22 +1,11 @@
 """The window handles a notebook's tabs borrow, made with four Win32 calls.
 
-`enable()` hands one of these to :class:`~tk_uia.tabs.TabHandles` as its
-`OverlayWindows`. A humble object with no decision in it, proven by the gui
-specs, which read the tabs back from another process and click one.
-
 Both window styles are load-bearing. `WS_EX_TRANSPARENT` keeps the window out of
 hit-testing, so the click a client aims at a tab reaches the notebook underneath
-and Tk selects it; without it the tab would be visible to a screen reader and
-dead to a mouse. `SS_OWNERDRAW` makes the static ask its parent to paint it, by
+and Tk selects it. `SS_OWNERDRAW` makes the static ask its parent to paint it by
 way of `WM_DRAWITEM`; Tk has never heard of this window and ignores the message,
 so nothing is painted and the tab strip shows through. A plain static would
 paint its background over the tab it is standing in for.
-
-Nothing here is registered with Tk, so Tk's geometry managers never see these
-windows and cannot lay them out; they are positioned in the notebook's client
-coordinates and moved when the strip moves. Windows destroys a child with its
-parent, which is a safety net rather than the plan: `TabHandles` gives each one
-back explicitly, and clears what it said first.
 """
 
 from __future__ import annotations
@@ -24,9 +13,8 @@ from __future__ import annotations
 import ctypes
 from typing import Any
 
-# The generic control class every Windows install has. Nothing is registered:
-# a class of this package's own would have to be unregistered too, and would
-# leave a stale atom behind on every reload.
+# The generic control class every Windows install has. A class of this
+# package's own would leave a stale atom behind on every reload.
 _A_PLAIN_STATIC = "STATIC"
 
 _WS_CHILD = 0x40000000
@@ -114,6 +102,6 @@ def _destroy_window() -> Any:
 
 
 def _user32() -> Any:
-    # Per call rather than at import, and with the last error kept: `ctypes.windll`
-    # does not exist off Windows, and this module still has to import there.
+    # Per call rather than at import: `ctypes.WinDLL` cannot be built off
+    # Windows, and this module still has to import there.
     return ctypes.WinDLL("user32", use_last_error=True)

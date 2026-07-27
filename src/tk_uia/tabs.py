@@ -1,24 +1,10 @@
 """Giving a notebook's tabs the window handles Tk never gave them.
 
-`install()` builds a :class:`TabHandles` over the real Win32 seam and refreshes
-it whenever a notebook maps or its tabs change; specs build one over a recording
-double. Nothing here is platform-specific, so which handles should exist, where,
-and saying what, is all specifiable with no desktop.
-
-Why handles at all: Tk draws the whole tab strip inside the notebook's own
-window, so there is no handle to annotate and a client sees a `TabControl` with
-nothing in it. A real child window over each tab is a handle, so the machinery
-already here annotates it, and four things a client needs follow. The tab is in
-the tree, it has the tab's name, it has the tab's rectangle, and it paints
-nothing while a click at its centre passes straight through to Tk, which selects
-the tab. The last of those is why the window is `WS_EX_TRANSPARENT` and
-owner-drawn by a parent that ignores it.
-
-This does not generalise to a `Listbox` or a `Treeview`. Their items scroll,
-there can be thousands, and a window per row would be absurd where a window per
-tab is four. Those still want MSAA's child-id model, which means implementing
-`IAccessible` and answering `WM_GETOBJECT`: a COM server, and a different
-package from this one.
+Tk draws the whole tab strip inside the notebook's own window, so there is no
+handle to annotate and a client sees a `TabControl` with nothing in it. A real
+child window over each tab is a handle the machinery already here annotates,
+which puts the tab in the tree with its name and its rectangle. Nothing in this
+module is platform-specific.
 """
 
 from __future__ import annotations
@@ -30,12 +16,11 @@ from typing import Protocol
 from tk_uia.annotate import AccessibilityStore, PropId
 from tk_uia.roles import Role
 
-# How far down the scan is willing to look. A tab strip is at the top of the
-# notebook and one row of text high, so this bounds the search: a notebook whose
-# tabs are hidden costs a fixed number of questions rather than one per pixel.
+# Bounds the search, so a notebook whose tabs are hidden costs a fixed number
+# of questions rather than one per pixel.
 _THE_TALLEST_A_TAB_STRIP_GETS = 120
-# How coarsely the first pass sweeps across. A tab narrower than this would have
-# no room for a caption.
+# How coarsely the first pass sweeps across: a tab narrower than this would
+# have no room for a caption.
 _THE_NARROWEST_A_TAB_GETS = 8
 
 
@@ -43,9 +28,8 @@ _THE_NARROWEST_A_TAB_GETS = 8
 class Tab:
     """One tab on a notebook's strip: what it says, and where it is.
 
-    In the notebook's own coordinates, because that is what a child window of
-    the notebook is positioned in. No conversion, and nothing to get wrong when
-    the window moves.
+    In the notebook's own coordinates, which is what a child window of the
+    notebook is positioned in.
     """
 
     text: str
@@ -60,12 +44,7 @@ class Tab:
 
 
 class TabStrip(Protocol):
-    """A notebook's tab strip, as the scan asks about it.
-
-    Deliberately not "a notebook": the only things wanted here are what is under
-    a point, what a tab says, and how much room there is to look in. A seam this
-    narrow is why the scan below is specified without a display.
-    """
+    """A notebook's tab strip, as the scan asks about it."""
 
     def settle(self) -> None: ...
 
@@ -89,16 +68,10 @@ class OverlayWindows(Protocol):
 
 
 def tabs_on(strip: TabStrip) -> tuple[Tab, ...]:
-    """Every tab on the strip, by asking what is under each point.
-
-    Asked of Tk rather than worked out from the theme's metrics: `index @x,y` is
-    the same question the toolkit answers for a real mouse click, so a rectangle
-    found this way cannot drift from where the tab actually is. That matters,
-    because a client is going to aim a pointer at it.
-    """
-    # Before a single measurement. Tk lays a strip out on idle: measured,
-    # `notebook.add(...)` followed straight away by a scan finds the strip
-    # exactly as it was, and the new tab simply is not there.
+    """Every tab on the strip, by asking what is under each point."""
+    # Tk lays a strip out on idle: measured, `notebook.add(...)` followed
+    # straight away by a scan finds the strip exactly as it was, with the new
+    # tab simply not there.
     strip.settle()
     width, height = strip.size()
     somewhere = _anywhere_at_all_on_the_strip(strip, width, height)
@@ -135,11 +108,9 @@ def _the_band_the_whole_strip_covers(
 ) -> tuple[int, int]:
     """The extent every tab is given, which is the one they cover between them.
 
-    Each tab's own extent would be more precise and worse. The selected tab is
-    the taller one, so per-tab extents would change for two tabs every time a
-    user picked a different one, turning a refresh that currently writes nothing
-    into one that moves two windows on every click. The union is stable under
-    selection, always contains the tab, and always has the tab under its middle.
+    Per-tab extents would be more precise and worse: the selected tab is the
+    taller one, so two of them would move on every click. The union is stable
+    under selection and always has the tab under its middle.
     """
     bands = [
         _how_far_it_runs_down(strip, columns[len(columns) // 2], height)
@@ -153,9 +124,7 @@ def _anywhere_at_all_on_the_strip(
 ) -> tuple[int, int] | None:
     """One point known to be on a tab, to measure the rest relative to.
 
-    Coarse on both axes on purpose. Every later scan is fine-grained and needs a
-    line it knows is worth walking; finding that line by walking every pixel of
-    an empty notebook would be the expensive way to learn there is nothing here.
+    Coarse on both axes, so an empty notebook is cheap to rule out.
     """
     for y in range(min(height, _THE_TALLEST_A_TAB_STRIP_GETS)):
         for x in range(0, width, _THE_NARROWEST_A_TAB_GETS):
@@ -196,9 +165,8 @@ class _AHandledTab:
 class TabHandles:
     """One window handle per tab, kept in step with the strip beneath it.
 
-    Keyed by the notebook's Tk path rather than its handle, for the reason the
-    ledger is: a path survives Tk rebuilding the widget under it, and `<Destroy>`
-    carries the path once the widget object has gone.
+    Keyed by the notebook's Tk path, which survives Tk rebuilding the widget
+    and is all `<Destroy>` carries.
     """
 
     def __init__(self, store: AccessibilityStore, windows: OverlayWindows) -> None:
@@ -237,9 +205,8 @@ class TabHandles:
         return _AHandledTab(tab, hwnd)
 
     def _brought_into_step(self, standing: _AHandledTab, now: Tab) -> _AHandledTab:
-        # Compared before anything is written: a tab *selection* fires the same
-        # event a tab *change* does, so most refreshes ask about a strip that
-        # has not moved.
+        # A tab *selection* fires the same event a tab *change* does, so most
+        # refreshes ask about a strip that has not moved.
         if standing.tab == now:
             return standing
         if standing.tab.rectangle != now.rectangle:
@@ -256,7 +223,7 @@ class TabHandles:
         for one in handled:
             # Cleared before the window goes, never after: Windows hands the
             # same handle out again, and an annotation left on a recycled one
-            # mislabels an unrelated window and reads as a flaky locator.
+            # mislabels an unrelated window.
             self._store.clear(one.hwnd)
             self._windows.destroy(one.hwnd)
 
@@ -268,12 +235,7 @@ class StripFor(Protocol):
 
 
 class Notebooks:
-    """Every notebook in the application, and the handles standing in for its tabs.
-
-    The piece that knows a widget is a notebook is the factory, not this: asking
-    `isinstance(widget, ttk.Notebook)` needs tkinter, which nothing above the
-    platform modules imports.
-    """
+    """Every notebook in the application, and the handles standing in for its tabs."""
 
     def __init__(self, handles: TabHandles, strip_for: StripFor) -> None:
         self._handles = handles

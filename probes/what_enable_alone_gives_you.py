@@ -1,17 +1,12 @@
 """Measures what `enable()` on its own leaves a client able to read, and what it does not.
 
-Nothing imports this. It is the script behind the README's caveats: the entry
-whose ValuePattern is empty until somebody binds it, the accessible name that
-goes stale after `config(text=...)`, and the checkbutton whose checked state is
-never conveyed. Run it and those claims are either reproduced or falsified.
-
-It launches a Tk window that calls `enable(root)` and then deliberately says
-nothing else, into a process of its own, and reads it back through UI Automation
-from this one. Same arrangement as the gui specs, and for the same reason: an
-annotation read inside the process that wrote it proves nothing about the
-bridge.
-
     python probes/what_enable_alone_gives_you.py
+
+The script behind the README's caveats: the entry whose ValuePattern is empty
+until somebody binds it, the accessible name that goes stale after
+`config(text=...)`, and the checkbutton whose checked state is never conveyed.
+The window runs in a process of its own, because an annotation read inside the
+process that wrote it proves nothing about the bridge.
 """
 
 from __future__ import annotations
@@ -71,9 +66,9 @@ def an_application_that_only_calls_enable(title: str, commands: Path) -> None:
     headline.pack(pady=10)
     tk.Button(root, text=NEW_TASK).pack(pady=10)
     tk.Entry(root, width=30, textvariable=tk.StringVar(value=SHOPPING)).pack(pady=10)
-    # Two checkbuttons that differ only in whether they are ticked, and one
-    # widget that is disabled. A client that cannot tell these apart is not
-    # being told about state, however confidently the control type reads.
+    # Two checkbuttons differing only in whether they are ticked, and one widget
+    # that is disabled. A client that cannot tell these apart is not being told
+    # about state.
     ticked = tk.IntVar(value=1)
     tk.Checkbutton(root, text=TICKED, variable=ticked).pack()
     tk.Checkbutton(root, text=UNTICKED, variable=tk.IntVar(value=0)).pack()
@@ -193,8 +188,8 @@ def _pattern(control: Any, pattern: str) -> Any:
     """Whatever the control offers under this pattern, or nothing.
 
     Two ways of answering "no", and both are the measurement: `uiautomation`
-    defines no accessor at all on a control class the pattern cannot apply to,
-    and answers `None` where it applies and the provider does not offer it.
+    defines no accessor on a control class the pattern cannot apply to, and
+    answers `None` where it applies and the provider does not offer it.
     """
     ask = getattr(control, f"Get{pattern}Pattern", None)
     return None if ask is None else ask()

@@ -1,10 +1,7 @@
 """A Tk application whose whole point is a notebook, for the tab specs to read.
 
-Kept apart from `annotated_app.py`, because a fixture that grew a notebook would
-make every unrelated spec pay for scanning one.
-
-The window titles itself from `argv` so that several runs, or a window left
-behind by a crashed one, cannot be mistaken for each other.
+The window titles itself from `argv` so that a window left behind by a crashed
+run cannot be mistaken for this one.
 """
 
 from __future__ import annotations
@@ -44,8 +41,7 @@ class Widgets:
 
 def main(title: str, commands: Path) -> None:
     widgets = _a_window_with_a_notebook(title)
-    # Painted before accessibility is switched on, so the tab strip has a
-    # geometry to scan, and so this is the path a real application takes.
+    # Painted first, so the tab strip has a geometry to scan.
     widgets.root.update_idletasks()
     _accessibility_switched_on(widgets.root)
     _watching_for_commands(widgets, commands)
@@ -68,9 +64,7 @@ def _a_window_with_a_notebook(title: str) -> Widgets:
 def _accessibility_switched_on(root: tk.Tk) -> None:
     strategy = tk_uia.enable(root)
     if strategy is not Strategy.ANNOTATED:
-        # Loudly, and before painting anything: a window that came up with the
-        # gate mis-fired would fail every spec below with "the tab is not there",
-        # which is true and says nothing about why.
+        # Loudly: a mis-fired gate fails every spec below with "the tab is not there".
         raise SystemExit(
             f"tk_uia.enable reported {strategy}, not {Strategy.ANNOTATED}: "
             "there is nothing for the tab specs to read"
@@ -81,22 +75,17 @@ def _add_a_tab(widgets: Widgets) -> None:
     page = ttk.Frame(widgets.notebook)
     ttk.Label(page, text=f"the {ADDED_LATER} page").pack(padx=20, pady=20)
     widgets.notebook.add(page, text=ADDED_LATER)
-    # Adding beside the open tab moves no selection, so Tk fires nothing at
-    # all. This is the documented way an application says what no event did.
+    # Adding beside the open tab moves no selection, so Tk fires nothing at all.
     tk_uia.add_acc_object(widgets.notebook)
 
 
 def _remove_the_selected_tab(widgets: Widgets) -> None:
-    # The *selected* one, deliberately: removing it moves the selection, which
-    # is the one tab change Tk announces. Nothing here re-announces anything,
-    # so a spec watching this is watching the binding do the work.
+    # The *selected* one: removing it moves the selection, the one change Tk announces.
     widgets.notebook.forget(widgets.notebook.select())
 
 
 def _rename_the_first_tab(widgets: Widgets) -> None:
-    # A plain `tab(0, text=...)` fires no event at all, the same shape as a
-    # `config(text=...)` on a label: an application that renames a tab says so
-    # with `add_acc_object(notebook)`.
+    # A plain `tab(0, text=...)` fires no event at all.
     widgets.notebook.tab(0, text=RENAMED)
     tk_uia.add_acc_object(widgets.notebook)
 

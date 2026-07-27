@@ -1,13 +1,8 @@
 """Fixture app: one of every widget class whose role was chosen by measurement.
 
 `test_gui_new_roles.py` reads this back from another process and checks each one
-arrives as the control type the role was *measured* to produce. Without a spec
-holding that, a number in `roles.py` could be changed to another plausible one
-and nothing in the suite would notice: every wrong number reaches a client as
-the anonymous `PaneControl` these widgets already were.
-
-Each widget is named explicitly, because most of these have no words of their
-own and the spec correlates by name.
+arrives as the control type the role was *measured* to produce. Each widget is
+named explicitly, because most of these have no words of their own.
 """
 
 from __future__ import annotations
@@ -46,8 +41,7 @@ def main(title: str, _commands: Path) -> None:
     for widget in named.values():
         widget.pack(padx=10, pady=6, fill="x")
 
-    # Packed alongside but deliberately not in `named`: its name is the thing
-    # under test, and it has to come from Tk rather than from a call here.
+    # Not in `named`: its name has to come from Tk rather than from a call here.
     tk.Scale(root, from_=0, to=10, orient="horizontal", label=A_LABELLED_SCALE).pack(
         padx=10, pady=6, fill="x"
     )

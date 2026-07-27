@@ -1,11 +1,9 @@
 """Fixture app: a notebook built from a re-imported `tkinter.ttk`.
 
-IDLE's `idlelib/run.py` deletes seven tkinter submodules from `sys.modules` as
-a workaround it has carried for a decade; any later `import tkinter.ttk`
-re-executes the module and makes a second, distinct `Notebook` class. This app
-performs that dance after `enable()`, then builds its notebook from the second
-class. A gate that asks Python's type system instead of Tk fails it silently:
-the notebook keeps its role and loses its tabs.
+IDLE's `idlelib/run.py` deletes seven tkinter submodules from `sys.modules`, so
+any later `import tkinter.ttk` re-executes the module and makes a second,
+distinct `Notebook` class. A gate that asks Python's type system instead of Tk
+fails that silently: the notebook keeps its role and loses its tabs.
 """
 
 from __future__ import annotations

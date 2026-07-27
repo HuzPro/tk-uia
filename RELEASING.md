@@ -11,7 +11,7 @@ Everything up to *Publish* is proven; everything from *Publish* down is the plan
 ## Before you build
 
 1. **The suite is green, including the gui lane.** `./.venv/Scripts/python.exe -m
-   pytest -q` — the gui specs open real windows and take about eighty seconds.
+   pytest -q`. The gui specs open real windows and take about eighty seconds.
    The unit lane alone is not enough for a release: `_accprop.py` is untested by
    design, and the gui specs are the only thing that reads an annotation back
    out of Windows.
@@ -20,7 +20,7 @@ Everything up to *Publish* is proven; everything from *Publish* down is the plan
    It is the single source: `[tool.hatch.version]` reads the package, and
    `describe()` prints it in its own headline, so a stale one lands in every
    report an application prints.
-4. **`CHANGELOG.md`'s top section is `## <version> — <date>`,** not
+4. **`CHANGELOG.md`'s top section is `## <version> - <date>`,** not
    `## Unreleased`, and the date is today's.
 5. **`COVERAGE.md` is regenerated** if anything touched roles or annotation:
    `python probes/coverage_matrix.py`. It is measured, not written.
@@ -47,7 +47,7 @@ This produces `dist/tk_uia-<version>-py3-none-any.whl` and
 > needs it: it creates an isolated environment per artifact and installs
 > hatchling into it with pip.
 
-Delete any older artifacts from `dist/` before uploading — `twine upload dist/*`
+Delete any older artifacts from `dist/` before uploading: `twine upload dist/*`
 uploads whatever it finds, and re-uploading an existing version is refused by
 PyPI rather than ignored.
 
@@ -64,14 +64,14 @@ it.
 
 What to look for:
 
-- `tk_uia/py.typed` is present — without it every type annotation in the package
+- `tk_uia/py.typed` is present. Without it every type annotation in the package
   is invisible to a type checker in somebody else's project.
 - No `tests/`, no `probes/`, no `.venv`. They belong in the sdist, which is a
   source distribution and should be able to run the suite; they do not belong in
   what an application installs.
 - `tk_uia-<version>.dist-info/METADATA` says `Requires-Dist:` for the `dev`
   extra only. **Runtime dependencies are permanently zero** and that is the
-  claim the whole package rests on — a stray runtime requirement is the one
+  claim the whole package rests on: a stray runtime requirement is the one
   regression worth blocking a release for.
 
 Then install the wheel the way a stranger will, in a virtual environment that
@@ -95,8 +95,8 @@ weaker check.
 **This step needs the maintainer's PyPI account, and cannot be done by anyone
 else or by any automation that does not hold the token.**
 
-1. Sign in to PyPI and create an **API token** — Account settings → API tokens.
-   Scope it to the `tk-uia` project once the project exists; the *first* upload
+1. Sign in to PyPI and create an **API token**, under Account settings → API
+   tokens. Scope it to the `tk-uia` project once the project exists; the *first* upload
    has no project to scope to, so it needs an account-wide token, which should
    be revoked and replaced with a scoped one immediately afterwards.
 2. Put it where the tool will find it. `twine` reads `TWINE_USERNAME=__token__`
@@ -123,10 +123,10 @@ else or by any automation that does not hold the token.**
 still not claimed by anything of ours. That is not a reservation: PyPI names are
 first-come, nothing prevents somebody else registering `tk-uia` in the meantime,
 and **the first successful upload is what claims it.** If the name has gone by
-the time this is run, the decision — a different distribution name with the same
-import name, or a different name entirely — is the maintainer's and belongs in
-`pyproject.toml` under `[project] name`, nowhere else. The import package stays
-`tk_uia` either way.
+the time this is run, the decision is the maintainer's and belongs in
+`pyproject.toml` under `[project] name`, nowhere else: a different distribution
+name with the same import name, or a different name entirely. The import
+package stays `tk_uia` either way.
 
 ## After publishing
 

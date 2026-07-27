@@ -1,9 +1,7 @@
 """Stand-ins for the two things the annotator talks to: Windows, and Tk.
 
-One needs a desktop and the other a display, and both are narrow enough to
-answer honestly in a dict. Everything the package decides is decided above this
-line, so these doubles are why the whole suite runs on a machine with no Tk, no
-display and no Windows.
+One needs a desktop and the other a display, and these are why the whole suite
+runs on a machine with neither.
 """
 
 from __future__ import annotations
@@ -50,16 +48,14 @@ class RecordingStore:
 class FakeWidget:
     """A Tk widget as the annotator sees it, with no display behind it.
 
-    `cget` refuses an option the real widget would not have, and `winfo_id`
-    refuses once destroyed, because both are how Tk behaves and both are
-    failures the annotator has to survive rather than propagate.
+    `cget` refuses an unknown option and `winfo_id` refuses once destroyed,
+    because both are how Tk behaves.
 
-    Every method here goes through the Tcl interpreter in a real Tk, so every
-    method here refuses a caller from another thread. That is *stricter* than Tk
-    itself, deliberately: real Tk mostly answers and corrupts the interpreter
-    quietly instead, which is a failure a spec could never see. The rule under
-    test is that the annotator turns a foreign caller away before touching Tk at
-    all, and a double that answered would let a late guard pass.
+    Every method here refuses a caller from another thread. That is *stricter*
+    than Tk itself, deliberately: real Tk mostly answers and corrupts the
+    interpreter quietly instead, which is a failure a spec could never see. The
+    rule under test is that the annotator turns a foreign caller away before
+    touching Tk at all, and a double that answered would let a late guard pass.
     """
 
     def __init__(
@@ -87,20 +83,16 @@ class FakeWidget:
             self._options["label"] = label
         # The Tcl *name* of a variable, which is all a widget carries. Only the
         # classes that really have the option get it: an entry does, a `tk.Text`
-        # does not, and the difference is what `keys()` is asked for.
+        # does not.
         if textvariable is not None:
             self._options["textvariable"] = textvariable
         self._mapped = mapped
         self._children = list(children)
         # A real Tk path encodes ancestry: a dialog is `.!toplevel` and the
-        # button in it is `.!toplevel.!button`. The one built here from the
-        # class and the handle is unique and says nothing about who holds it, so
-        # a spec that turns on which window a widget is in passes `path=`.
+        # button in it is `.!toplevel.!button`. The default built here says
+        # nothing about who holds it, so a spec that turns on that passes `path=`.
         self._path = path if path is not None else f".!{tk_class.lower()}{hwnd}"
         self._destroyed = False
-        # Window-ness is structural in real Tk (a toplevel is its own
-        # containing toplevel), and a root's class name is application-chosen.
-        # Defaulting from the class keeps the many existing specs unchanged.
         self._window = window if window is not None else tk_class in ("Tk", "Toplevel")
         self._parent: FakeWidget | None = None
         for child in self._children:
@@ -121,8 +113,7 @@ class FakeWidget:
         return self._mapped
 
     def winfo_exists(self) -> bool:
-        # Answers rather than raises, as Tcl's `winfo exists` does for a path it
-        # no longer has, which is what makes it usable as a liveness check.
+        # Answers rather than raises, as Tcl's `winfo exists` does.
         self._only_from_the_thread_that_owns_tk()
         return not self._destroyed
 
@@ -133,8 +124,8 @@ class FakeWidget:
         holder = self._parent
         while holder is not None and not holder._window:
             holder = holder._parent
-        # Real Tk always has a containing toplevel; a parentless fake answers
-        # with a stand-in so that only a window is ever its own toplevel.
+        # Real Tk always has a containing toplevel, so a parentless fake answers
+        # with a stand-in rather than with itself.
         return holder if holder is not None else _A_WINDOW_SOMEWHERE_ABOVE
 
     def winfo_children(self) -> Sequence[FakeWidget]:
@@ -163,12 +154,7 @@ class FakeWidget:
         self._destroyed = True
 
     def is_taken_off_the_screen(self) -> None:
-        """Stand in for Tk unmapping a widget that is still very much alive.
-
-        An unselected notebook tab, a pane the geometry manager could not fit,
-        a `pack_forget()`. The widget keeps its handle and everything written
-        about it; UI Automation simply stops listing it.
-        """
+        """Stand in for Tk unmapping a widget that is still very much alive."""
         self._mapped = False
 
     def take_a_new_handle(self, hwnd: int) -> None:
@@ -197,9 +183,7 @@ class FakeTclError(Exception):
 class FakeVariable:
     """A `tkinter.Variable` as the binding sees it: a value and write traces.
 
-    Traces are held under the name `trace_add` hands back, as Tcl's are, because
-    a trace outlives the widget it was registered for and the name is the only
-    thing that can take it off again.
+    Traces are held under the name `trace_add` hands back, as Tcl's are.
     """
 
     def __init__(self, value: str) -> None:
@@ -232,12 +216,7 @@ class FakeVariable:
 class VariablesByName:
     """The variables an application owns, reached the way a widget names them.
 
-    Stands in for `tk_uia._tkvars`: a widget declares the *name* of a variable
-    and nothing else, so something has to turn that name into a value and
-    somewhere to hang a trace. Here that is a dict.
-
-    A name nobody owns answers `None`, which is what a Tk with no such variable
-    answers too, and means the widget is left exactly as it was.
+    A name nobody owns answers `None`, as a Tk with no such variable does.
     """
 
     def __init__(self, variables: Mapping[str, FakeVariable]) -> None:
@@ -250,8 +229,6 @@ class VariablesByName:
 class FakeInterpreter:
     """The Tcl interpreter, answering the handful of things the gate asks it.
 
-    `catch`, `set` and `unset` behave as Tcl's do, because that is how the gate
-    asks whether a subcommand exists without letting the refusal reach Python.
     The wording of the complaint is the wording Tk 8.6.15 actually produced.
     """
 
