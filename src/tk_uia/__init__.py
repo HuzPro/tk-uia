@@ -39,7 +39,7 @@ from tk_uia.tkversion import Strategy
 if TYPE_CHECKING:
     import tkinter
 
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 
 __all__ = [
     "ROLE_FOR_TK_CLASS",
@@ -260,6 +260,11 @@ def describe(root: tkinter.Misc) -> Description:
     Reports what tk-uia believes it wrote, which is not evidence that a client
     can read it; see the caveat the report closes with. `print()` it for the
     report, or read `.widgets` for the same thing as data.
+
+    Reads the ledger `enable()` installed, so it raises `AnnotationRefused`
+    where `enable()` has never run: there would be no honest strategy to head
+    the report with. After `enable()` it touches no COM and no UI Automation,
+    which is what lets the call stay in a production build.
     """
     return _describe(root, _the_installation())
 

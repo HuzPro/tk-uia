@@ -56,6 +56,21 @@ _ROLES_WHOSE_VARIABLE_IS_WHAT_THEY_HOLD = frozenset(
     {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON}
 )
 
+# The narrowest question every Tk widget answers and nothing else does. Asked
+# of the object rather than of its class, so that a widget subclass, a mixin
+# and a test double all pass on the same terms.
+_WHAT_EVERY_TK_WIDGET_ANSWERS_TO = "winfo_class"
+
+# What the arguments are called in the signatures, so that a complaint about one
+# names it as the caller wrote it.
+_THE_WIDGET_PARAMETER = "widget"
+_THE_LABEL_PARAMETER = "label"
+
+# The role a number would have been, for a complaint that can name it. Built
+# once: `Role(43)` raises for a number no member carries, and a lookup that has
+# to be wrapped in a try reads as though the miss were exceptional.
+_THE_ROLE_EACH_NUMBER_MEANS: Mapping[int, Role] = {role.value: role for role in Role}
+
 
 def is_a_window(widget: TkWidget) -> bool:
     """Whether this widget is a toplevel window, whatever its class says.
@@ -419,6 +434,7 @@ class Annotator:
         )
 
     def add(self, widget: TkWidget) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         # Before the first question is asked of the widget, rather than at the
         # store below: `winfo_class`, `keys` and `cget` each cross into the Tcl
         # interpreter, and doing that from a foreign thread corrupts it quietly.
@@ -480,9 +496,12 @@ class Annotator:
         )
 
     def set_role(self, widget: TkWidget, role: Role) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
+        _a_role_is_named_rather_than_numbered(role)
         self._write(widget, PropId.ROLE, role.value)
 
     def set_name(self, widget: TkWidget, name: str) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._the_application_has_the_last_word_on(widget, PropId.NAME)
         self._write(widget, PropId.NAME, name)
 
@@ -493,7 +512,10 @@ class Annotator:
         no amount of reading the widget can find it. This is the application
         saying it.
         """
+        _every_call_here_takes_a_widget(label, _THE_LABEL_PARAMETER)
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._owner.refuse_any_other_caller()
+        self._refuse_a_caption_that_holds_its_own_contents(label, widget)
         variable = self._whatever_variable_the_label_declares(label)
         if variable is not None:
             # Released before the new one is bound, exactly as the manual
@@ -534,25 +556,31 @@ class Annotator:
         return None if written is None else str(written.value)
 
     def set_value(self, widget: TkWidget, value: str) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._the_application_has_the_last_word_on(widget, PropId.VALUE)
         self._write(widget, PropId.VALUE, value)
 
     def set_description(self, widget: TkWidget, description: str) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._write(widget, PropId.DESCRIPTION, description)
 
     def set_action(self, widget: TkWidget, action: str) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._write(widget, PropId.DEFAULT_ACTION, action)
 
     def set_help(self, widget: TkWidget, help_text: str) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._write(widget, PropId.HELP, help_text)
 
     def set_state(self, widget: TkWidget, state: int) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._write(widget, PropId.STATE, state)
 
     def bind_text_variable(self, widget: TkWidget, variable: TkVariable) -> None:
         # The override for the variable a widget declares, and the whole answer
         # for a widget that declares none. Only the application knows which
         # variable really says who the widget is.
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._the_application_has_the_last_word_on(widget, PropId.NAME)
         self._keep_in_step_with(widget, variable, PropId.NAME)
 
@@ -560,10 +588,16 @@ class Annotator:
         # The contents of an entry are not on the widget to be read back. They
         # are in the variable, and where the widget did not name that variable
         # itself, only the application knows which one it is.
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
         self._the_application_has_the_last_word_on(widget, PropId.VALUE)
         self._keep_in_step_with(widget, variable, PropId.VALUE)
 
     def set_automation_id(self, widget: TkWidget, automation_id: int) -> None:
+        _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
+        # Before the store is asked anything: the id goes to Win32 through
+        # ctypes, where a string arrives as an argument error naming a stack
+        # frame the application never wrote.
+        _an_automation_id_is_a_number(automation_id)
         self._owner.refuse_any_other_caller()
         hwnd = self._handle_of(widget)
         in_use = self._store.control_id(hwnd)
@@ -588,6 +622,28 @@ class Annotator:
         if hwnd is None:
             return
         self._take_it_all_back(hwnd)
+
+    def _refuse_a_caption_that_holds_its_own_contents(
+        self, label: TkWidget, widget: TkWidget
+    ) -> None:
+        """Refuse a control whose variable is what it holds as the caption for another.
+
+        Before the label is asked what it declares, because an entry declares a
+        `-textvariable` exactly as a caption driven by one does. Read in that
+        order, the two arguments the wrong way round bind the caption's name to
+        whatever somebody types into the box, and go on following it.
+        """
+        role = self.roles.get(label.winfo_class())
+        if role not in _ROLES_WHOSE_VARIABLE_IS_WHAT_THEY_HOLD:
+            return
+        raise AnnotationRefused(
+            f"{label} is a control a client asks the contents of, so whatever "
+            f"drives it is what it holds rather than a caption for {widget}. "
+            "The usual cause is swapped arguments: label_for(caption, control) "
+            "names the control after the caption, in that order. Where the "
+            "words really are on this widget, say set_acc_name(widget, ...) or "
+            "follow a variable of your own with bind_text_variable(widget, ...)."
+        )
 
     def _whatever_variable_the_label_declares(
         self, label: TkWidget
@@ -720,7 +776,7 @@ class Annotator:
         # finds a confident, wrong answer where before it found none.
         raise AnnotationRefused(
             f"{widget} is a window, and a window already has an accessible name "
-            "from `wm title` — which is what resolves it for every query that "
+            "from `wm title` -- which is what resolves it for every query that "
             "follows. Annotating one writes to the container pane behind it "
             "instead of to the window, so use `root.title(...)` to name it, and "
             "annotate the widgets inside it."
@@ -936,6 +992,66 @@ def _what_a_declared_variable_is(role: Role) -> PropId:
     """
     return (
         PropId.VALUE if role in _ROLES_WHOSE_VARIABLE_IS_WHAT_THEY_HOLD else PropId.NAME
+    )
+
+
+def _every_call_here_takes_a_widget(widget: object, parameter: str) -> None:
+    """Refuse anything that is not a Tk widget, and say which argument it was.
+
+    A `TypeError` rather than an :class:`AnnotationRefused`: nothing was
+    refused, because a widget's path, its name or its text is not something an
+    annotation can be made about at all. Left to itself the call fails several
+    frames down on an attribute a string does not have, which reads as a bug in
+    this package.
+    """
+    if hasattr(widget, _WHAT_EVERY_TK_WIDGET_ANSWERS_TO):
+        return
+    raise TypeError(
+        f"{parameter} must be a Tk widget, and this is a "
+        f"{type(widget).__name__}. Everything here is written against the "
+        "window handle winfo_id() answers with, so each call takes the widget "
+        "itself rather than its Tk path, its name or the words it shows."
+    )
+
+
+def _a_role_is_named_rather_than_numbered(role: object) -> None:
+    if isinstance(role, Role):
+        return
+    raise TypeError(
+        f"role must be a tk_uia.Role, and this is a {type(role).__name__}. "
+        f"{_whichever_role_that_number_would_have_been(role)}"
+    )
+
+
+def _whichever_role_that_number_would_have_been(role: object) -> str:
+    # The number is the tempting thing to pass: it is what gets written, and
+    # `describe()` prints it beside the member in every row. Where it names a
+    # role, saying which one turns a rejection into an answer. Where it names
+    # none, the contract is all there is to say, and a guess at what was meant
+    # would be the confident wrong answer in a new place.
+    meant = _THE_ROLE_EACH_NUMBER_MEANS.get(role) if isinstance(role, int) else None
+    if meant is None:
+        return (
+            "A role decides which patterns the MSAA-to-UIA bridge offers for "
+            "the widget at all, so it is named here rather than numbered: "
+            "set_acc_role(widget, Role.PUSH_BUTTON)."
+        )
+    return (
+        f"Role({role}) is Role.{meant.name}; say "
+        f"set_acc_role(widget, Role.{meant.name})."
+    )
+
+
+def _an_automation_id_is_a_number(automation_id: object) -> None:
+    if isinstance(automation_id, int):
+        return
+    raise TypeError(
+        f"automation_id must be an int, and this is a "
+        f"{type(automation_id).__name__}. UI Automation renders an "
+        "AutomationId as text, which is where the temptation comes from, but "
+        "what is written here is GWLP_ID, the Win32 control id, and that is a "
+        "number and nothing else: set_automation_id(widget, 4207) reads back "
+        "as '4207'."
     )
 
 

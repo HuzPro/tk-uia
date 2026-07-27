@@ -8,6 +8,13 @@ The two views are joined by rectangle rather than by name, because a
 widget whose class has no role is never annotated and so has no name to
 join on — and those are the rows worth having.
 
+The `a test writes` column is the query
+[pytest-uia](https://github.com/HuzPro/pytest-uia) offers for that
+control, and `app` is the application handle it hands a test. Each line
+is read back out of the queries that tool really authorises for this
+window rather than composed here, so a control it offers no way to
+reach reads **no query**.
+
 ## classic tk
 
 | widget | `winfo_class` | bare Tk | after `enable()` | + what the app says | patterns | `describe()` says | a test writes |
@@ -27,10 +34,10 @@ join on — and those are the rows worth having.
 | `tk.Frame` | `Frame` | `PaneControl` — | `GroupControl` — | `GroupControl` 'Details' |  | — | `app.group("Details")` |
 | `tk.LabelFrame` | `Labelframe` | `PaneControl` — | `GroupControl` 'a LabelFrame' | `GroupControl` 'a LabelFrame' |  | — | `app.group("a LabelFrame")` |
 | `tk.PanedWindow` | `Panedwindow` | `PaneControl` — | `GroupControl` — | `GroupControl` 'Split view' |  | — | `app.group("Split view")` |
-| `tk.Menu (on a Menubutton)` | `Menu` | *not on screen* | *not on screen* | *not on screen* | — | NEVER_MAPPED | — |
+| `tk.Menu (on a Menubutton)` | `Menu` | *not on screen* | *not on screen* | *not on screen* | — | MENUS_ARE_NATIVE | — |
 | `tk.Menubutton` | `Menubutton` | `PaneControl` — | `SplitButtonControl` 'a Menubutton' | `SplitButtonControl` 'a Menubutton' | Invoke | — | `app.split_button("a Menubutton")` |
 | `tk.OptionMenu` | `Menubutton` | `PaneControl` — | `SplitButtonControl` 'one' | `SplitButtonControl` 'one' | Invoke | — | `app.split_button("one")` |
-| `tk.Menu (menubar)` | `Menu` | *not on screen* | *not on screen* | *not on screen* | — | NEVER_MAPPED | — |
+| `tk.Menu (menubar)` | `Menu` | *not on screen* | *not on screen* | *not on screen* | — | MENUS_ARE_NATIVE | — |
 | `tk.Toplevel` | `Toplevel` | `PaneControl` — | `PaneControl` — | `PaneControl` — |  | NAMED_BY_ITS_TITLE | **no query** |
 
 **20 widget classes surveyed, 2 never on screen.**
@@ -41,7 +48,7 @@ join on — and those are the rows worth having.
 | after `enable()` | 17 | 8 | — |
 | **+ what the app says** | **17** | **17** | **17** |
 
-*24 queries offered for this window.*
+*24 queries offered for this window by [pytest-uia](https://github.com/HuzPro/pytest-uia).*
 
 ## ttk
 
@@ -65,7 +72,7 @@ join on — and those are the rows worth having.
 | `ttk.Notebook` | `TNotebook` | `PaneControl` — | `TabControl` — | `TabControl` 'Settings' | Selection | — | `app.tab_strip("Settings")` |
 | `ttk.Treeview` | `Treeview` | `PaneControl` — | `TreeControl` — | `TreeControl` 'Task list' | Selection | ITEMS_NOT_IN_THE_TREE | `app.tree("Task list")` |
 | `ttk.LabeledScale` | `TFrame` | `PaneControl` — | `GroupControl` — | `GroupControl` 'Brightness' |  | — | `app.group("Brightness")` |
-| `ttk.Menu (on a Menubutton)` | `Menu` | *not on screen* | *not on screen* | *not on screen* | — | NEVER_MAPPED | — |
+| `ttk.Menu (on a Menubutton)` | `Menu` | *not on screen* | *not on screen* | *not on screen* | — | MENUS_ARE_NATIVE | — |
 | `ttk.Menubutton` | `TMenubutton` | `PaneControl` — | `SplitButtonControl` 'a Menubutton' | `SplitButtonControl` 'a Menubutton' | Invoke | — | `app.split_button("a Menubutton")` |
 | `ttk.OptionMenu` | `TMenubutton` | `PaneControl` — | `SplitButtonControl` 'one' | `SplitButtonControl` 'one' | Invoke | — | `app.split_button("one")` |
 
@@ -77,5 +84,5 @@ join on — and those are the rows worth having.
 | after `enable()` | 20 | 7 | — |
 | **+ what the app says** | **20** | **20** | **20** |
 
-*28 queries offered for this window.*
+*28 queries offered for this window by [pytest-uia](https://github.com/HuzPro/pytest-uia).*
 

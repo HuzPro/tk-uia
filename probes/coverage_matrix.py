@@ -281,6 +281,13 @@ def _written(reports: list[tuple[str, dict[str, Any]]]) -> str:
         "widget whose class has no role is never annotated and so has no name to",
         "join on — and those are the rows worth having.",
         "",
+        "The `a test writes` column is the query",
+        "[pytest-uia](https://github.com/HuzPro/pytest-uia) offers for that",
+        "control, and `app` is the application handle it hands a test. Each line",
+        "is read back out of the queries that tool really authorises for this",
+        "window rather than composed here, so a control it offers no way to",
+        "reach reads **no query**.",
+        "",
     ]
     for label, survey in reports:
         lines += _a_table(label, survey)
@@ -407,7 +414,10 @@ def _how_the_query_column_was_filled(queries: dict[str, Any] | None) -> str:
             "*The `a test writes` column needs a sibling `pytest-uia` checkout with "
             "its virtualenv; without one it is left blank rather than guessed.*"
         )
-    return f"*{len(queries['queries'])} queries offered for this window.*"
+    return (
+        f"*{len(queries['queries'])} queries offered for this window by "
+        "[pytest-uia](https://github.com/HuzPro/pytest-uia).*"
+    )
 
 
 if __name__ == "__main__":

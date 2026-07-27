@@ -1,5 +1,80 @@
 # Changelog
 
+## 0.6.2 - 2026-07-28
+
+A fresh-eyes pass drove all of it: somebody who had never seen this package read
+the docs and used the API from them, and every line below is something that
+found. Two calls that took a wrong argument and said something unhelpful about
+it, one report sentence that was untrue of half the widgets printed under it,
+and a set of pages that had drifted from the code beside them.
+
+- **`label_for` refuses a control whose variable is its contents.** An entry
+  declares a `-textvariable` exactly as a caption driven by one does, and the
+  declared-variable check came first, so `label_for(entry, caption)` with the
+  arguments the wrong way round bound the *caption's* name to whatever somebody
+  typed into the box and followed it keystroke by keystroke. No error, and a
+  confident wrong answer in the tree. The refusal is by role rather than by what
+  the widget happens to declare, so it covers `Entry`, `TEntry`, `TCombobox`,
+  `Spinbox`, `TSpinbox` and `tk.Text`, the last of which carries no such
+  variable at all. The message names the likely cause and points at
+  `set_acc_name` or `bind_text_variable` for the rare window where the words
+  really are on that control. `infer_names_from_layout` never made this call: a
+  row's subject can only be a label or the button that captions it.
+
+- **Wrong-typed arguments raise `TypeError` instead of surfacing internals.**
+  `set_acc_role(widget, 43)` used to raise `'int' object has no attribute
+  'value'` from inside the annotator; it now answers `Role(43) is
+  Role.PUSH_BUTTON; say set_acc_role(widget, Role.PUSH_BUTTON)`, and states the
+  contract without inventing a member where the number names no role.
+  `set_automation_id(widget, "save-button")` is the natural first attempt, since
+  UI Automation renders an AutomationId as text and the guide shows one reading
+  back as `'4207'`; what is written underneath is `GWLP_ID`, a Win32 control id
+  and a number, and a string used to arrive as a `ctypes.ArgumentError` naming a
+  stack frame the application never wrote. The guard fires before any ctypes
+  call. And a non-widget where a widget belongs, `set_acc_name("oops", "x")`,
+  now names the parameter and the type that arrived rather than failing on
+  `winfo_class` several frames down; every widget-taking call carries that
+  check, both arguments of `label_for` included, and `forget()` deliberately
+  does not, because it takes a widget or its path string. These are
+  `TypeError`s rather than `AnnotationRefused`: nothing was refused, because the
+  call never described an annotation.
+
+- **`UNMAPPED_SINCE_ANNOTATED` stopped claiming history it cannot know.** It
+  read "written, and Tk has since taken it off the screen", which is untrue of a
+  widget annotated while it had never been mapped at all: name an entry with
+  `label_for` on a notebook tab nobody has opened, describe the window, and the
+  report said Tk had removed something it had never shown. Measured on
+  COOKBOOK's own form described before `mainloop()`: nine widgets `NEVER_MAPPED`
+  and the two entries `label_for` reached filed under this heading, not one of
+  which had been on screen. The sentence now covers both paths without a claim
+  about the past. The member name is unchanged, because that is the stable
+  identity a client-side dump matches on.
+
+- **One exception message carried a Unicode em dash** where every other message
+  in the package uses ASCII `--`, and on a legacy code page it renders as
+  mojibake in the middle of a refusal. It was the only one: `src/` is ASCII
+  throughout, checked character by character rather than by eye.
+
+- **The documentation says what the code does.** COOKBOOK's retrofit block
+  claimed four lines of output where the page's own window prints two, and the
+  two that are missing are the lesson: the entries are absent precisely because
+  the `label_for` calls above already named them and a name the application
+  chose is never replaced. The guide gained an executed click recipe for the
+  `Invoke` limitation (foreground the window, click the centre of the rectangle,
+  and what to do when Windows refuses to foreground it), the four modules its
+  layout diagram had never listed, a field-by-field table of what `describe()`
+  hands back with a CI gate built on it, a corrected gui-suite count of 30, and
+  the plain statement that `describe()` needs `enable()` first and raises
+  without it. COVERAGE.md now says what `app` is in the 37 `app.something(...)`
+  lines of its query column: the query
+  [pytest-uia](https://github.com/HuzPro/pytest-uia) offers for that control.
+  Every sample output on those pages is pasted from a real run of the page's own
+  code in the state the page had reached.
+
+- **Not fixed, deliberately: `dir(tk_uia)` lists internals beyond `__all__`.**
+  Hiding them means underscore-aliasing every internal import to tidy a
+  tab-completion list, and `__all__` is the convention that defines the surface.
+
 ## 0.6.1 - 2026-07-27
 
 Three bugs, all found by running 0.6.0 against applications that have never

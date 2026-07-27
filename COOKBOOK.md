@@ -105,7 +105,8 @@ that already exists, `infer_names_from_layout(root)` applies the same convention
 to every row at once and tells you what it did:
 
 ```python
-tk_uia.enable(root)
+# ... enable(root) and the two label_for calls, exactly as above ...
+
 for named in tk_uia.infer_names_from_layout(root):
     print(named.path, "->", named.name)
 ```
@@ -113,17 +114,28 @@ for named in tk_uia.infer_names_from_layout(root):
 Which on this window prints:
 
 ```
+.!frame.!button -> Browse... for Task file
+.!frame2.!button -> Browse... for Output folder
+```
+
+Two lines, not four, and the two that are missing are the lesson. The entries
+are absent precisely because your word already won: the two `label_for` calls
+above named them, and a name the application chose is never replaced. What comes
+back is what this call really named, so a row somebody has already thought about
+is passed over in silence, and the two routes mix freely. What it did do is the
+reason to prefer it here: it qualified both `Browse...` buttons with the row
+they act on. Two controls announced `Browse...` in one window are two controls
+nobody can choose between, and that is a fault the per-row route leaves behind.
+
+On the same window with those two `label_for` lines deleted, the same call
+prints four, because then nobody had said anything about the entries either:
+
+```
 .!frame.!entry -> Task file
 .!frame.!button -> Browse... for Task file
 .!frame2.!entry -> Output folder
 .!frame2.!button -> Browse... for Output folder
 ```
-
-It named the two entries as the two `label_for` calls did, and it did one thing
-more, which is the reason to prefer it here: it qualified both `Browse...`
-buttons with the row they act on. Two controls announced `Browse...` in one
-window are two controls nobody can choose between, and that is a fault the
-per-row route leaves behind.
 
 ### Which route fits
 
@@ -154,7 +166,7 @@ print(tk_uia.describe(root))
 With `enable()` and the two `label_for` calls, that prints:
 
 ```
-tk-uia 0.6.0 -- what this application has told Windows it is showing
+tk-uia 0.6.2 -- what this application has told Windows it is showing
 enable() reported ANNOTATED. 12 widgets under .: 11 written to, 1 not.
 
 WIDGET            CLASS        ROLE               NAME                        VALUE  ID

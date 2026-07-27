@@ -289,6 +289,39 @@ after, in all eight cases probed.
 Note that synthesised input is subject to Windows' User Interface Privilege
 Isolation, and reading is not. The half of this that works is the durable half.
 
+### What to write instead
+
+Bring the window to the front, then click the middle of the control's rectangle.
+Executed against a small annotated form whose button counts its own presses:
+
+```python
+import uiautomation as auto
+
+window = auto.WindowControl(searchDepth=1, Name="Tasks")
+window.SetActive()
+
+button = auto.ButtonControl(searchFromControl=window, Name="New Task")
+where = button.BoundingRectangle
+auto.Click(where.left + where.width() // 2, where.top + where.height() // 2)
+```
+
+The form's status line reads `presses 0` before that block and `presses 1`
+after. `button.GetInvokePattern().Invoke()`, run straight afterwards against the
+same button, leaves it at `presses 1`.
+
+The `SetActive()` is not politeness. A click is synthesised mouse input aimed at
+a screen coordinate, so it lands on whatever window owns that pixel: with your
+window behind another, the press goes to the window in front and the Tk command
+never runs, which looks *exactly* like the `Invoke` lie above and is a different
+fault entirely. And Windows can refuse to bring a window forward.
+`SetForegroundWindow` obeys only a process that already holds the foreground or
+has had recent input from the user, so `SetActive()` can return having changed
+nothing at all. Read the foreground back, retry, and report a refusal as a
+refusal, rather than letting it arrive later as a click that pressed nothing.
+
+[pytest-uia](https://github.com/HuzPro/pytest-uia) does the foregrounding, the
+retrying and the refusal-reporting for you.
+
 ## The app you cannot modify
 
 Because annotation is in-process, a Tk application whose source you cannot touch
@@ -484,14 +517,20 @@ tk_uia.describe(root).widgets    # the same thing, as data
 It walks the live widget tree and reads tk-uia's own annotation ledger. It does
 **not** touch UI Automation, does not import `uiautomation`, and reads nothing
 back from Windows. Runtime dependencies stay at zero, which is what lets you
-leave this call in a production application.
+leave this call in a production application, after `enable()`.
+
+That "after" is a requirement and not a nicety: the ledger is the thing
+`enable()` installs, so `describe(root)` on an application that never called it
+raises `AnnotationRefused`. There would be no honest strategy to head the report
+with, and a page of blank rows is exactly what an author reads as a clean bill
+of health.
 
 Run `python probes/what_your_app_tells_windows.py` for the whole thing. Abridged
 below, against a deliberately mixed window: classic `tk` and `ttk`, a canvas, a
 listbox, a notebook, a frame that is never packed, a second toplevel.
 
 ```
-tk-uia 0.6.0 -- what this application has told Windows it is showing
+tk-uia 0.6.2 -- what this application has told Windows it is showing
 enable() reported ANNOTATED. 18 widgets under .: 13 written to, 5 not.
 
 WIDGET              CLASS      ROLE                NAME         VALUE               ID
@@ -587,6 +626,73 @@ client can read it" are different claims, and only the first is in this report.
 `check_screenreader()` answers a different question again ("is anything even
 listening?") and is deliberately not folded in.
 
+### The same report, as data
+
+`describe(root).widgets` carries everything the text above prints, so nothing
+has to be parsed back out of it.
+
+| `WidgetDescription` | |
+|---|---|
+| `path` | the Tk path, `.!frame.!entry`. Never truncated, because finding the widget in your own source is the point |
+| `tk_class` | what `winfo_class()` answers: `Entry`, `TEntry` |
+| `role` | the `Role` written, or `None` where nothing was written at all |
+| `name` | the accessible name written, or `None` |
+| `value` | the accessible value written, or `None` |
+| `automation_id` | the id `set_automation_id` wrote, or `None` |
+| `shows_now` | what the widget's `-text` says at the moment of the walk, or `None` where it has no such option. The other half of `NAME_MAY_BE_STALE` |
+| `kept_in_step` | which properties a variable is following, so they cannot go stale |
+| `also_written` | description, help, action and state: whatever the table has no column for |
+| `gaps` | the `Gap` members for this widget, which is the whole of what is wrong with it |
+| `tabs` | a notebook's tab names, which are not widgets and appear nowhere else in the report |
+| `is_window` | whether this is a toplevel, decided structurally rather than by class name |
+
+| `Description` | |
+|---|---|
+| `strategy` | what `enable()` reported: `ANNOTATED`, `NATIVE` or `UNSUPPORTED` |
+| `root` | the path the walk started from |
+| `widgets` | one `WidgetDescription` each, in walk order, the root first |
+| `orphans` | paths annotated and not found under this root: either this is not the application's real root, or a widget went away by a route that never reached `forget()` |
+
+**Gating on it in CI.** Collect the gaps outside a set you have accepted, and
+assert the list is empty. The member names are stable, so accept them by name:
+a new kind of gap then fails the build rather than moving a number nobody reads.
+
+```python
+from tk_uia import Gap
+
+ACCEPTED = {Gap.CANNOT_BE_PRESSED, Gap.NAMED_BY_ITS_TITLE, Gap.MENUS_ARE_NATIVE}
+
+
+def test_this_window_leaves_a_client_nothing_it_cannot_read():
+    root = build_your_window()
+    tk_uia.enable(root)
+    root.update()                      # <Map> is what annotates
+
+    unaccepted = [
+        (widget.path, gap.name)
+        for widget in tk_uia.describe(root).widgets
+        for gap in widget.gaps
+        if gap not in ACCEPTED
+    ]
+    assert unaccepted == []
+```
+
+Run against
+[COOKBOOK.md](https://github.com/HuzPro/tk-uia/blob/main/COOKBOOK.md)'s form as
+that page leaves it, `unaccepted` is exactly the work that page has left to do:
+
+```
+[('.!frame.!entry', 'NO_VALUE'),
+ ('.!frame.!button', 'NAME_NOT_UNIQUE'),
+ ('.!frame2.!entry', 'NO_VALUE'),
+ ('.!frame2.!button', 'NAME_NOT_UNIQUE')]
+```
+
+With `infer_names_from_layout(root)` and a `textvariable` on each entry, the
+same gate reports `[]`. The three accepted members are the ones with nothing to
+fix: a Tk button cannot be pressed, a window is named by its title, and a menu
+was accessible before this package was installed.
+
 ### Closing the gap: compare it with what a client sees
 
 Run `tk_uia.describe(root)` inside your application and a client-side dump from
@@ -675,7 +781,7 @@ reproducible by running `probes/what_enable_alone_gives_you.py`.
 | Annotated `Checkbutton` `ToggleState` | `1`, then `0` when the application set its variable to 0 — correct, and live, with no call to this package |
 | Write trace left on a `StringVar` after its bound widget is destroyed | **0** (`trace_info()` read inside the app) |
 | `enable()` runtime dependencies | **0**, permanently |
-| gui suite (29 specs, a real window each) | ~81 s |
+| gui suite (30 specs, a real window each) | ~84 s |
 
 The `ProviderDescription` line is the useful one for anybody writing a UIA
 client. A Tk window is served by the MSAA proxy but reports `FrameworkId`
@@ -829,8 +935,12 @@ src/tk_uia/
 ├── annotate.py     # all the behaviour, over AccessibilityStore/TkWidget Protocols
 ├── describe.py     # what was written, what was not, and why — over the same Protocols
 ├── layout.py       # the row-and-caption convention, applied only when asked for
+├── tabs.py         # which handles a notebook's tabs need, where, and saying what
 ├── tkversion.py    # the Tk 9.1 capability gate
-└── _accprop.py     # the ctypes/COM humble object — the only Windows in here
+├── _accprop.py     # the ctypes/COM humble object — the only Windows in here
+├── _overlay.py     # the four Win32 calls a tab's borrowed window handle is made of
+├── _tkstrip.py     # where a real ttk.Notebook keeps its tabs, asked through Tcl
+└── _tkvars.py      # an application's own variable, reached without destroying it
 probes/            # the scripts behind the measurements above; not tests
 ```
 

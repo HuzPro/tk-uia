@@ -64,11 +64,11 @@ class Gap(Enum):
         "called forget() on it, or something here has genuinely gone wrong."
     )
     UNMAPPED_SINCE_ANNOTATED = (
-        "written, and Tk has since taken it off the screen. Everything below is "
-        "still on the widget's window and still correct, and a client can read "
-        "none of it: UI Automation does not list an unmapped window. It comes "
-        "back on its own when Tk maps the widget again -- an unselected "
-        "notebook tab is the everyday case, and nothing needs re-annotating."
+        "written, and not on the screen now. Everything below is still on the "
+        "widget's window and still correct, and a client can read none of it: "
+        "UI Automation does not list an unmapped window. It comes back on its "
+        "own when Tk maps the widget -- an unselected notebook tab is the "
+        "everyday case, and nothing needs re-annotating."
     )
     ANNOTATED_ON_A_HANDLE_IT_NO_LONGER_HAS = (
         "everything written about this widget is on a window handle it no "

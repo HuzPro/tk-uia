@@ -22,6 +22,8 @@ _A_CANVAS_HANDLE = 0x000407A4
 _A_ROOT_HANDLE = 0x000407A0
 _A_DIALOG_HANDLE = 0x000407A1
 _A_LABEL_HANDLE = 0x000407A5
+_A_TEXT_HANDLE = 0x000407A6
+_A_COMBOBOX_HANDLE = 0x000407A7
 _A_RECYCLED_HANDLE = 0x000508B1
 
 # STATE_SYSTEM_UNAVAILABLE, from oleacc.h: the widget is there but disabled.
@@ -30,6 +32,15 @@ _MSAA_STATE_UNAVAILABLE = 0x1
 _NO_CONTROL_ID_AT_ALL = 0
 _AN_ID_THE_APPLICATION_CHOSE = 4207
 _AN_ID_WIN32_IS_USING = 1101
+# What UI Automation renders an id as, and what an application reaches for
+# first because of it: `GWLP_ID` underneath holds a number and nothing else.
+_AN_ID_SPELT_AS_A_NAME = "save-button"
+
+# ROLE_SYSTEM_PUSHBUTTON, which is what `describe()` prints beside the member.
+_THE_NUMBER_A_PUSH_BUTTON_IS = 43
+_A_NUMBER_NO_ROLE_CARRIES = 7
+
+_NOT_A_WIDGET_AT_ALL = "oops"
 
 # What Tcl calls the first `StringVar` an application makes, and what
 # `cget("textvariable")` answers with once a widget has been given it.
@@ -449,6 +460,100 @@ def test_an_automation_id_is_refused_rather_than_written_over_one_windows_is_usi
     assert str(_AN_ID_WIN32_IS_USING) in str(refusal.value), (
         f"the refusal must name the id already in place: {refusal.value}"
     )
+
+
+def test_a_role_given_as_the_number_behind_it_is_refused_and_told_which_member_that_is() -> (
+    None
+):
+    # Given an application reaching for the number, which is a fair guess: the
+    # number is what gets written, and `describe()` prints it in every row
+    store = RecordingStore()
+    annotator = Annotator(store)
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+
+    # When it is passed where a Role belongs
+    with pytest.raises(TypeError) as complaint:
+        annotator.set_role(button, _THE_NUMBER_A_PUSH_BUTTON_IS)
+
+    # Then it is a TypeError and not an AnnotationRefused, because nothing was
+    # refused: the call never said anything a widget could be annotated with.
+    # And it names the member meant, which is the whole difference between a
+    # rejection and an answer.
+    assert "Role.PUSH_BUTTON" in str(complaint.value), (
+        f"the reader has to be told what to write instead: {complaint.value}"
+    )
+    assert store.writes == [], f"a role arrived as a bare number: {store.writes}"
+
+
+def test_a_role_given_as_a_number_no_role_carries_is_told_the_contract_and_nothing_more() -> (
+    None
+):
+    # Given a number that names no role at all, which is what a typo looks like
+    store = RecordingStore()
+    annotator = Annotator(store)
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+
+    # When it is passed where a Role belongs
+    with pytest.raises(TypeError) as complaint:
+        annotator.set_role(button, _A_NUMBER_NO_ROLE_CARRIES)
+
+    # Then the contract is stated and no member is invented for it. A guess at
+    # which role was meant is the confident wrong answer in a new place.
+    assert "Role" in str(complaint.value) and "int" in str(complaint.value), (
+        f"the complaint has to say what the parameter takes: {complaint.value}"
+    )
+    assert store.writes == [], f"a role arrived as a bare number: {store.writes}"
+
+
+def test_an_automation_id_given_as_text_is_refused_before_windows_is_asked_anything() -> (
+    None
+):
+    # Given the natural first attempt, since a client reads an AutomationId back
+    # as text and every example in the guide shows one quoted
+    store = RecordingStore()
+    annotator = Annotator(store)
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+
+    # When a name is passed where the id belongs
+    with pytest.raises(TypeError) as complaint:
+        annotator.set_automation_id(button, _AN_ID_SPELT_AS_A_NAME)
+
+    # Then the call is stopped at the door, and told why the id is a number:
+    # underneath it is `GWLP_ID`, the Win32 control id, and a string reaches
+    # ctypes as an argument error from a stack frame nobody here wrote.
+    assert "GWLP_ID" in str(complaint.value), (
+        f"the complaint has to say why an id here is a number: {complaint.value}"
+    )
+    assert store.control_id(_A_BUTTON_HANDLE) == _NO_CONTROL_ID_AT_ALL, (
+        "a control id was written from a value Win32 cannot carry"
+    )
+
+
+def test_a_call_handed_something_that_is_not_a_widget_says_which_parameter_it_was() -> (
+    None
+):
+    # Given an application that has passed a widget's name, or its path, where
+    # the widget itself belongs
+    store = RecordingStore()
+    annotator = Annotator(store)
+    caption = FakeWidget("Label", _A_LABEL_HANDLE, text="Host:")
+
+    # When two of the calls that take a widget are handed a string
+    with pytest.raises(TypeError) as named:
+        annotator.set_name(_NOT_A_WIDGET_AT_ALL, "Host")
+    with pytest.raises(TypeError) as associated:
+        annotator.label_for(caption, _NOT_A_WIDGET_AT_ALL)
+
+    # Then each says which parameter it was and what arrived, rather than
+    # failing several frames down on an attribute a string does not have.
+    assert "widget" in str(named.value) and "str" in str(named.value), (
+        f"the complaint names neither the parameter nor the type: {named.value}"
+    )
+    assert "widget" in str(associated.value), (
+        f"the complaint does not say which of the two arguments was wrong: "
+        f"{associated.value}"
+    )
+    assert store.writes == [], f"a string reached the store as a widget: {store.writes}"
 
 
 def test_annotating_from_a_thread_other_than_the_one_that_owns_the_widgets_is_refused() -> (
@@ -958,6 +1063,101 @@ def test_naming_a_widget_after_a_label_with_nothing_to_say_is_refused() -> None:
     )
     assert str(says_nothing) in str(refusal.value), (
         f"the refusal has to name the label that said nothing: {refusal.value}"
+    )
+
+
+def test_naming_a_widget_after_an_entry_is_refused_because_an_entry_holds_contents() -> (
+    None
+):
+    # Given a form row and an application that has said the two arguments the
+    # wrong way round. An entry declares a `-textvariable` exactly as a caption
+    # driven by one does, so nothing about the call looks unusual.
+    store = RecordingStore()
+    what_somebody_typed = FakeVariable("build.example.com")
+    annotator = Annotator(
+        store,
+        variables=VariablesByName(
+            {_THE_VARIABLE_THE_WIDGET_DECLARES: what_somebody_typed}
+        ),
+    )
+    entry = FakeWidget(
+        "Entry", _AN_ENTRY_HANDLE, textvariable=_THE_VARIABLE_THE_WIDGET_DECLARES
+    )
+    caption = FakeWidget("Label", _A_LABEL_HANDLE, text="Host:")
+
+    # When it asks for the caption to be named after the entry
+    with pytest.raises(AnnotationRefused) as refusal:
+        annotator.label_for(entry, caption)
+
+    # Then nothing was said about the caption and nothing is listening to the
+    # variable. Taken at its word the call announces the caption as whatever
+    # somebody typed into the box, and follows it keystroke by keystroke, which
+    # reads back as a confident answer to a question nobody asked.
+    assert store.properties(_A_LABEL_HANDLE) == {}, (
+        f"the caption was named after the entry's contents anyway: "
+        f"{store.properties(_A_LABEL_HANDLE)}"
+    )
+    assert what_somebody_typed.traces_left() == _NOTHING_STILL_LISTENING, (
+        f"{what_somebody_typed.traces_left()} trace(s) left on the entry's own "
+        "variable by a call that was refused"
+    )
+    assert "set_acc_name" in str(refusal.value), (
+        f"the refusal has to say what to reach for instead: {refusal.value}"
+    )
+
+
+def test_naming_a_widget_after_a_combobox_is_refused_the_same_way() -> None:
+    # Given the other everyday shape of the same mistake: a themed combobox,
+    # whose variable is the option somebody chose rather than a caption
+    store = RecordingStore()
+    chosen = FakeVariable("High")
+    annotator = Annotator(
+        store, variables=VariablesByName({_THE_VARIABLE_THE_WIDGET_DECLARES: chosen})
+    )
+    combobox = FakeWidget(
+        "TCombobox", _A_COMBOBOX_HANDLE, textvariable=_THE_VARIABLE_THE_WIDGET_DECLARES
+    )
+    caption = FakeWidget("Label", _A_LABEL_HANDLE, text="Priority:")
+
+    # When it is offered as the caption
+    with pytest.raises(AnnotationRefused) as refusal:
+        annotator.label_for(combobox, caption)
+
+    # Then it is refused by what the widget *is*, not by what it happens to
+    # declare, so the whole family is covered rather than the one class that
+    # prompted this.
+    assert store.properties(_A_LABEL_HANDLE) == {}, (
+        f"the caption was named after the chosen option: "
+        f"{store.properties(_A_LABEL_HANDLE)}"
+    )
+    assert chosen.traces_left() == _NOTHING_STILL_LISTENING, (
+        f"{chosen.traces_left()} trace(s) left on the combobox's own variable"
+    )
+    assert str(combobox) in str(refusal.value), (
+        f"the refusal has to name the widget it would not read: {refusal.value}"
+    )
+
+
+def test_naming_a_widget_after_a_text_widget_is_refused_for_holding_contents() -> None:
+    # Given a `tk.Text`, which has no `-textvariable` option at all and whose
+    # words are still the contents of the control rather than a caption
+    store = RecordingStore()
+    annotator = Annotator(store)
+    notes = FakeWidget("Text", _A_TEXT_HANDLE)
+    entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+
+    # When it is offered as the caption for an entry
+    with pytest.raises(AnnotationRefused) as refusal:
+        annotator.label_for(notes, entry)
+
+    # Then it is refused for holding contents rather than for showing no words.
+    # The two refusals send a reader to opposite places: one says give the label
+    # some words, and here that is exactly the wrong thing to do.
+    assert "contents" in str(refusal.value), (
+        f"the refusal reads as though the widget merely said nothing: {refusal.value}"
+    )
+    assert PropId.NAME not in store.properties(_AN_ENTRY_HANDLE), (
+        f"the entry was named anyway: {store.properties(_AN_ENTRY_HANDLE)}"
     )
 
 
