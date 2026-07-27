@@ -47,5 +47,15 @@ class TkTabStrip:
 
 
 def is_a_notebook(widget: object) -> bool:
-    """Whether this widget is one whose tabs need handles of their own."""
-    return isinstance(widget, ttk.Notebook)
+    """Whether this widget is one whose tabs need handles of their own.
+
+    Asked of Tk, never of Python's type system. `isinstance` against
+    `ttk.Notebook` breaks the moment a host re-imports `tkinter.ttk`, which
+    re-executes the module and makes a second, distinct class: IDLE's own
+    `idlelib/run.py` does exactly that, and every notebook it builds afterwards
+    failed the check while carrying the right class name all along. The role
+    table already keys on `winfo_class()`, so this is also the same question
+    the rest of the package asks.
+    """
+    winfo_class = getattr(widget, "winfo_class", None)
+    return winfo_class is not None and winfo_class() == "TNotebook"

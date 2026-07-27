@@ -111,6 +111,12 @@ def newly_roled_app(tmp_path: Path) -> Iterator[RunningApp]:
 
 
 @pytest.fixture
+def reimported_ttk_app(tmp_path: Path) -> Iterator[RunningApp]:
+    """A notebook built from a re-imported tkinter.ttk, the way IDLE ends up with one."""
+    yield from _the_app_in("reimported_ttk_app.py", tmp_path)
+
+
+@pytest.fixture
 def notebook_app(tmp_path: Path) -> Iterator[RunningApp]:
     """The app whose window is a notebook, for the specs about its tabs."""
     yield from _the_app_in("notebook_app.py", tmp_path)

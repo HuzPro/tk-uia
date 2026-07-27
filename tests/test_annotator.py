@@ -125,6 +125,24 @@ def test_a_role_the_application_chose_survives_the_widget_being_mapped_again() -
     )
 
 
+def test_naming_a_root_with_an_application_chosen_class_is_still_refused() -> None:
+    # Given a root whose class the application named, as tk.Tk(className=...)
+    # does. It is exactly as much a window as a plain root.
+    from tests.doubles import FakeInterpreter, FakeRoot
+
+    store = RecordingStore()
+    annotator = Annotator(store)
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), tk_class="Idle")
+
+    # When something tries to name it anyway
+    # Then the window refusal fires, for the reason it exists: winfo_id() on a
+    # toplevel answers with the container pane, so the write would land where a
+    # client reads a confident wrong answer.
+    with pytest.raises(AnnotationRefused):
+        annotator.set_name(root, "the app")
+    assert store.writes == [], f"the pane behind the window was written: {store.writes}"
+
+
 def test_a_scale_is_named_from_the_label_option_it_keeps_its_words_in() -> None:
     # Given a classic Scale, which has no `-text` at all: measured, its options
     # carry `-label` and nothing else that holds words a person reads

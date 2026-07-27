@@ -71,6 +71,7 @@ class FakeWidget:
         label: str | None = None,
         textvariable: str | None = None,
         mapped: bool = True,
+        window: bool | None = None,
         children: Sequence[FakeWidget] = (),
         path: str | None = None,
     ) -> None:
@@ -97,6 +98,13 @@ class FakeWidget:
         # a spec that turns on which window a widget is in passes `path=`.
         self._path = path if path is not None else f".!{tk_class.lower()}{hwnd}"
         self._destroyed = False
+        # Window-ness is structural in real Tk (a toplevel is its own
+        # containing toplevel), and a root's class name is application-chosen.
+        # Defaulting from the class keeps the many existing specs unchanged.
+        self._window = window if window is not None else tk_class in ("Tk", "Toplevel")
+        self._parent: FakeWidget | None = None
+        for child in self._children:
+            child._parent = self
 
     def winfo_id(self) -> int:
         self._only_from_the_thread_that_owns_tk()
@@ -117,6 +125,17 @@ class FakeWidget:
         # no longer has, which is what makes it usable as a liveness check.
         self._only_from_the_thread_that_owns_tk()
         return not self._destroyed
+
+    def winfo_toplevel(self) -> object:
+        self._only_from_the_thread_that_owns_tk()
+        if self._window:
+            return self
+        holder = self._parent
+        while holder is not None and not holder._window:
+            holder = holder._parent
+        # Real Tk always has a containing toplevel; a parentless fake answers
+        # with a stand-in so that only a window is ever its own toplevel.
+        return holder if holder is not None else _A_WINDOW_SOMEWHERE_ABOVE
 
     def winfo_children(self) -> Sequence[FakeWidget]:
         self._only_from_the_thread_that_owns_tk()
@@ -166,6 +185,9 @@ class FakeWidget:
 
     def __str__(self) -> str:
         return self._path
+
+
+_A_WINDOW_SOMEWHERE_ABOVE = object()
 
 
 class FakeTclError(Exception):
@@ -280,8 +302,9 @@ class FakeRoot(FakeWidget):
         interpreter: FakeInterpreter,
         *,
         children: Sequence[FakeWidget] = (),
+        tk_class: str = "Tk",
     ) -> None:
-        super().__init__("Tk", _A_ROOT_HANDLE, children=children)
+        super().__init__(tk_class, _A_ROOT_HANDLE, window=True, children=children)
         self.tk = interpreter
         self.class_bindings: list[tuple[str, str]] = []
         self._handlers: dict[str, object] = {}

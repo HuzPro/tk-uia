@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.6.1 - 2026-07-27
+
+Three bugs, all found by running 0.6.0 against applications that have never
+imported it: IDLE, the ttkbootstrap widget demo, and Thonny. Each has a spec
+that fails on 0.6.0.
+
+- **A re-imported `tkinter.ttk` no longer switches off notebook tabs.**
+  `is_a_notebook` asked `isinstance` against the ttk module bound at `enable()`
+  time. IDLE's `idlelib/run.py` deletes and re-imports `tkinter.ttk`, which
+  re-executes the module and makes a second `Notebook` class, so every notebook
+  IDLE built afterwards kept its role and silently lost its tabs. The gate now
+  asks `winfo_class() == "TNotebook"`, the same question the role table has
+  asked all along. Pinned by a fixture app that performs the re-import dance.
+
+- **A root created with `className=` is treated as the window it is.** IDLE and
+  Thonny both name their root class, so window-ness matched on class names sent
+  their roots to `NO_ROLE_FOR_ITS_CLASS`, whose advice is to define a role for
+  your own main window, and let `set_acc_name` write to the pane behind it.
+  Window-ness is now structural: a window is its own containing toplevel.
+
+- **The widget walk remembers where it has been.** A widget created under one
+  parent and managed into another is claimed by both, and the walk counted its
+  subtree twice: measured on Thonny, `describe()` reported 91 widgets in an
+  85-widget window and listed six of them twice.
+
+- **Menus are reported as natively accessible, not as a gap.** Measured on IDLE
+  and Thonny: the bare window already shows a `MenuBarControl` with named
+  items, because Tk builds menus out of native Windows menus. `describe()` used
+  to file every `Menu` under `NEVER_MAPPED`, sending the reader to fix
+  something that is not broken. New reason, filed under left alone on purpose.
+
 ## 0.6.0 — 2026-07-27
 
 The cost of making a Tk application accessible just dropped. A widget that told

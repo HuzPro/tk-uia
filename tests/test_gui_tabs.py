@@ -58,6 +58,27 @@ def until(what: Callable[[], bool]) -> bool:
     return False
 
 
+def test_a_notebook_from_a_reimported_ttk_still_gets_its_tabs(
+    reimported_ttk_app: RunningApp,
+) -> None:
+    # Given an application that deleted and re-imported tkinter.ttk after
+    # enable(), as IDLE's idlelib/run.py does, so its Notebook class is a
+    # second execution of the module
+    # When a client reads the window
+    seen = [
+        control.Name
+        for control in the_widgets_the_application_shows(reimported_ttk_app.window)
+        if control.ControlTypeName == _A_TAB
+    ]
+
+    # Then the tabs are there. A gate that asked isinstance failed this window
+    # silently: the notebook kept its role, lost its tabs, and nothing raised.
+    assert seen == ["Fonts", "Keys"], (
+        f"a client sees tabs {seen}; the notebook gate does not survive a "
+        "re-imported tkinter.ttk"
+    )
+
+
 def test_every_tab_on_a_notebook_is_a_control_a_client_can_see_and_name(
     notebook_app: RunningApp,
 ) -> None:

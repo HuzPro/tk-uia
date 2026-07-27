@@ -56,11 +56,18 @@ _ROLES_WHOSE_VARIABLE_IS_WHAT_THEY_HOLD = frozenset(
     {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON}
 )
 
-# Checked ahead of the role table rather than merely left out of it: a window
-# gets a correct accessible name from `wm title` for free, and overriding it
-# breaks resolving the window by its title. A caller supplying their own table
-# must not be able to undo that.
-WINDOWS_THAT_ALREADY_NAME_THEMSELVES = frozenset({"Tk", "Toplevel"})
+
+def is_a_window(widget: TkWidget) -> bool:
+    """Whether this widget is a toplevel window, whatever its class says.
+
+    Structural on purpose. A root's class name is application-chosen
+    (tk.Tk(className='Idle') answers 'Idle'), so class names cannot identify
+    windows; Tk's own answer is that a window is its own containing toplevel.
+    Menus are excluded: a Menu is a toplevel to Win32, and Tk builds it out of
+    a native Windows menu, which is not a window a title names.
+    """
+    return widget.winfo_class() != "Menu" and widget.winfo_toplevel() is widget
+
 
 _NEVER_SAID = object()
 
@@ -119,6 +126,8 @@ class TkWidget(Protocol):
     # Asked rather than inferred from a raise: `winfo exists` answers 0 for a
     # path Tk no longer has, where every other `winfo` subcommand raises.
     def winfo_exists(self) -> bool: ...
+
+    def winfo_toplevel(self) -> TkWidget: ...
 
     def winfo_children(self) -> Sequence[TkWidget]: ...
 
@@ -414,10 +423,9 @@ class Annotator:
         # store below: `winfo_class`, `keys` and `cget` each cross into the Tcl
         # interpreter, and doing that from a foreign thread corrupts it quietly.
         self._owner.refuse_any_other_caller()
-        tk_class = widget.winfo_class()
-        if tk_class in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
+        if is_a_window(widget):
             return
-        role = self.roles.get(tk_class)
+        role = self.roles.get(widget.winfo_class())
         if role is None:
             return
         # Written as inferred rather than through `set_role`/`set_name`, so that
@@ -703,7 +711,7 @@ class Annotator:
         return hwnd
 
     def _refuse_a_window_that_already_names_itself(self, widget: TkWidget) -> None:
-        if widget.winfo_class() not in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
+        if not is_a_window(widget):
             return
         # The one case where doing as asked is worse than refusing.
         # `winfo_id()` on a toplevel answers with the container child Tk puts
@@ -840,9 +848,21 @@ def _annotate_everything_already_on_screen(
 
 
 def every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
+    # With a memory of where it has been: a widget created under one parent and
+    # managed into another is claimed by both, and a walk without one counts
+    # that widget's whole subtree twice. Measured on a real IDE: six twice-
+    # walked widgets, and a report claiming 91 widgets in an 85-widget window.
+    yield from _every_widget_under(widget, seen=set())
+
+
+def _every_widget_under(widget: TkWidget, seen: set[str]) -> Iterator[TkWidget]:
     for child in widget.winfo_children():
+        path = str(child)
+        if path in seen:
+            continue
+        seen.add(path)
         yield child
-        yield from every_widget_under(child)
+        yield from _every_widget_under(child, seen)
 
 
 def _annotate_if_there_is_still_a_widget(

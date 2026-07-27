@@ -20,7 +20,6 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from tk_uia.annotate import (
-    WINDOWS_THAT_ALREADY_NAME_THEMSELVES,
     Installation,
     Ledger,
     PropId,
@@ -29,6 +28,7 @@ from tk_uia.annotate import (
     Written,
     Wrote,
     every_widget_under,
+    is_a_window,
     words_the_widget_shows,
 )
 from tk_uia.roles import Role
@@ -109,6 +109,12 @@ class Gap(Enum):
         "buttons are owner-drawn, so the proxy's synthesised BM_CLICK goes into "
         "the void. Clients must click."
     )
+    MENUS_ARE_NATIVE = (
+        "a menu. Tk builds menubars and popup menus out of native Windows "
+        "menus, which are accessible on their own: measured, a bare window "
+        "already shows a MenuBarControl with named items. Nothing needs "
+        "writing here, and nothing is."
+    )
     NAMED_BY_ITS_TITLE = (
         "a window, and `wm title` already gives it a correct accessible name. "
         "Overriding it would break resolving the window by its title, which is "
@@ -119,7 +125,7 @@ class Gap(Enum):
 # The one reason in the catalogue that is not a fault to fix. It is reported
 # rather than left out because a description that silently dropped every window
 # would read as having lost them.
-ON_PURPOSE: frozenset[Gap] = frozenset({Gap.NAMED_BY_ITS_TITLE})
+ON_PURPOSE: frozenset[Gap] = frozenset({Gap.NAMED_BY_ITS_TITLE, Gap.MENUS_ARE_NATIVE})
 
 
 @dataclass(frozen=True)
@@ -139,6 +145,9 @@ class WidgetDescription:
     # A notebook's tabs, which are not widgets and appear nowhere else in this
     # report. They have window handles of their own and nothing to walk to.
     tabs: tuple[str, ...] = ()
+    # Structural, not a class name: a client scopes queries to a window, and a
+    # root's class is whatever the application passed as className=.
+    is_window: bool = False
 
 
 @dataclass(frozen=True)
@@ -249,11 +258,7 @@ def _the_windows_a_client_scopes_a_query_to(
     # Read out of the walk rather than asked of Tk, which would be a seventh
     # kind of trip into the interpreter for something already in hand: the
     # widgets that name themselves are the toplevels, by definition.
-    return tuple(
-        widget.path
-        for widget in widgets
-        if widget.tk_class in WINDOWS_THAT_ALREADY_NAME_THEMSELVES
-    )
+    return tuple(widget.path for widget in widgets if widget.is_window)
 
 
 def _the_window_holding(path: str, windows: tuple[str, ...]) -> str:
@@ -468,6 +473,7 @@ class _AsTheWalkFoundIt:
     widget: TkWidget
     path: str
     tk_class: str
+    is_window: bool
     shows_now: str | None
 
 
@@ -481,6 +487,7 @@ def _described(
         widget=widget,
         path=str(widget),
         tk_class=widget.winfo_class(),
+        is_window=is_a_window(widget),
         shows_now=words_the_widget_shows(widget),
     )
     hwnd = ledger.handle_of(found.path)
@@ -500,6 +507,7 @@ def _nothing_was_written_about(
         value=None,
         automation_id=None,
         shows_now=found.shows_now,
+        is_window=found.is_window,
         kept_in_step=(),
         also_written={},
         gaps=_why_nothing_was_written(found, roles),
@@ -520,6 +528,7 @@ def _what_was_written_about(
         value=_whatever_was_written(said, PropId.VALUE),
         automation_id=ledger.automation_id_of(hwnd),
         shows_now=found.shows_now,
+        is_window=found.is_window,
         kept_in_step=_whatever_a_variable_is_keeping_true(said),
         also_written=_whatever_the_columns_have_no_room_for(said),
         gaps=(),
@@ -669,8 +678,10 @@ def _why_nothing_was_written(
     # Ordered, and the order is the answer: a widget is routinely both role-less
     # and never mapped, as every `tk.Menu` is, and "no role for class 'Menu'" is
     # what a reader can act on where "never mapped" is trivia.
-    if found.tk_class in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
+    if found.is_window:
         return (Gap.NAMED_BY_ITS_TITLE,)
+    if found.tk_class == "Menu":
+        return (Gap.MENUS_ARE_NATIVE,)
     if found.tk_class not in roles:
         return (Gap.NO_ROLE_FOR_ITS_CLASS,)
     if not found.widget.winfo_ismapped():

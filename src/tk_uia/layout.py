@@ -26,11 +26,11 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from tk_uia.annotate import (
-    WINDOWS_THAT_ALREADY_NAME_THEMSELVES,
     Installation,
     TkWidget,
     a_caption_read_as_a_name,
     every_widget_under,
+    is_a_window,
     variable_the_widget_declares,
     words_the_widget_shows,
 )
@@ -39,10 +39,7 @@ from tk_uia.annotate import (
 # buttons along the bottom, is packed straight onto the toplevel and sits inside
 # no frame at all. Measured: a walk that visited only frames missed exactly the
 # control that reports what went wrong.
-ROWS_A_FORM_IS_LAID_OUT_IN = (
-    frozenset({"Frame", "TFrame", "Labelframe", "TLabelframe"})
-    | WINDOWS_THAT_ALREADY_NAME_THEMSELVES
-)
+ROWS_A_FORM_IS_LAID_OUT_IN = frozenset({"Frame", "TFrame", "Labelframe", "TLabelframe"})
 
 # The classes a caption speaks for: the controls a client asks the contents of,
 # and the ones with no `-text` option to be named from. An entry is the whole
@@ -131,7 +128,7 @@ def _the_rows_under(root: TkWidget) -> Iterator[TkWidget]:
     # walk, and widgets packed straight onto it are a row like any other.
     yield root
     for widget in every_widget_under(root):
-        if widget.winfo_class() in ROWS_A_FORM_IS_LAID_OUT_IN:
+        if widget.winfo_class() in ROWS_A_FORM_IS_LAID_OUT_IN or is_a_window(widget):
             yield widget
 
 

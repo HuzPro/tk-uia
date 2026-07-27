@@ -142,6 +142,21 @@ and a package that costs an application nothing to install.
   order. The name was verified free when this project started; nothing reserves
   a PyPI name, and the first successful upload is what claims it.
 
+- **`infer_names_from_layout` should prefer the nearest caption by position.**
+  It picks a row's subject by child order today, which matched every row of the
+  settings dialog it was measured on and misfired on a paginator built
+  right-to-left: ttkbootstrap's `Page [entry] of [1]` row named the entry `of`.
+  The rectangles are available (`winfo_x`/`winfo_y`); nearest-to-the-left, then
+  nearest-above, is a strictly better rule. Until then the return value is the
+  audit: the function reports every name it chose.
+- **`python -m tk_uia app.py`.** The external verification ran three foreign
+  applications through a thirty-line wrapper that patches `mainloop`, calls
+  `enable()`, and `runpy`s the target. It worked unchanged on a stdlib module,
+  a package `__main__`, and an IDE that re-enters its event loop, because
+  `enable()` is idempotent. Shipping that wrapper would let a developer answer
+  "what would this cost me" without editing a line, and it is the natural home
+  for an `--infer-names` flag.
+
 ## Non-goals
 
 These are deliberate, not oversights. Each is a decision that was made, and the

@@ -37,6 +37,8 @@ from tk_uia.tkversion import Strategy
 
 _A_BUTTON_HANDLE = 0x000407A2
 _A_CANVAS_HANDLE = 0x000407A4
+_A_MENU_HANDLE = 0x000407B7
+_A_SECOND_FRAME_HANDLE = 0x000407B1
 _A_FRAME_HANDLE = 0x000407A6
 _A_DIALOG_HANDLE = 0x000407A1
 _AN_ENTRY_HANDLE = 0x000407A3
@@ -436,6 +438,76 @@ def test_a_notebook_whose_tabs_were_given_handles_is_not_reported_as_hollow() ->
     )
     assert said.tabs == ("General", "Paths"), (
         f"the report says its tabs are {said.tabs}"
+    )
+
+
+def test_a_root_given_its_own_class_name_is_still_reported_as_a_window() -> None:
+    # Given an application that names its root class, the way IDLE and Thonny
+    # both do: tk.Tk(className='Idle') makes winfo_class() answer 'Idle'
+    store = RecordingStore()
+    annotator = Annotator(store)
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), tk_class="Idle")
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then the root reads as what it is: a window named by its title. Matching
+    # window-ness on class names sent this row to NO_ROLE_FOR_ITS_CLASS, whose
+    # advice is to define a role for your own main window.
+    said = _what_the_description_says_about(description, str(root))
+    assert said.gaps == (Gap.NAMED_BY_ITS_TITLE,), (
+        f"a className root is reported as {said.gaps}"
+    )
+
+
+def test_a_menu_is_reported_as_natively_accessible_rather_than_as_a_hole() -> None:
+    # Given a menubar, which Tk builds out of a native Windows menu and never
+    # maps as a widget
+    store = RecordingStore()
+    annotator = Annotator(store)
+    menu = FakeWidget("Menu", _A_MENU_HANDLE, mapped=False)
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[menu])
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then the menu is in the left-alone section, not the gap list. Measured on
+    # IDLE and Thonny: the bare window already shows a MenuBarControl with named
+    # MenuItemControls, because native menus are accessible on their own. A
+    # NEVER_MAPPED row sent the reader looking for something to fix that is not
+    # broken.
+    said = _what_the_description_says_about(description, str(menu))
+    assert said.gaps == (Gap.MENUS_ARE_NATIVE,), f"a menu is reported as {said.gaps}"
+    assert Gap.MENUS_ARE_NATIVE in ON_PURPOSE, (
+        "the menu reason reads as a fault unless the report files it under "
+        "left alone on purpose"
+    )
+
+
+def test_a_widget_two_containers_both_claim_is_described_once() -> None:
+    # Given a widget that appears in two parents' child lists. Real Tk produces
+    # this when a widget is created under one parent and managed into another
+    # (in_=, or a notebook adding a frame built elsewhere); measured on Thonny,
+    # six widgets were walked twice and the report claimed 91 widgets in an
+    # 85-widget window.
+    store = RecordingStore()
+    annotator = Annotator(store)
+    shared = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+    first = FakeWidget("Frame", _A_FRAME_HANDLE, children=[shared])
+    second = FakeWidget("Frame", _A_SECOND_FRAME_HANDLE, children=[shared])
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[first, second]
+    )
+    annotator.add(shared)
+
+    # When the application asks what it has told Windows
+    description = describe(root, Installation(Strategy.ANNOTATED, annotator))
+
+    # Then the widget is one row, not two
+    described = [w.path for w in description.widgets if w.path == str(shared)]
+    assert described == [str(shared)], (
+        f"{len(described)} rows for one widget; the walk has no memory of what "
+        "it has already yielded"
     )
 
 

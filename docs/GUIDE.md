@@ -416,6 +416,30 @@ An unshown notebook tab, a window built and withdrawn: `<Map>` never fires, so
 nothing happens until it does. This is inherent to the event, and shared with Tk
 9.1's own implementation.
 
+### Menus are already accessible, without this package
+
+Tk builds menubars and popup menus out of native Windows menus. Measured
+against IDLE and Thonny: the bare window shows a `MenuBarControl` with named
+`MenuItemControl`s before `enable()` has run. A `Menu` widget itself is never
+mapped and never annotated, and `describe()` files it under "left alone on
+purpose" rather than as a gap, because there is nothing to fix.
+
+### Verified against real applications
+
+Three applications that have never imported tk-uia, launched under a generic
+injection wrapper and read back from a separate process. Bare, none of them
+offered a UIA client a single named widget of their own.
+
+| Application | own widgets named, bare | after `enable()` |
+|---|---|---|
+| IDLE Settings dialog | 0 | 10 |
+| ttkbootstrap widget demo | 0 | 48, plus 3 notebook tabs |
+| Thonny IDE | 0 | 15 |
+
+No crash, no hang, and no control rectangle moved, measured per pixel. The
+ttkbootstrap run also matched `describe()`'s claims against the external dump
+control for control.
+
 ### The rest
 
 - **`enable()` is idempotent, and one call covers the whole application.** A
