@@ -1,22 +1,20 @@
 """How much of Tkinter a Windows accessibility client can actually see.
 
-Where it plugs in: nothing imports this. It launches the two widget zoos beside
-it, reads each window through UI Automation twice — once as bare Tk, once after
-`enable()` — and writes a table saying, for every widget class Tk has, what a
-client gets and what it does not.
+Nothing imports this. It launches the two widget zoos beside it, reads each
+window through UI Automation twice, once as bare Tk and once after `enable()`,
+and writes a table saying what a client gets for every widget class Tk has.
 
     python probes/coverage_matrix.py
 
-The two views are joined **by rectangle**, not by name. The obvious scheme is to
-name each widget after its class and match on that, and it collapses exactly
-where the interesting answers are: a widget whose class has no role is never
-annotated, so it has no name to match on — and those are the rows this exists to
-find. Every widget has a rectangle and so does every node in the tree.
+The two views are joined **by rectangle**, not by name. Matching on a name
+collapses exactly where the interesting answers are: a widget whose class has no
+role is never annotated, so it has no name to match on, and those are the rows
+this exists to find. Every widget has a rectangle.
 
-`pytest-uia`'s column — the query a test would write — is read by shelling out to
-a checkout of it, because asking it directly is the only way to be sure the
-answer is not this file's own copy of a table that could drift. Without one the
-column is left out and the report says so, rather than being guessed at.
+The `a test writes` column is read by shelling out to a sibling `pytest-uia`
+checkout, because asking it directly is the only way to be sure the answer is
+not this file's own copy of a table that could drift. Without one the column is
+left out and the report says so.
 """
 
 from __future__ import annotations
@@ -188,12 +186,11 @@ def _closed(app: subprocess.Popen[str]) -> None:
 
 
 def _what_a_client_sees(title: str) -> list[Seen]:
-    """Every control under this survey's windows — both of them, where there are two.
+    """Every control under this survey's windows, both of them where there are two.
 
     A `Toplevel` is a window of its own rather than a control inside the first,
     so a reader that walked only the main window would report it as absent and
-    the row would read as unsupported. It is the one widget in either zoo that
-    is not under the window the survey is named after.
+    the row would read as unsupported.
     """
     import uiautomation as auto
 
@@ -237,10 +234,9 @@ def _patterns_on(control: Any) -> tuple[str, ...]:
             if control.GetPattern(pattern_id) is not None:
                 offered.append(name)
         except Exception:  # noqa: BLE001, S112 -- see below
-            # A provider that raises when asked is a provider that does not
-            # offer the pattern, and comtypes reports that as any of half a
-            # dozen HRESULTs. Nothing about one widget's refusal is worth
-            # failing a survey of forty for.
+            # A provider that raises when asked is one that does not offer the
+            # pattern, and comtypes reports that as any of half a dozen
+            # HRESULTs.
             continue
     return tuple(offered)
 
@@ -388,9 +384,7 @@ def _query_for(seen: Seen | None, queries: dict[str, Any] | None) -> str:
     Built from the offered list rather than from the node's role, which is not
     the same question: a control can carry `Role.TEXTBOX` and still authorise
     nothing, because it has no accessible name to match on. Deriving the query
-    from the role would print `app.textbox("")` for every unnamed entry in the
-    survey — a line that cannot work, in the column whose whole job is to say
-    what does.
+    from the role would print `app.textbox("")` for every unnamed entry.
     """
     if queries is None:
         return "*n/a*"

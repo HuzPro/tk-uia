@@ -1,23 +1,19 @@
 """Reaching a variable the application owns, by the name its widget declared.
 
-Where it plugs in: `enable()` hands this to the annotator, which calls it with
-whatever it read out of a widget's `-textvariable`. What comes back answers the
-same `TkVariable` protocol a `tkinter.StringVar` does, so every decision above
-this line — which property that variable drives, when to let go of it, what to
-announce — is made in one place and specified with no display and no Tk.
+`enable()` hands this to the annotator, which calls it with whatever it read out
+of a widget's `-textvariable`. What comes back answers the same `TkVariable`
+protocol a `tkinter.StringVar` does, so every decision above this line is made
+in one place and specified with no display and no Tk.
 
 **Why not a `tkinter.Variable`.** The obvious implementation is
 `StringVar(master, name=whatever_the_widget_declared)`, and it destroys the
-application's data. `Variable.__del__` *unsets* the Tcl variable it names,
-unconditionally — so the moment that wrapper is collected, the application's own
+application's data. `Variable.__del__` unsets the Tcl variable it names,
+unconditionally, so the moment that wrapper is collected the application's own
 variable is gone. Measured: unreadable afterwards, with no exception and nothing
-in any log, and removing the trace first makes no difference. A `Variable` that
-names somebody else's variable owns it, and this package must own nothing of the
-application's.
+in any log, and removing the trace first makes no difference.
 
 So the three things the protocol needs are made as calls into Tcl instead, which
-read and trace a variable without ever claiming it. There is no decision in here
-beyond that one, which is the same bargain `_accprop` and `_overlay` make.
+read and trace a variable without ever claiming it.
 """
 
 from __future__ import annotations
@@ -35,11 +31,10 @@ class _AVariableTheApplicationOwns:
         self._interpreter = widget.tk
         # Registered against the window rather than the widget: Tk deletes a
         # widget's Tcl commands as it destroys it, and a trace still on the
-        # variable would then fire at a command that is no longer there — a
-        # `TclError` inside Tcl's own callback, on every write, for the life of
-        # the process. Registered on the toplevel the command outlives the
-        # widget, so what answers is the liveness guard upstairs, which is where
-        # that decision already lives.
+        # variable would then fire at a command that is no longer there. That is
+        # a `TclError` inside Tcl's own callback, on every write, for the life
+        # of the process. On the toplevel the command outlives the widget, so
+        # what answers is the liveness guard upstairs.
         self._where_a_callback_becomes_a_command = widget.winfo_toplevel()
         self._name = name
 

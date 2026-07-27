@@ -2,9 +2,9 @@
 
 Tk tells Windows nothing about what a widget *is*: measured against a live
 window, the MSAA proxy reports `tk.Label` as an image and `tk.Entry` as a bare
-pane. The role number written here is the whole reason a screen reader says
-"button" and a UI Automation client sees a `ButtonControl` with a ValuePattern
-where there was none.
+pane. The role number written here is why a screen reader says "button" and a UI
+Automation client sees a `ButtonControl` with a ValuePattern where there was
+none.
 """
 
 from __future__ import annotations
@@ -46,11 +46,10 @@ _ONLY_IN_ONE_TOOLKIT = [
     ("TSizegrip", Role.GRIP),
 ]
 
-# What the MSAA-to-UIA bridge was measured to make of each number, and — for the
-# ones where more than one number was plausible — what the alternatives turned
-# out to be. A role the bridge does not recognise comes through as PaneControl,
-# which is what these widgets already were: the wrong number looks exactly like
-# success from inside this process and changes nothing a client can read.
+# What the MSAA-to-UIA bridge was measured to make of each number. A role the
+# bridge does not recognise comes through as PaneControl, which is what these
+# widgets already were: the wrong number looks like success from inside this
+# process and changes nothing a client can read.
 _MEASURED_AGAINST_THE_BRIDGE = [
     (Role.GRAPHIC, 40, "ImageControl"),
     (Role.MENU_BUTTON, 62, "SplitButtonControl"),
@@ -104,10 +103,10 @@ def test_a_label_and_an_entry_are_split_by_the_two_roles_that_mean_read_and_writ
     label = ROLE_FOR_TK_CLASS["Label"]
     entry = ROLE_FOR_TK_CLASS["Entry"]
 
-    # Then the label is static text and the entry is editable text. Measured:
-    # 41 turns the label from an `ImageControl` into a `TextControl`, and 42
-    # turns the entry into an `EditControl` carrying a ValuePattern that did not
-    # exist before it. Swapping them leaves a client with no way to type.
+    # Then the label is static text and the entry is editable text. Measured: 41
+    # turns the label from an `ImageControl` into a `TextControl`, and 42 turns
+    # the entry into an `EditControl` carrying a ValuePattern that did not exist
+    # before it.
     assert (label.value, entry.value) == (_MSAA_STATICTEXT, _MSAA_TEXT), (
         f"label is {label.value} and entry is {entry.value}; a client reads the "
         "number to decide whether a control can be written to"
@@ -120,13 +119,10 @@ def test_a_label_and_an_entry_are_split_by_the_two_roles_that_mean_read_and_writ
 def test_each_role_carries_the_number_that_was_measured_to_produce_its_control_type(
     role: Role, number: int, control_type: str
 ) -> None:
-    # Given a role this table uses, and the control type it was measured to
-    # produce when read back from another process
-    # When the number that will actually reach Windows is read off it
-    # Then it is the measured one. Nothing else in the package can catch this:
-    # `DIAGRAM`, `CLIENT` and `PANE` were all tried for the canvas and every one
-    # of them came back as the anonymous `PaneControl` the widget already was,
-    # with `S_OK` and no complaint from anywhere.
+    # Then the number that reaches Windows is the measured one. `DIAGRAM`,
+    # `CLIENT` and `PANE` were all tried for the canvas and every one came back
+    # as the anonymous `PaneControl` the widget already was, with `S_OK` and no
+    # complaint from anywhere.
     assert role.value == number, (
         f"{role.name} carries {role.value}; {number} is the number measured to "
         f"reach a client as {control_type}"

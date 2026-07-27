@@ -1,11 +1,10 @@
 """Behavioral spec for the row-and-label convention, applied on request.
 
 The walk asks a widget its class, its children, its options and its words, and
-says what it worked out through the annotator — which is every call the doubles
-already answer, so the whole of this feature is specified with no Tk, no display
-and no Windows. That is not a convenience here: this is the one part of the
-package that *guesses*, and a guess is exactly the thing that has to be pinned
-down widget by widget rather than tried against one real dialog and believed.
+says what it worked out through the annotator: every call the doubles already
+answer. That is not only a convenience. This is the one part of the package that
+*guesses*, and a guess has to be pinned down widget by widget rather than tried
+against one real dialog and believed.
 """
 
 from __future__ import annotations
@@ -63,9 +62,9 @@ def the_convention_applied_to(
 
 
 def test_an_entry_beside_a_caption_is_named_after_it() -> None:
-    # Given a form row as every Tk dialog builds one: a caption, and the entry
-    # it captions, side by side in a frame — and nothing anywhere in Tk
-    # recording that the two have anything to do with each other
+    # Given a form row as every Tk dialog builds one: a caption and the entry it
+    # captions, side by side in a frame, with nothing anywhere in Tk recording
+    # that the two have anything to do with each other
     store = RecordingStore()
     annotator = Annotator(store)
     entry = FakeWidget("Entry", _AN_ENTRY)
@@ -75,10 +74,10 @@ def test_an_entry_beside_a_caption_is_named_after_it() -> None:
     # When the application asks for the convention its own layout follows
     the_convention_applied_to(root, annotator)
 
-    # Then the entry answers to the caption beside it. This is the single
-    # largest gap left in a real window — measured on a six-tab settings dialog,
-    # 15 of its 110 controls were nameless entries, every one of them captioned
-    # by a sibling label — and it is why this call exists at all.
+    # Then the entry answers to the caption beside it. This is the largest gap
+    # left in a real window: measured on a six-tab settings dialog, 15 of its
+    # 110 controls were nameless entries, every one captioned by a sibling
+    # label.
     assert store.properties(_AN_ENTRY)[PropId.NAME] == "Host", (
         f"the entry was left as {store.properties(_AN_ENTRY)}, so a screen "
         "reader still announces an edit control and not what it is for"
@@ -110,9 +109,9 @@ def test_widgets_packed_straight_onto_a_window_are_a_row_like_any_frame() -> Non
     # When the convention is applied to the whole application
     the_convention_applied_to(root, annotator)
 
-    # Then both are named. A walk that visited only frames missed exactly the
-    # control that reports what went wrong — measured, the status line of a real
-    # application, which is packed onto the toplevel like almost every one is.
+    # Then both are named. Measured: a walk that visited only frames missed the
+    # status line of a real application, which is packed onto the toplevel like
+    # almost every one is.
     assert store.properties(_AN_ENTRY).get(PropId.NAME) == "Host", (
         f"the row packed onto the window itself was skipped: {store.properties(_AN_ENTRY)}"
     )
@@ -147,19 +146,18 @@ def test_a_caption_showing_a_variable_is_not_what_a_row_is_about() -> None:
     # When the convention decides what this row is about
     the_convention_applied_to(root, annotator)
 
-    # Then it is about the caption, never about the value. A label driven by a
-    # variable is showing what the row *holds*, not saying what it is — and
-    # taking a subject from one is measured: it produced a button announced as
+    # Then it is about the caption, never about the value. Measured: taking a
+    # subject from a label driven by a variable produced a button announced as
     # "Reset to Default for C:\Example\stopped.ico", which changes every time
-    # the value does, so no test could pin to it and no listener could use it.
+    # the value does.
     assert store.properties(_A_BUTTON)[PropId.NAME] == "Reset to Default for Icon", (
         f"the row's subject came from a value: {store.properties(_A_BUTTON)}"
     )
 
 
 def test_a_row_with_no_caption_at_all_is_named_by_the_button_that_captions_it() -> None:
-    # Given a row with no label in it, captioned by its own action button —
-    # which is how the icon rows of a real settings dialog are built
+    # Given a row with no label in it, captioned by its own action button, which
+    # is how the icon rows of a real settings dialog are built
     store = RecordingStore()
     annotator = Annotator(store)
     entry = FakeWidget("Entry", _AN_ENTRY)
@@ -180,9 +178,9 @@ def test_a_row_with_no_caption_at_all_is_named_by_the_button_that_captions_it() 
 
 
 def test_an_entry_named_after_a_caption_that_moves_moves_with_it() -> None:
-    # Given a row captioned by its own button — the one subject that can be
+    # Given a row captioned by its own button, the one subject that can be
     # driven by a variable, since a *label* showing one is a value and the rule
-    # above rejects it — and an application that retitles that caption as it runs
+    # above rejects it. The application retitles that caption as it runs.
     store = RecordingStore()
     what_the_caption_says = FakeVariable("Icon:")
     annotator = Annotator(
@@ -240,8 +238,7 @@ def test_a_button_whose_caption_says_nothing_on_its_own_is_qualified_with_its_ro
 
     # Then the button is qualified by the row it is in. Two buttons called
     # "Browse..." in one window are indistinguishable to a screen reader user
-    # choosing between them and to a locator trying to pick one — and a window
-    # with six of them offers a client no way to say which it meant.
+    # choosing between them and to a locator trying to pick one.
     assert store.properties(_A_BUTTON)[PropId.NAME] == "Browse... for GUI Executable", (
         f"the generic button was left as {store.properties(_A_BUTTON)}"
     )
@@ -264,8 +261,7 @@ def test_a_button_that_already_says_what_it_acts_on_is_left_exactly_as_it_was() 
 
     # Then it says what it always said. Qualifying every button in a window
     # would make a screen reader read the row's caption twice for the one
-    # control that never needed it, and lengthening a good name is a cost with
-    # nothing bought.
+    # control that never needed it.
     assert store.properties(_A_BUTTON)[PropId.NAME] == "Restart the service", (
         f"a button that named itself was rewritten: {store.properties(_A_BUTTON)}"
     )
@@ -273,7 +269,7 @@ def test_a_button_that_already_says_what_it_acts_on_is_left_exactly_as_it_was() 
 
 
 def test_a_button_that_captions_its_own_row_is_not_qualified_with_itself() -> None:
-    # Given a row that is nothing but a generic button — a bare "Browse..." with
+    # Given a row that is nothing but a generic button: a bare "Browse..." with
     # no caption anywhere near it, which is the row this convention cannot help
     store = RecordingStore()
     annotator = Annotator(store)
@@ -296,8 +292,8 @@ def test_a_button_that_captions_its_own_row_is_not_qualified_with_itself() -> No
 def test_a_caption_showing_a_variable_is_left_to_the_binding_enable_already_made() -> (
     None
 ):
-    # Given a label with no words of its own, driven by a variable — which
-    # `enable()` has already named and keeps in step with, on its own
+    # Given a label with no words of its own, driven by a variable that
+    # `enable()` has already named it from and keeps it in step with
     store = RecordingStore()
     what_went_wrong = FakeVariable("disk full")
     annotator = Annotator(
@@ -319,9 +315,7 @@ def test_a_caption_showing_a_variable_is_left_to_the_binding_enable_already_made
     # When the convention walks the row it sits in
     named = the_convention_applied_to(root, annotator)
 
-    # Then it is not touched at all. A label showing a variable is the one
-    # widget in the window that already announces itself correctly and keeps
-    # doing so, and a convention that renamed it after the caption beside it
+    # Then it is not touched at all. Renaming it after the caption beside it
     # would replace a live value with a fixed word.
     assert store.properties(_A_SECOND_CAPTION)[PropId.NAME] == "disk full", (
         f"the convention renamed a label that was already right: "
@@ -375,17 +369,15 @@ def test_a_qualified_button_keeps_its_qualification_when_tk_maps_it_again() -> N
     already_annotated(root, annotator)
     the_convention_applied_to(root, annotator)
 
-    # When Tk maps it again, which for a tabbed dialog is every tab change —
-    # and this convention was measured on a dialog with six tabs
+    # When Tk maps it again, which for a tabbed dialog is every tab change
     annotator.add(button)
 
     # Then the qualification stands. `<Map>` re-runs the automatic annotation,
-    # which names a widget from its own `-text`: a convention whose names ranked
-    # below an inferred caption would have every one of them quietly undone by
-    # the first tab change, on an event the application never sees. So what the
-    # convention writes is the application's own word — it was asked for — and
-    # `set_acc_name` still outranks it, before it by being left alone and after
-    # it by replacing it.
+    # which names a widget from its own `-text`, so a convention whose names
+    # ranked below an inferred caption would have every one of them undone by
+    # the first tab change. What the convention writes counts as the
+    # application's own word, since it was asked for, and `set_acc_name` still
+    # outranks it in both directions.
     assert store.properties(_A_BUTTON)[PropId.NAME] == "Browse... for GUI Executable", (
         f"the caption won the name back on the next <Map>: {store.properties(_A_BUTTON)}"
     )
@@ -415,8 +407,7 @@ def test_the_convention_reports_every_widget_it_named_and_what_it_called_it() ->
 
     # Then it says what it decided, widget by widget, read back out of what was
     # actually written rather than out of what it meant to write. A convention
-    # is a guess, and an author has to be able to see every guess it made
-    # without reading this module — `describe(root)` is still the full picture.
+    # is a guess, and an author has to be able to see every guess it made.
     assert named == (
         NamedByTheLayout(str(entry), "GUI Executable"),
         NamedByTheLayout(str(button), "Browse... for GUI Executable"),
@@ -444,9 +435,9 @@ def test_working_names_out_from_a_thread_that_does_not_own_the_widgets_is_refuse
     )
 
     # Then it is stopped before a single Tk call. This walk asks every widget in
-    # the application its class, its children and its options, and each of those
-    # crosses into the Tcl interpreter — which from a foreign thread corrupts it
-    # quietly rather than raising, so a guard anywhere further in is too late.
+    # the application its class, its children and its options, and each crosses
+    # into the Tcl interpreter, which from a foreign thread corrupts quietly
+    # rather than raising.
     assert isinstance(refusal, AnnotationRefused), (
         f"a foreign thread got through to Tk with {refusal!r}"
     )

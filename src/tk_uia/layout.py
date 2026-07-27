@@ -1,23 +1,22 @@
 """The row-and-label convention a form follows, applied because it was asked for.
 
-Where it plugs in: `tk_uia.infer_names_from_layout(root)` hands this module the
-installation `enable()` made, and it walks the widget tree naming the controls
-that have no words of their own — an entry after the caption beside it, a
-"Browse..." button after the row it acts on.
+`tk_uia.infer_names_from_layout(root)` hands this module the installation
+`enable()` made, and it walks the widget tree naming the controls that have no
+words of their own: an entry after the caption beside it, a "Browse..." button
+after the row it acts on.
 
 **Why this is not in `enable()`.** Everything else in this package is read off
-the widget that is being annotated: its class, its `-text`, the variable it
-declared. This is read off the widgets *around* it, and there is nothing in Tk
-that says a label captions the entry to its right — only that they were packed
-next to each other. That makes it a guess, and a library that guessed on its own
-would put names into applications whose layout means something else. Asked for
-explicitly, it is a convention the author has recognised in their own window; it
-is also the difference measured on a real six-tab settings dialog between 83 of
-its 110 controls being addressable and all 110 of them.
+the widget being annotated: its class, its `-text`, the variable it declared.
+This is read off the widgets *around* it, and nothing in Tk says a label
+captions the entry to its right, only that they were packed next to each other.
+That makes it a guess, and a library that guessed on its own would put names
+into applications whose layout means something else. Asked for explicitly, it is
+a convention the author has recognised in their own window. Measured on a real
+six-tab settings dialog, it takes 83 of its 110 controls addressable to 110.
 
 The walk asks a widget its class, its children, its options and its words, and
-says what it worked out through the annotator — so nothing platform-specific is
-reached from here, and the whole convention is specified against doubles.
+says what it worked out through the annotator, so nothing platform-specific is
+reached from here and the whole convention is specified against doubles.
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ from tk_uia.annotate import (
 
 # A row is a container, and a window is one too: a status bar, or a row of
 # buttons along the bottom, is packed straight onto the toplevel and sits inside
-# no frame at all. Measured — a walk that visited only frames missed exactly the
+# no frame at all. Measured: a walk that visited only frames missed exactly the
 # control that reports what went wrong.
 ROWS_A_FORM_IS_LAID_OUT_IN = (
     frozenset({"Frame", "TFrame", "Labelframe", "TLabelframe"})
@@ -65,8 +64,8 @@ WIDGETS_THAT_ACT_ON_A_ROW = frozenset(
 
 # Captions that say what a control does and nothing about what it does it to.
 # Two of these in one window are indistinguishable to a screen reader user
-# choosing between them and to a locator trying to pick one — and the dialog
-# this was measured on had six.
+# choosing between them and to a locator trying to pick one. The dialog this was
+# measured on had six.
 CAPTIONS_THAT_SAY_NOTHING_ON_THEIR_OWN = frozenset(
     {"Browse...", "Browse", "Reset to Default", "...", "?"}
 )
@@ -90,8 +89,8 @@ class NamesWidgets(Protocol):
     """What the walk needs of an annotator: what a widget is called, and two ways to say.
 
     Narrower than the annotator on purpose. This module holds the one part of
-    the package that guesses, and the only things a guess may do are ask what
-    somebody has already said and speak where nobody has.
+    the package that guesses, and a guess may only ask what somebody has already
+    said and speak where nobody has.
     """
 
     def name_of(self, widget: TkWidget) -> str | None: ...
@@ -113,10 +112,9 @@ def infer_names_from_layout(
     root: TkWidget, installation: Installation
 ) -> tuple[NamedByTheLayout, ...]:
     """Name what the layout says these widgets are, and report what that came to."""
-    # Before the walk asks its first widget anything, and for the same reason
-    # `describe` does it here rather than leaving it to the annotator: this
-    # crosses into the Tcl interpreter four ways per widget, and doing that from
-    # a foreign thread corrupts it quietly instead of raising.
+    # Before the walk asks its first widget anything: this crosses into the Tcl
+    # interpreter four ways per widget, and doing that from a foreign thread
+    # corrupts it quietly instead of raising.
     installation.owner.refuse_any_other_caller()
     return tuple(_whatever_the_convention_names(root, installation.annotator))
 
@@ -143,9 +141,9 @@ def _whatever_this_row_names(
     children = tuple(row.winfo_children())
     subject = _what_this_row_is_about(children)
     if subject is None:
-        # Nothing in the row says what it is for, and a name invented from
-        # anywhere else — the widget's path, its class — would be worse than the
-        # honest silence a client already has.
+        # Nothing in the row says what it is for, and a name invented from the
+        # widget's path or its class would be worse than the honest silence a
+        # client already has.
         return
     for child in children:
         yield from _whatever_naming_this_child_comes_to(child, subject, names)
@@ -231,8 +229,8 @@ def _what_it_is_called_now(
 ) -> Iterator[NamedByTheLayout]:
     # Read back rather than reported from what was meant: on a Tk where
     # `enable()` stood down, nothing was written at all, and a report claiming
-    # names no client can read would be exactly the confident wrong answer this
-    # package exists to refuse.
+    # names no client can read is the confident wrong answer this package exists
+    # to refuse.
     name = names.name_of(widget)
     if name is None:
         return

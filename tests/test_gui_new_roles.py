@@ -1,10 +1,8 @@
-"""Behavioral spec for the eight widget classes that gained a role in 0.5.0.
+"""Behavioral spec for the widget classes whose role was chosen by measurement.
 
-Every one of these was an anonymous `PaneControl` before, and that is exactly
-what makes the numbers behind them dangerous: a role the MSAA-to-UIA bridge does
-not recognise is accepted, returns `S_OK`, and leaves the widget as the pane it
-already was. Measured while choosing them — `DIAGRAM`, `CLIENT` and `PANE` were
-all tried for the canvas and all three did precisely that.
+A role the MSAA-to-UIA bridge does not recognise is accepted, returns `S_OK`,
+and leaves the widget as the anonymous `PaneControl` it already was. `DIAGRAM`,
+`CLIENT` and `PANE` were all tried for the canvas and all three did that.
 
 So the numbers cannot be held by a unit spec, which would only prove the table
 says what the table says. These read the widgets back from another process and
@@ -66,14 +64,13 @@ def what_a_client_reads(window: Any) -> dict[str, str]:
 def test_a_widget_that_gained_a_role_reaches_a_client_as_the_control_it_was_measured_to_be(
     newly_roled_app: RunningApp, name: str, control_type: str
 ) -> None:
-    # Given one of the widget classes that carried no role until 0.5.0
-    # When a client reads the window it is in
+    # Given one of these widgets, when a client reads the window it is in
     read = what_a_client_reads(newly_roled_app.window)
 
     # Then it arrives as the control type its number was measured to produce,
-    # and — the part that matters — as something other than the anonymous pane
-    # it used to be. A number the bridge does not know leaves it a pane, so
-    # this second assertion is the one that catches a wrong choice.
+    # and as something other than an anonymous pane. A number the bridge does
+    # not know leaves it a pane, so the second assertion is the one that catches
+    # a wrong choice.
     assert read.get(name) == control_type, (
         f"{name!r} reaches a client as {read.get(name)}, not {control_type}"
     )
@@ -85,15 +82,14 @@ def test_a_widget_that_gained_a_role_reaches_a_client_as_the_control_it_was_meas
 def test_a_scale_carries_the_name_tk_keeps_in_its_label_option(
     newly_roled_app: RunningApp,
 ) -> None:
-    # Given a Scale given its caption the only way Tk allows — `-label`, since a
+    # Given a Scale given its caption the only way Tk allows, `-label`, since a
     # classic Scale has no `-text` option at all
     # When a client reads the window
     read = what_a_client_reads(newly_roled_app.window)
 
     # Then the caption is its accessible name, inferred rather than set by hand.
-    # Nothing in the fixture names this widget: an inference that only ever read
-    # `-text` would leave the one widget built differently as the one widget a
-    # screen reader announces as an unnamed slider.
+    # Nothing in the fixture names this widget, so an inference that only read
+    # `-text` would leave it announced as an unnamed slider.
     assert read.get(A_LABELLED_SCALE) == "SliderControl", (
         f"a labelled Scale reaches a client as {read.get(A_LABELLED_SCALE)}"
     )

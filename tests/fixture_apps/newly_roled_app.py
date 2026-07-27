@@ -1,10 +1,9 @@
-"""Fixture app: one of every widget class that gained a role in 0.5.0.
+"""Fixture app: one of every widget class whose role was chosen by measurement.
 
-Where it plugs in: `test_gui_new_roles.py` reads this back from another process
-and checks each one arrives as the control type the role was *measured* to
-produce. That measurement is the whole basis for the numbers in `roles.py`, and
-without a spec holding it, a number could be changed to another plausible one
-and nothing in the suite would notice — every wrong number reaches a client as
+`test_gui_new_roles.py` reads this back from another process and checks each one
+arrives as the control type the role was *measured* to produce. Without a spec
+holding that, a number in `roles.py` could be changed to another plausible one
+and nothing in the suite would notice: every wrong number reaches a client as
 the anonymous `PaneControl` these widgets already were.
 
 Each widget is named explicitly, because most of these have no words of their

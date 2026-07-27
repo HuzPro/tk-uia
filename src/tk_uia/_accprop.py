@@ -1,29 +1,24 @@
 """The `oleacc` calls an annotation is actually made of.
 
-Where it plugs in: this is the one implementation of
-:class:`~tk_uia.annotate.AccessibilityStore`, and the only module in the package
-that knows COM exists. Everything above it decides *what* a widget should say;
-this decides nothing at all.
+The one implementation of :class:`~tk_uia.annotate.AccessibilityStore`, and the
+only module in the package that knows COM exists. A humble object by design: no
+branch worth a unit test, only ctypes plumbing that cannot run without a Windows
+desktop. Its correctness is proven by the gui specs, which read the properties
+back out of a live window from a separate process.
 
-Humble object by design: it holds no branch worth a unit test, only ctypes
-plumbing that cannot run without a Windows desktop. What it is *for* is
-specified against :class:`~tk_uia.annotate.Annotator` with a recording double,
-and this module's own correctness is proven by the gui specs, which read the
-properties back out of a live window from a separate process.
-
-Two details here return `S_OK` and do nothing at all when they are wrong, which
-is the exact failure this package exists to refuse, so neither is guessed at:
+Two details here return `S_OK` and do nothing at all when they are wrong, so
+neither is guessed at:
 
 * every `PROPID_ACC_*` GUID is transcribed from `oleacc.h` in the Windows SDK
-  (10.0.22621.0), not recalled — `PROPID_ACC_HELP` in particular is not the
-  value that intuition suggests;
+  (10.0.22621.0), not recalled. `PROPID_ACC_HELP` in particular is not the value
+  intuition suggests;
 * `MSAAPROPID` is `typedef GUID`, so `idProp` is passed **by value**. Passing a
   pointer compiles, runs, returns `S_OK`, and annotates nothing.
 
 `ctypes.HRESULT` and `ctypes.WINFUNCTYPE` do not exist off Windows, so every
 prototype is built on first use rather than at import. That is what lets this
-module be imported — and `enable()` be called — on a machine that has no MSAA
-to reach for.
+module be imported, and `enable()` be called, on a machine that has no MSAA to
+reach for.
 """
 
 from __future__ import annotations
@@ -65,9 +60,8 @@ _WINDOWS = "win32"
 # *before* the caller sees the value, so `_checked` never runs and the message
 # an application gets is a bare "[WinError -2147024891] Access is denied" with
 # no way to tell which of eleven identical-looking annotation calls refused.
-# Read as a number, the code reaches `_checked`, which names the call — and
-# catches the positive non-`S_OK` answers `ctypes.HRESULT` lets through as
-# success.
+# Read as a number, the code reaches `_checked`, which names the call and also
+# catches the positive non-`S_OK` answers `ctypes.HRESULT` lets through.
 _HOWEVER_COM_ANSWERED = ctypes.c_long
 
 
@@ -136,7 +130,7 @@ class AccPropServicesStore:
     def __init__(self) -> None:
         # Nothing is reached for here. `enable()` builds one of these before the
         # version gate has run, and on a machine with no MSAA at all it is then
-        # never used — constructing it must therefore cost nothing.
+        # never used, so constructing it must cost nothing.
         self._services: ctypes.c_void_p | None = None
 
     def set_string(self, hwnd: int, prop: PropId, value: str) -> None:
@@ -214,9 +208,9 @@ def _acc_prop_services() -> ctypes.c_void_p:
     ole32 = ctypes.windll.ole32
     started = ole32.CoInitializeEx(None, _COINIT_APARTMENTTHREADED)
     # S_FALSE means this thread was already in an apartment, and
-    # RPC_E_CHANGED_MODE means it is in a different one — both fine, both
-    # somebody else's apartment to close, which is why CoUninitialize is never
-    # called anywhere in this package.
+    # RPC_E_CHANGED_MODE means it is in a different one. Both are fine, and both
+    # are somebody else's apartment to close, which is why CoUninitialize is
+    # never called anywhere in this package.
     if started not in (_S_OK, _S_FALSE) and (started & 0xFFFFFFFF) != (
         _RPC_E_CHANGED_MODE
     ):

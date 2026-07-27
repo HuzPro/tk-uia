@@ -1,10 +1,9 @@
 """Behavioral spec for what an application is told it has told Windows.
 
-Every one of these runs against the same doubles the annotator's own specs use,
-which is the point rather than a compromise: the description is a reading of the
-annotation ledger and a walk of the widget tree, and neither needs a display, a
-Tk build or Windows to be specified. The report a reader prints is specified the
-same way, so the whole feature is covered by the lane that has no Tk at all.
+The description is a reading of the annotation ledger and a walk of the widget
+tree, so it is specified against the same doubles the annotator's own specs use.
+So is the report a reader prints, which puts the whole feature in the lane that
+needs no Tk, no display and no Windows.
 """
 
 from __future__ import annotations
@@ -78,9 +77,8 @@ def test_describing_an_annotated_widget_reports_the_role_and_the_name_that_were_
     # When the application asks what it has told Windows about its widgets
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then it is told, per widget, what was written. Every failure mode this
-    # package has returns `S_OK` and does nothing, so an application that cannot
-    # ask what it wrote has no way to tell an annotation from a silence.
+    # Then it is told, per widget, what was written. Every failure mode here
+    # returns `S_OK` and does nothing, so silence and success read alike.
     said = _what_the_description_says_about(description, str(button))
 
     assert (said.role, said.name) == (Role.PUSH_BUTTON, "New Task"), (
@@ -93,8 +91,8 @@ def test_a_widget_whose_class_has_no_role_is_named_as_unwritten_rather_than_left
     None
 ):
     # Given somebody's own widget nested inside a frame. Every class both
-    # toolkits ship has a role now, so the widget `enable()` walks past is no
-    # longer a canvas — it is a custom one registered under its own class name.
+    # toolkits ship has a role, so the only widget `enable()` walks past is one
+    # registered under a class name it has never seen.
     store = RecordingStore()
     annotator = Annotator(store)
     homemade = FakeWidget("SparklineChart", _A_CANVAS_HANDLE)
@@ -106,10 +104,9 @@ def test_a_widget_whose_class_has_no_role_is_named_as_unwritten_rather_than_left
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then it is in the report, by its path, with the reason nothing was
-    # written about it. A description that listed only what it had written would
-    # render an application nobody annotated as a blank page — and the widget an
-    # author most needs to see is the one they never thought about.
+    # Then it is in the report, by its path, with the reason nothing was written
+    # about it. A description listing only successes would render an application
+    # nobody annotated as a blank page.
     said = _what_the_description_says_about(description, str(homemade))
 
     assert said.gaps == (Gap.NO_ROLE_FOR_ITS_CLASS,), (
@@ -121,10 +118,9 @@ def test_a_widget_whose_class_has_no_role_is_named_as_unwritten_rather_than_left
 def test_a_widget_tk_never_mapped_is_reported_as_never_mapped_and_not_as_a_missing_role() -> (
     None
 ):
-    # Given a frame the geometry manager never found room for, in a window that
-    # switched accessibility on. A fixed `geometry()` silently drops whatever
-    # the packer cannot fit: `<Map>` never fires, so the sweep never sees it and
-    # nothing anywhere raises. This widget has a role — it is not the canvas.
+    # Given a frame the geometry manager never found room for. A fixed
+    # `geometry()` silently drops whatever the packer cannot fit: `<Map>` never
+    # fires, so the sweep never sees it and nothing anywhere raises.
     store = RecordingStore()
     annotator = Annotator(store)
     never_fitted = FakeWidget("Frame", _A_FRAME_HANDLE, mapped=False)
@@ -135,10 +131,9 @@ def test_a_widget_tk_never_mapped_is_reported_as_never_mapped_and_not_as_a_missi
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then it is told the widget was never mapped, which is the actionable
-    # answer, rather than that its class has no role — which is not even true.
-    # Two reasons apply to a widget at once far more often than they look like
-    # they will, and which one is reported is the whole value of the line.
+    # Then it is told the widget was never mapped rather than that its class has
+    # no role. Two reasons apply to a widget at once more often than they look
+    # like they will, and which one is reported is the value of the line.
     said = _what_the_description_says_about(description, str(never_fitted))
 
     assert said.gaps == (Gap.NEVER_MAPPED,), (
@@ -162,7 +157,7 @@ def test_a_toplevel_is_reported_as_left_alone_on_purpose_rather_than_as_a_failur
     # Then both windows are in the report, and both carry the one reason that is
     # not a fault. Leaving them out would read as the description having lost
     # them; listing them among the failures would send a reader off to fix
-    # something this package refuses to do on purpose.
+    # something this package refuses on purpose.
     windows = [
         _what_the_description_says_about(description, path)
         for path in (str(root), str(dialog))
@@ -180,9 +175,9 @@ def test_a_toplevel_is_reported_as_left_alone_on_purpose_rather_than_as_a_failur
 def test_a_mapped_widget_with_a_role_that_was_never_written_to_is_reported_as_such() -> (
     None
 ):
-    # Given a button on screen, in a window where nothing was ever annotated —
-    # which is what an author sees when the version gate stood down, or when
-    # `enable()` was called before the widget existed
+    # Given a button on screen, in a window where nothing was ever annotated:
+    # the version gate stood down, or `enable()` was called before the widget
+    # existed
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -191,9 +186,9 @@ def test_a_mapped_widget_with_a_role_that_was_never_written_to_is_reported_as_su
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then the widget is reported as showing, roleable, and carrying nothing —
-    # which is a different complaint from either of the two above it, and the
-    # only one that means something has actually gone wrong.
+    # Then the widget is reported as showing, roleable, and carrying nothing:
+    # a different complaint from either of the two above it, and the only one
+    # that means something has actually gone wrong.
     said = _what_the_description_says_about(description, str(button))
 
     assert said.gaps == (Gap.NOTHING_WRITTEN,), (
@@ -205,8 +200,8 @@ def test_a_mapped_widget_with_a_role_that_was_never_written_to_is_reported_as_su
 def test_a_class_the_application_gave_a_role_to_is_never_reported_as_a_class_with_no_role() -> (
     None
 ):
-    # Given an application that has already done the thing the report would tell
-    # it to do — named its canvas in `enable(root, roles=...)` — and a canvas the
+    # Given an application that has already done what the report would tell it
+    # to do, naming its canvas in `enable(root, roles=...)`, and a canvas the
     # geometry manager then never mapped
     store = RecordingStore()
     annotator = Annotator(store, {"Canvas": Role.STATIC_TEXT})
@@ -219,8 +214,7 @@ def test_a_class_the_application_gave_a_role_to_is_never_reported_as_a_class_wit
     # Then it is told the widget was never mapped, not that its class needs a
     # role. Reading the built-in table rather than the one actually in force
     # would answer "pass roles={...} to enable()" to a reader who did exactly
-    # that — a confident wrong answer, which is the failure mode this whole
-    # package exists to refuse.
+    # that.
     said = _what_the_description_says_about(description, str(canvas))
 
     assert said.gaps == (Gap.NEVER_MAPPED,), (
@@ -233,8 +227,7 @@ def test_an_annotated_entry_is_reported_as_having_neither_a_name_nor_a_value_a_c
     None
 ):
     # Given an entry that `enable()` annotated and the application said no more
-    # about — the widget with no `-text` to be named from, and whose contents
-    # live in a variable rather than on the widget
+    # about: no `-text` to be named from, and its contents in a variable
     store = RecordingStore()
     annotator = Annotator(store)
     entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
@@ -245,9 +238,9 @@ def test_an_annotated_entry_is_reported_as_having_neither_a_name_nor_a_value_a_c
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then both halves are named. The role alone gave this widget a ValuePattern
-    # it did not have before, and until something writes one it answers `''` —
-    # a confident wrong answer where bare Tk gave no answer at all, and the one
-    # place in this package where annotating leaves a client worse informed.
+    # it did not have before, and until something writes one it answers `''`:
+    # the one place in this package where annotating leaves a client worse
+    # informed than bare Tk did.
     said = _what_the_description_says_about(description, str(entry))
 
     assert said.gaps == (Gap.NO_NAME, Gap.NO_VALUE), (
@@ -260,8 +253,7 @@ def test_an_annotated_spinbox_with_nothing_in_it_is_reported_as_having_no_value(
     None
 ):
     # Given a spinbox that `enable()` annotated and the application said no more
-    # about — the quantity box in a form, with the number it shows living in a
-    # variable nobody has introduced
+    # about: the quantity box in a form, showing a number nobody introduced
     store = RecordingStore()
     annotator = Annotator(store)
     spinbox = FakeWidget("Spinbox", _A_SPINBOX_HANDLE)
@@ -275,8 +267,7 @@ def test_an_annotated_spinbox_with_nothing_in_it_is_reported_as_having_no_value(
 
     # Then the value is reported missing, exactly as an entry's is. COVERAGE.md
     # measures this one from another process: an annotated spinbox reaches a
-    # client as a `SpinnerControl` carrying a ValuePattern, so a report that
-    # left it out understated by one whole widget class in both toolkits.
+    # client as a `SpinnerControl` carrying a ValuePattern.
     said = _what_the_description_says_about(description, str(spinbox))
 
     assert said.gaps == (Gap.NO_NAME, Gap.NO_VALUE), (
@@ -304,10 +295,8 @@ def test_an_annotated_progressbar_is_reported_as_having_no_value_until_one_is_sa
 
     # Then the value is reported missing. Measured cross-process, three ways: an
     # annotated progressbar's ValuePattern answers '' with nothing written, and
-    # still '' after the widget's own -value moved from 10 to 90 — the proxy
-    # never serves the widget's number. Only set_acc_value reads back. So a bar
-    # visibly at 40 percent tells a client nothing, which is exactly the
-    # confident wrong answer this gap exists to name.
+    # still '' after the widget's own -value moved from 10 to 90. Only
+    # set_acc_value reads back, so a bar visibly at 40 percent says nothing.
     said = _what_the_description_says_about(description, str(progressbar))
 
     assert Gap.NO_VALUE in said.gaps, (
@@ -331,8 +320,7 @@ def test_a_spinbox_whose_value_was_written_is_not_reported_as_missing_one() -> N
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then nothing is held against it. The gap is a missing value and not the
-    # role that offers one, and a report that flagged every spinbox in a window
-    # would send an author to fix the boxes they have already filled in.
+    # role that offers one.
     said = _what_the_description_says_about(description, str(spinbox))
 
     assert Gap.NO_VALUE not in said.gaps, (
@@ -358,10 +346,9 @@ def test_a_frame_is_not_reported_as_unnamed_because_a_grouping_is_not_what_a_scr
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then neither is held against it. This is a signal-to-noise decision, and
-    # it is pinned so that changing it has to be deliberate: a report that
-    # flagged every container would bury the one entry that genuinely needs a
-    # name under a list of frames nobody was ever going to name.
+    # Then neither is held against it. A signal-to-noise decision, pinned so
+    # that changing it has to be deliberate: a report flagging every container
+    # would bury the one entry that genuinely needs a name.
     structural = [
         _what_the_description_says_about(description, path)
         for path in (str(frame), str(scrollbar))
@@ -392,10 +379,8 @@ def test_a_listbox_is_reported_as_findable_with_its_rows_not_in_the_tree_at_all(
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then each is reported as findable and hollow. Tk gives one window handle
-    # per widget and annotation works on handles; the rows, items and tabs would
-    # need MSAA's child-id model, which is a different piece of machinery. A
-    # screen-reader user can find the listbox and cannot hear what is in it.
+    # Then each is reported as findable and hollow: a screen-reader user can
+    # find the listbox and cannot hear what is in it.
     said = [
         _what_the_description_says_about(description, str(widget))
         for widget in compound
@@ -444,9 +429,7 @@ def test_a_notebook_whose_tabs_were_given_handles_is_not_reported_as_hollow() ->
         ),
     )
 
-    # Then the tabs are named as reachable rather than reported missing. Saying
-    # a notebook is hollow when a client can already see and press every tab on
-    # it would send an author looking for a gap that is not there.
+    # Then the tabs are named as reachable rather than reported missing.
     said = _what_the_description_says_about(description, str(notebook))
     assert Gap.ITEMS_NOT_IN_THE_TREE not in said.gaps, (
         f"a notebook with handles for both its tabs is reported as {said.gaps}"
@@ -459,8 +442,8 @@ def test_a_notebook_whose_tabs_were_given_handles_is_not_reported_as_hollow() ->
 def test_a_widget_tk_has_unmapped_since_it_was_annotated_is_reported_as_out_of_reach() -> (
     None
 ):
-    # Given a widget that was annotated while it was on screen, and which Tk has
-    # since taken off it — an unselected notebook tab is the everyday case
+    # Given a widget annotated while it was on screen, and which Tk has since
+    # taken off it. An unselected notebook tab is the everyday case.
     store = RecordingStore()
     annotator = Annotator(store)
     entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
@@ -472,18 +455,14 @@ def test_a_widget_tk_has_unmapped_since_it_was_annotated_is_reported_as_out_of_r
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then it is reported as out of reach rather than as written. Measured
-    # against a real tabbed dialog: after a tab change, 23 widgets kept their
-    # handles and every annotation on them, and a client could read none of
-    # them — UI Automation does not list an unmapped window. A report that
-    # still called those written was the one thing this file exists to refuse.
+    # Then it is reported as out of reach rather than as written: UI Automation
+    # does not list an unmapped window, however intact the annotation on it is.
     said = _what_the_description_says_about(description, str(entry))
     assert said.gaps == (Gap.UNMAPPED_SINCE_ANNOTATED,), (
         f"reported {said.gaps} for a widget nothing can currently read"
     )
-    # And the row still shows what was written, because it is all still there:
-    # the widget comes back the moment Tk maps it again, and nothing has to be
-    # re-annotated for that to happen.
+    # And the row still shows what was written, because it is all still there.
+    # The widget comes back the moment Tk maps it again.
     assert (said.role, said.name) == (Role.TEXT, "Host"), (
         f"the row lost what was written about it: role {said.role}, name {said.name!r}"
     )
@@ -504,9 +483,8 @@ def test_an_annotated_button_is_reported_as_advertising_an_invoke_pattern_that_p
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then the README's central caveat is repeated against this widget, by path.
-    # Both of those patterns lie: they return cleanly and the Tk command behind
-    # the button never runs, because every Tk button is owner-drawn and the
-    # proxy synthesises Invoke from a `BM_CLICK` nothing is listening for.
+    # Both patterns lie: every Tk button is owner-drawn, and the proxy
+    # synthesises Invoke from a `BM_CLICK` nothing is listening for.
     said = _what_the_description_says_about(description, str(button))
 
     assert said.gaps == (Gap.CANNOT_BE_PRESSED,), (
@@ -532,8 +510,7 @@ def test_a_name_that_no_longer_matches_the_widgets_text_is_reported_as_possibly_
 
     # Then the disagreement is reported, along with what the widget says now.
     # `-text` is read at `<Map>` and never again, so a client goes on being told
-    # 'Task list' indefinitely — and staleness is the worst way an accessibility
-    # tree can be wrong, because a stale answer reads exactly like a true one.
+    # 'Task list'. A stale answer reads exactly like a true one.
     said = _what_the_description_says_about(description, str(label))
 
     assert said.gaps == (Gap.NAME_MAY_BE_STALE,), (
@@ -562,8 +539,7 @@ def test_a_name_the_application_chose_itself_is_never_called_stale_when_the_widg
 
     # Then the disagreement between the two is not held against it. Without
     # knowing where a name came from, the staleness check fires on a documented,
-    # encouraged pattern — and a diagnostic that cries wolf on good code is
-    # ignored, which is how the one genuinely stale name gets missed too.
+    # encouraged pattern, and a diagnostic that cries wolf gets ignored.
     said = _what_the_description_says_about(description, str(button))
 
     assert Gap.NAME_MAY_BE_STALE not in said.gaps, (
@@ -575,7 +551,7 @@ def test_a_name_the_application_chose_itself_is_never_called_stale_when_the_widg
 def test_two_widgets_a_client_cannot_tell_apart_are_both_reported_as_ambiguous() -> (
     None
 ):
-    # Given the shape measured on a real six-tab settings dialog: two `Browse...`
+    # Given the shape measured on a real settings dialog: two `Browse...`
     # buttons on one tab, each correctly typed, each correctly named, and named
     # identically
     store = RecordingStore()
@@ -593,10 +569,8 @@ def test_two_widgets_a_client_cannot_tell_apart_are_both_reported_as_ambiguous()
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then both are named as ambiguous. Nothing is wrong with either widget on
-    # its own, which is exactly why no per-widget check can see this and why it
-    # takes the whole walk: a client asking for "the Browse... button" reaches
-    # one of the two at random, and a screen-reader user hears the same
-    # announcement for controls that do different things.
+    # its own, which is why no per-widget check can see this: a client asking
+    # for "the Browse... button" reaches one of the two at random.
     said = [
         _what_the_description_says_about(description, str(widget))
         for widget in (for_the_executable, for_the_log)
@@ -611,8 +585,8 @@ def test_two_widgets_a_client_cannot_tell_apart_are_both_reported_as_ambiguous()
 def test_the_ambiguity_is_added_to_what_a_widget_is_already_missing_rather_than_replacing_it() -> (
     None
 ):
-    # Given those same two buttons, which — like every Tk button — also
-    # advertise an InvokePattern that presses nothing
+    # Given those same two buttons, which like every Tk button also advertise an
+    # InvokePattern that presses nothing
     store = RecordingStore()
     annotator = Annotator(store)
     for_the_executable = FakeWidget("Button", _A_BUTTON_HANDLE, text="Browse...")
@@ -629,9 +603,8 @@ def test_the_ambiguity_is_added_to_what_a_widget_is_already_missing_rather_than_
 
     # Then the widget carries both reasons. This one is additive where
     # UNMAPPED_SINCE_ANNOTATED replaces, and the difference is whether the other
-    # reasons are still true: a widget nothing can see has no other complaint
-    # worth hearing, while two buttons that cannot be told apart are still two
-    # buttons that cannot be pressed.
+    # reasons are still true: two buttons that cannot be told apart are still
+    # two buttons that cannot be pressed.
     said = _what_the_description_says_about(description, str(for_the_log))
 
     assert said.gaps == (Gap.CANNOT_BE_PRESSED, Gap.NAME_NOT_UNIQUE), (
@@ -641,8 +614,8 @@ def test_the_ambiguity_is_added_to_what_a_widget_is_already_missing_rather_than_
 
 
 def test_the_same_name_on_two_different_roles_is_not_reported_as_ambiguous() -> None:
-    # Given a heading and a button that both read "Options" — the everyday shape
-    # of a section captioned above the control that opens it
+    # Given a heading and a button that both read "Options": a section captioned
+    # above the control that opens it
     store = RecordingStore()
     annotator = Annotator(store)
     heading = FakeWidget("Label", _A_LABEL_HANDLE, text="Options")
@@ -657,9 +630,8 @@ def test_the_same_name_on_two_different_roles_is_not_reported_as_ambiguous() -> 
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then neither is held against it. A query names a control type as well as a
-    # name — `app.text("Options")` and `app.button("Options")` reach one widget
-    # each — so a check that matched on the name alone would flag the commonest
-    # arrangement in every window there is, and be switched off within a day.
+    # name, so `app.text("Options")` and `app.button("Options")` reach one
+    # widget each.
     said = [
         _what_the_description_says_about(description, str(widget))
         for widget in (heading, button)
@@ -674,8 +646,8 @@ def test_the_same_name_on_two_different_roles_is_not_reported_as_ambiguous() -> 
 def test_widgets_nobody_named_are_never_reported_as_ambiguous_with_one_another() -> (
     None
 ):
-    # Given two entries in a form, neither of them named — which is the state
-    # `enable()` alone leaves every entry in an application in
+    # Given two entries in a form, neither named, which is the state `enable()`
+    # alone leaves every entry in
     store = RecordingStore()
     annotator = Annotator(store)
     host = FakeWidget("Entry", _AN_ENTRY_HANDLE)
@@ -690,10 +662,8 @@ def test_widgets_nobody_named_are_never_reported_as_ambiguous_with_one_another()
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then neither is reported as a duplicate of the other. Both are already
-    # reported as NO_NAME, which is the fix and is one call each; counting every
-    # anonymous widget in a window as clashing with every other would put most
-    # of a form under a heading whose advice is to qualify a caption that does
-    # not exist.
+    # reported as NO_NAME, which is the fix and is one call each; the advice
+    # under NAME_NOT_UNIQUE is to qualify a caption neither of them has.
     said = [
         _what_the_description_says_about(description, str(widget))
         for widget in (host, port)
@@ -730,10 +700,9 @@ def test_the_same_control_in_two_windows_is_not_a_collision_because_a_client_ask
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then neither is reported as ambiguous. Ambiguity is counted per window
-    # because that is how a client resolves one: every query starts by finding
-    # the window by its title and then searches inside it, so a name repeated
-    # across two windows is two answers to two different questions. Counting it
-    # globally would flag the OK button of every dialog an application has.
+    # because that is how a client resolves one: every query finds the window by
+    # its title and searches inside it. Counting it globally would flag the OK
+    # button of every dialog an application has.
     said = [
         _what_the_description_says_about(description, str(widget))
         for widget in (in_the_dialog, in_the_main_window)
@@ -750,9 +719,7 @@ def test_a_window_whose_path_merely_begins_with_anothers_is_still_a_different_wi
 ):
     # Given two dialogs whose Tk paths differ only by a digit on the end, each
     # with a "Confirm" of its own. `.!toplevel22` begins with the whole of
-    # `.!toplevel2` and is not inside it — Tk separates a path by segments, and
-    # an application that has opened this many windows is the ordinary way to
-    # arrive at two that read alike.
+    # `.!toplevel2` and is not inside it: Tk separates a path by segments.
     store = RecordingStore()
     annotator = Annotator(store)
     in_the_second = FakeWidget(
@@ -780,9 +747,7 @@ def test_a_window_whose_path_merely_begins_with_anothers_is_still_a_different_wi
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then neither is reported as ambiguous. A widget's window is read out of
-    # the paths the walk already has, and a Tk path is a run of segments rather
-    # than a string of characters: these two windows share eleven of those
+    # Then neither is reported as ambiguous. These two windows share eleven
     # characters and hold nothing of each other, so each "Confirm" is the only
     # answer to the only question that will be asked of it.
     said = [
@@ -801,9 +766,8 @@ def test_the_report_says_which_properties_a_variable_is_keeping_in_step_so_a_rea
     None
 ):
     # Given a status label showing "ready" and bound to a variable that already
-    # holds "ready" — the ordinary shape of a startup, and the arrangement where
-    # binding announces a value the ledger has already written. The COM write is
-    # skipped, which is the ledger doing exactly the job it exists for.
+    # holds "ready", the ordinary shape of a startup. The ledger skips the COM
+    # write, which is the job it exists for.
     store = RecordingStore()
     annotator = Annotator(store)
     label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
@@ -817,8 +781,7 @@ def test_the_report_says_which_properties_a_variable_is_keeping_in_step_so_a_rea
 
     # Then the name is reported as one something is keeping true, and not as one
     # that has gone stale. Skipping the COM write must not skip recording where
-    # the value came from: a report that did would tell an author to go and fix
-    # the one widget in the window that is already looking after itself.
+    # the value came from.
     said = _what_the_description_says_about(description, str(label))
 
     assert said.kept_in_step == (PropId.NAME,), (
@@ -834,8 +797,7 @@ def test_a_widget_following_the_variable_it_declares_is_reported_as_kept_in_step
 ):
     # Given a status label driven by a `textvariable` and bound by nobody, whose
     # variable has moved on since. Tk keeps a classic label's `-text` in step
-    # with its variable, so this is the shape that used to be reported as a name
-    # gone stale on every single write.
+    # with its variable, so both sides move together.
     store = RecordingStore()
     status = FakeVariable("ready")
     annotator = Annotator(
@@ -853,9 +815,8 @@ def test_a_widget_following_the_variable_it_declares_is_reported_as_kept_in_step
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then the report says a variable is keeping this name true, and nothing
-    # asks the author to go and fix it. A widget looking after itself must not
-    # be listed beside the ones that are genuinely wrong, or the list stops
-    # being read.
+    # asks the author to go and fix it. A widget looking after itself listed
+    # beside the ones that are genuinely wrong is how the list stops being read.
     said = _what_the_description_says_about(description, str(label))
 
     assert said.name == "task created", (
@@ -888,8 +849,7 @@ def test_the_automation_id_an_application_asked_for_is_reported_against_the_widg
 
     # Then the number is reported beside the widget that was given it. It goes
     # straight through to `GWLP_ID` and never near the property ledger, so a
-    # report reading only the properties would show the one identifier a test
-    # suite is going to depend on as absent.
+    # report reading only the properties would show it as absent.
     said = _what_the_description_says_about(description, str(button))
 
     assert said.automation_id == _AN_ID_THE_APPLICATION_CHOSE, (
@@ -900,7 +860,7 @@ def test_the_automation_id_an_application_asked_for_is_reported_against_the_widg
 def test_every_other_property_that_was_written_is_reported_rather_than_only_the_four_in_the_table() -> (
     None
 ):
-    # Given a button the application has filled in completely — the four
+    # Given a button the application has filled in completely: the four
     # properties a report's columns have no room for
     store = RecordingStore()
     annotator = Annotator(store)
@@ -915,8 +875,7 @@ def test_every_other_property_that_was_written_is_reported_rather_than_only_the_
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then all four come back. They are rare and they are in the ledger, and a
-    # report whose stated principle is that it must not quietly omit what it
+    # Then all four come back. A report that must not quietly omit what it
     # cannot see cannot quietly omit four properties it can.
     said = _what_the_description_says_about(description, str(button))
 
@@ -932,8 +891,8 @@ def test_a_widget_tk_rebuilt_on_a_new_handle_is_reported_as_annotated_on_a_handl
     None
 ):
     # Given an annotated button that Tk has since rebuilt at the same path on a
-    # fresh window — what happens whenever a frame is torn down and laid out
-    # again — with nothing having re-annotated it since
+    # fresh window, as it does whenever a frame is torn down and laid out again,
+    # with nothing having re-annotated it
     store = RecordingStore()
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -945,9 +904,8 @@ def test_a_widget_tk_rebuilt_on_a_new_handle_is_reported_as_annotated_on_a_handl
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then the report says so rather than repeating the annotation as if it were
-    # in force. Everything in the ledger for this widget describes a window it
-    # no longer owns; a client reading the widget on screen gets whatever bare
-    # Tk gives the new one, which is nothing.
+    # in force. Everything in the ledger describes a window this widget no
+    # longer owns, and the new one carries nothing.
     said = _what_the_description_says_about(description, str(button))
 
     assert said.gaps == (Gap.ANNOTATED_ON_A_HANDLE_IT_NO_LONGER_HAS,), (
@@ -959,9 +917,9 @@ def test_a_widget_tk_rebuilt_on_a_new_handle_is_reported_as_annotated_on_a_handl
 def test_a_ledger_entry_whose_widget_is_no_longer_in_the_tree_is_named_rather_than_dropped() -> (
     None
 ):
-    # Given an annotated widget that the walk from this root will never reach —
-    # a dialog's contents when the main window was the one described, or a
-    # widget that went away without `<Destroy>` ever reaching the annotator
+    # Given an annotated widget the walk from this root will never reach: a
+    # dialog's contents when the main window was the one described, or a widget
+    # that went away without `<Destroy>` ever reaching the annotator
     store = RecordingStore()
     annotator = Annotator(store)
     somewhere_else = FakeWidget("Entry", _AN_ENTRY_HANDLE)
@@ -972,9 +930,9 @@ def test_a_ledger_entry_whose_widget_is_no_longer_in_the_tree_is_named_rather_th
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
     # Then the entry is named as unaccounted for rather than silently left out.
-    # A report that dropped it would hide the two things worth knowing: that
-    # `describe` was handed something that is not the real root, and that an
-    # annotation is alive for a widget nothing here can find.
+    # Dropping it would hide two things worth knowing: that `describe` was
+    # handed something that is not the real root, and that an annotation is
+    # alive for a widget nothing here can find.
     assert description.orphans == (str(somewhere_else),), (
         f"the description accounts for {description.orphans}, so an annotation "
         "the walk never reached has gone missing from the report entirely"
@@ -998,10 +956,8 @@ def test_describing_a_tk_that_was_never_annotated_says_so_before_it_says_anythin
     description = describe(root, installation)
 
     # Then the strategy is carried on the description, and every widget in the
-    # window is named as carrying nothing. This is the highest-value case in the
-    # whole feature: a report that showed only successes would render an
-    # application where the gate mis-fired as a blank page, and let its author
-    # read that as a clean bill of health.
+    # window is named as carrying nothing. A report that showed only successes
+    # would render a window where the gate mis-fired as a blank page.
     assert description.strategy is Strategy.UNSUPPORTED, (
         f"the description claims {description.strategy}"
     )
@@ -1022,15 +978,14 @@ def test_describing_from_a_thread_other_than_the_one_that_owns_the_widgets_is_re
     root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[button])
     installation = install(root, store)
 
-    # When a background worker asks what the application has told Windows —
-    # the ordinary shape of a thread that wants to log the state of the window
+    # When a background worker asks what the application has told Windows
     refusal = the_failure_raised_on_another_thread(lambda: describe(root, installation))
 
     # Then it is stopped at the door. Describing asks every widget for its
     # class, its options, its text, its handle and whether it is mapped: six
-    # kinds of trip into the Tcl interpreter, each of which corrupts it quietly
-    # from a foreign thread. The widget double refuses a foreign caller itself,
-    # so a `FakeTclError` here would mean the guard fired after Tk was reached.
+    # kinds of trip into the Tcl interpreter. The widget double refuses a
+    # foreign caller itself, so a `FakeTclError` here would mean the guard fired
+    # after Tk was reached.
     assert isinstance(refusal, AnnotationRefused), (
         f"a foreign thread got through to Tk with {refusal!r}; the refusal has "
         "to come before the first winfo call, not after it"
@@ -1060,8 +1015,8 @@ def test_the_report_prints_one_row_for_every_widget_saying_what_was_written_abou
     printed = str(describe(root, Installation(Strategy.ANNOTATED, annotator)))
 
     # Then every widget has a row, and the row carries everything a client was
-    # told. The Tk path is never truncated: finding the widget in your own
-    # source is the point, and a shortened path cannot be grepped for.
+    # told. The Tk path is never truncated, because a shortened path cannot be
+    # grepped for in your own source.
     assert _the_line_about(printed, str(button)).split() == [
         str(button),
         "Button",
@@ -1137,10 +1092,8 @@ def test_the_report_lists_the_widgets_a_client_cannot_tell_apart_by_path() -> No
     # When the description is printed
     printed = str(describe(root, Installation(Strategy.ANNOTATED, annotator)))
 
-    # Then the reason has a block of its own with both paths under it. The
-    # ambiguity is decided in the walk rather than in the page, so `.widgets`
-    # carries it too — but a name a reader cannot act on is a name they will not
-    # act on, and both Tk paths are what turns this into a two-line fix.
+    # Then the reason has a block of its own with both paths under it. Both Tk
+    # paths are what turns this into a two-line fix.
     assert "NAME_NOT_UNIQUE  (2)" in printed, (
         f"no counted block for NAME_NOT_UNIQUE:\n{printed}"
     )
@@ -1168,9 +1121,7 @@ def test_the_report_opens_with_the_strategy_so_a_page_of_blanks_cannot_be_read_a
     printed = str(describe(root, installation))
 
     # Then the first thing it says is that nothing here was annotated, before
-    # any row of the table. This is the reason the whole feature is worth
-    # shipping: a report that showed only successes would render this window as
-    # a blank page, and its author would read that as everything being fine.
+    # any row of the table.
     assert printed.index(Strategy.UNSUPPORTED.name) < printed.index(_THE_TABLE), (
         f"the strategy does not lead the report:\n{printed}"
     )
@@ -1194,9 +1145,9 @@ def test_the_report_closes_by_saying_this_is_what_was_written_and_not_proof_a_cl
     printed = str(describe(root, Installation(Strategy.ANNOTATED, annotator)))
 
     # Then the last thing it says is that none of it is evidence. This spec
-    # exists so that the caveat cannot be deleted quietly: every row above it is
-    # what this package *believes* it wrote, and the difference between that and
-    # what a client reads is the entire class of bug this library has.
+    # exists so that the caveat cannot be deleted quietly: the difference
+    # between what was written and what a client reads is the entire class of
+    # bug this library has.
     closing = printed[printed.index(_THE_CLOSING_CAVEAT_BEGINS) :]
 
     assert "S_OK" in closing, f"the report does not name the silence:\n{printed}"
@@ -1222,10 +1173,8 @@ def test_an_annotation_the_walk_never_reached_is_printed_and_not_only_kept_in_th
     # When the description is printed
     printed = str(describe(root, Installation(Strategy.ANNOTATED, annotator)))
 
-    # Then it says so. The whole principle of this report is that it must not
-    # quietly omit what it cannot see, and an annotation alive for a widget the
-    # walk cannot find is exactly that — carried in the data and dropped from
-    # the page is the same silence in a different place.
+    # Then it says so. Carried in the data and dropped from the page is the
+    # same silence in a different place.
     assert str(somewhere_else) in printed, (
         f"an annotation the walk never reached is missing from the page:\n{printed}"
     )

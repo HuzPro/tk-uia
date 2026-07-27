@@ -1,25 +1,21 @@
 """The window handles a notebook's tabs borrow, made with four Win32 calls.
 
-Where it plugs in: `enable()` hands one of these to :class:`~tk_uia.tabs.TabHandles`
-as its `OverlayWindows`. A humble object with no unit tests of its own — there
-is no decision in it — proven by the gui specs, which read the tabs back from
-another process and click one.
+`enable()` hands one of these to :class:`~tk_uia.tabs.TabHandles` as its
+`OverlayWindows`. A humble object with no decision in it, proven by the gui
+specs, which read the tabs back from another process and click one.
 
-Why these exact styles, since every one of them is load-bearing:
-
-`WS_EX_TRANSPARENT` keeps the window out of hit-testing, so the click a client
-aims at a tab reaches the notebook underneath and Tk selects it. Without it the
-tab would be visible to a screen reader and dead to a mouse.
-
-`SS_OWNERDRAW` makes the static ask its parent to paint it, by way of
-`WM_DRAWITEM`. Tk has never heard of this window and ignores the message, so
-nothing is painted and the tab strip shows through unaltered. A plain static
-would paint its background over the tab it is standing in for.
+Both window styles are load-bearing. `WS_EX_TRANSPARENT` keeps the window out of
+hit-testing, so the click a client aims at a tab reaches the notebook underneath
+and Tk selects it; without it the tab would be visible to a screen reader and
+dead to a mouse. `SS_OWNERDRAW` makes the static ask its parent to paint it, by
+way of `WM_DRAWITEM`; Tk has never heard of this window and ignores the message,
+so nothing is painted and the tab strip shows through. A plain static would
+paint its background over the tab it is standing in for.
 
 Nothing here is registered with Tk, so Tk's geometry managers never see these
 windows and cannot lay them out; they are positioned in the notebook's client
 coordinates and moved when the strip moves. Windows destroys a child with its
-parent, which is a safety net rather than the plan — `TabHandles` gives each one
+parent, which is a safety net rather than the plan: `TabHandles` gives each one
 back explicitly, and clears what it said first.
 """
 

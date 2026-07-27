@@ -1,14 +1,12 @@
 """Behavioral spec for a notebook's tabs, read back by a real client.
 
-Everything above `tabs.py`'s seams is decided against recording doubles, and a
-double would agree just as happily with a window handle nothing can read. Tabs
-raise the stakes: the package *makes* these handles rather than borrowing ones
-Tk made, so "the handle exists" and "a client can see a tab there" are further
-apart here than anywhere else in the package.
+The package *makes* these handles rather than borrowing ones Tk made, so "the
+handle exists" and "a client can see a tab there" are further apart here than
+anywhere else, and a recording double cannot tell the two apart.
 
 One of these presses a tab, which is the only spec in the suite that touches the
 mouse. It has to: a tab a client can read and not press would leave a notebook
-exactly as unusable as it was, and clicking is the only way to find out.
+exactly as unusable as it was.
 """
 
 from __future__ import annotations
@@ -90,8 +88,8 @@ def test_the_notebook_itself_is_still_the_tab_control_holding_them(
     ]
 
     # Then the tabs sit under one tab control rather than replacing it. The
-    # handles are children of the notebook's own window, so the shape a client
-    # expects — a tab control with tabs in it — is the shape it gets.
+    # handles are children of the notebook's own window, so a client gets the
+    # shape it expects: a tab control with tabs in it.
     assert controls[0] == _THE_TAB_CONTROL, (
         f"the notebook reads as {controls}; a client walking down from the tab "
         "control would not find the tabs beneath it"
@@ -108,9 +106,9 @@ def test_a_tab_added_after_startup_appears_without_the_application_saying_so(
     notebook_app.ask_for(ADD_A_TAB)
 
     # Then it is there. Measured on Tk 8.6.15: adding a tab beside the open one
-    # moves no selection, and `<<NotebookTabChanged>>` is fired for selection and
-    # nothing else — so no Tk event announces this at all. `add_acc_object` is
-    # the same escape hatch a `config(text=...)` needs, for the same reason.
+    # moves no selection, and `<<NotebookTabChanged>>` fires for selection and
+    # nothing else, so no Tk event announces this at all. `add_acc_object` is
+    # the same escape hatch a `config(text=...)` needs.
     assert until(lambda: ADDED_LATER in tabs_a_client_can_see(notebook_app.window)), (
         f"a client still sees {tabs_a_client_can_see(notebook_app.window)} after "
         "a tab was added"
@@ -128,8 +126,8 @@ def test_removing_the_open_tab_withdraws_it_without_the_application_saying_so(
 
     # Then it goes anyway: removing the open tab moves the selection, which is
     # the one tab change Tk does announce, and the binding is what notices. A
-    # tab left behind would be worse than one never shown — it is findable, it
-    # has a rectangle, and pressing it reaches a page that is not there.
+    # tab left behind would be worse than one never shown, because it is
+    # findable, has a rectangle, and reaches a page that is not there.
     assert until(
         lambda: tabs_a_client_can_see(notebook_app.window) == [SECOND, THIRD]
     ), (
@@ -148,8 +146,8 @@ def test_a_renamed_tab_says_its_new_name_once_the_application_re_announces_it(
     notebook_app.ask_for(RENAME_THE_FIRST_TAB)
 
     # Then the new name is what a client reads. Renaming fires no Tk event of
-    # any kind, exactly as `config(text=...)` on a label does not, so this is
-    # `add_acc_object(notebook)` — the same escape hatch, for the same reason.
+    # any kind, exactly as `config(text=...)` on a label does not, so this needs
+    # `add_acc_object(notebook)`.
     assert until(lambda: RENAMED in tabs_a_client_can_see(notebook_app.window)), (
         f"a client still sees {tabs_a_client_can_see(notebook_app.window)}"
     )
@@ -175,11 +173,9 @@ def test_a_tab_a_client_presses_is_the_tab_the_notebook_then_shows(
     # When a client clicks the middle of it
     auto.Click(where.left + where.width() // 2, where.top + where.height() // 2)
 
-    # Then Tk selected that page. This is the whole justification for the
-    # machinery: the handle is WS_EX_TRANSPARENT, so it is in the tree for
-    # reading and invisible to hit-testing, and the click lands on the notebook
-    # underneath. A tab that could be read and not pressed would leave the
-    # window exactly as undriveable as it was.
+    # Then Tk selected that page. The handle is WS_EX_TRANSPARENT, so it is in
+    # the tree for reading and invisible to hit-testing, and the click lands on
+    # the notebook underneath.
     assert until(lambda: _the_page_now_showing(window) == f"the {THIRD} page"), (
         f"after clicking {THIRD} the notebook shows {_the_page_now_showing(window)!r}; "
         "the overlay swallowed the click instead of letting it through"

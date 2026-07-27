@@ -1,9 +1,9 @@
 """What a Tk widget tells Windows about itself, and the seam it says it through.
 
-Where it plugs in: `enable()` builds an :class:`Annotator` over the real COM
-store and puts it in the path of every widget Tk maps; specs build one over a
-recording double. This module is the whole of the package's behaviour and it
-imports nothing platform-specific, which is what lets that be true.
+`enable()` builds an :class:`Annotator` over the real COM store and puts it in
+the path of every widget Tk maps; specs build one over a recording double. This
+module holds the whole of the package's behaviour and imports nothing
+platform-specific, which is what makes that substitution possible.
 """
 
 from __future__ import annotations
@@ -22,48 +22,44 @@ _A_WIDGET_DIED = "<Destroy>"
 _THE_TABS_CHANGED = "<<NotebookTabChanged>>"
 
 # Anything else replaces whatever Tk and the application already had bound to
-# the same event, which is a startling amount of a Tk application to break in
-# exchange for switching accessibility on.
+# the same event.
 _ALONGSIDE_WHAT_IS_ALREADY_BOUND = "+"
 
 # The only kind of variable change worth re-announcing.
 _A_WRITE = "write"
 
-# `-text` for almost everything, and `-label` for the classic `tk.Scale`, which
-# is the one widget in either toolkit with no `-text` option at all. In order:
-# nothing has both, and if anything ever does, the option every other widget
-# uses is the one to believe.
+# `-text` for almost everything, and `-label` for the classic `tk.Scale`, the
+# one widget in either toolkit with no `-text` option at all. Order matters:
+# nothing has both, and if anything ever does, `-text` is the one to believe.
 _WHERE_A_WIDGET_KEEPS_ITS_WORDS = ("text", "label")
 
 # Where a widget keeps the *name* of the variable driving it, which is all it
 # keeps: measured, `cget` answers `'PY_VAR0'` where one is declared and `''`
-# where the option exists and nobody filled it in. Sixteen classes across both
-# toolkits have the option; `tk.Text` has none, and a `Listbox`'s
+# where the option exists and nobody filled it in. A `Listbox`'s
 # `-listvariable` and a `Scale`'s `-variable` are deliberately not this.
 _WHERE_A_WIDGET_KEEPS_THE_VARIABLE_IT_SHOWS = "textvariable"
 
 # Nothing declared, which is what an untouched `-textvariable` answers with.
 _NO_VARIABLE_AT_ALL = ""
 
-# How a form punctuates a caption, and what none of it means: measured across a
-# real six-tab settings dialog, every caption in it ends with a colon, and no
-# screen reader user wants to hear one read out as part of a control's name.
+# How a form punctuates a caption. Measured across a real six-tab settings
+# dialog: every caption in it ends with a colon, and none of them is part of
+# the name of the control it captions.
 _HOW_A_CAPTION_IS_PUNCTUATED = ":"
 
 # The three roles whose variable is what the widget *holds* rather than what it
-# *is*: an entry, a combobox and a spinbox are all controls a client asks the
-# contents of, and a `-textvariable` on one of them is those contents. Every
-# other class carrying the option — a label, a button, a checkbutton, a
-# menubutton — shows the variable *instead of* a caption, so there it is the
-# widget's whole name.
+# *is*. An entry, a combobox and a spinbox are controls a client asks the
+# contents of, so a `-textvariable` on one of them is those contents. Every
+# other class carrying the option shows the variable instead of a caption, so
+# there it is the widget's whole name.
 _ROLES_WHOSE_VARIABLE_IS_WHAT_THEY_HOLD = frozenset(
     {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON}
 )
 
 # Checked ahead of the role table rather than merely left out of it: a window
 # gets a correct accessible name from `wm title` for free, and overriding it
-# breaks resolving the window by its title, which is where every other query
-# starts. A caller supplying their own table must not be able to undo that.
+# breaks resolving the window by its title. A caller supplying their own table
+# must not be able to undo that.
 WINDOWS_THAT_ALREADY_NAME_THEMSELVES = frozenset({"Tk", "Toplevel"})
 
 _NEVER_SAID = object()
@@ -76,18 +72,16 @@ _NO_CONTROL_ID = 0
 class AnnotationRefused(Exception):
     """The annotator would not do what it was asked, and says why.
 
-    Raised rather than shrugged: every failure mode this package exists to
-    refuse looks like success from the outside — `S_OK` returned, nothing
-    changed — so an annotation that cannot be made honestly has to be loud.
+    Raised rather than shrugged. Every failure mode this package exists to
+    refuse looks like success from outside: `S_OK` returned, nothing changed.
     """
 
 
 class PropId(Enum):
     """The MSAA properties a widget can be annotated with.
 
-    Named rather than numbered on purpose: the GUIDs `oleacc.h` gives these live
-    in the one module that talks to COM, so nothing above it can pass the wrong
-    one by transcribing it from memory.
+    Named rather than numbered: the GUIDs `oleacc.h` gives these live in the one
+    module that talks to COM, so nothing above it can pass the wrong one.
     """
 
     NAME = auto()
@@ -164,17 +158,13 @@ class TkVariable(Protocol):
 class VariableCalled(Protocol):
     """How the Tcl name a widget declares becomes a variable that can be followed.
 
-    A seam rather than a call, and for a sharper reason than the rest of them:
-    reaching an application's variable by name means raw Tcl, because
-    `tkinter.Variable.__del__` *unsets* the variable it names — measured, a
-    wrapper built around somebody else's `StringVar` destroys that `StringVar`
-    the moment it is collected. So the domain says which name it wants and
-    something platform-specific answers with a value and somewhere to hang a
-    trace.
+    A seam rather than a call: reaching an application's variable by name means
+    raw Tcl, because `tkinter.Variable.__del__` unsets the variable it names.
+    See `_tkvars` for the measurement.
 
-    `None` for a Tk that has no such variable, and for every installation
-    nothing platform-specific was wired into: a declared name is then a string
-    and nothing more, and the widget is left exactly as it was.
+    `None` where nothing platform-specific was wired in, or where Tk has no such
+    variable: the declared name is then a string and nothing more, and the
+    widget is left exactly as it was.
     """
 
     def __call__(self, widget: object, name: str) -> TkVariable | None: ...
@@ -183,9 +173,8 @@ class VariableCalled(Protocol):
 def no_variables_to_follow(widget: object, name: str) -> TkVariable | None:
     """For every annotator built without a way to reach an application's variables.
 
-    Same reason as :class:`NoTabs`: the alternative is an "is anything wired in"
-    branch at the one place a declared variable is noticed, which is the kind of
-    branch only ever wrong on the platform nobody is testing on.
+    A null object, same as :class:`NoTabs`, so that the one place a declared
+    variable is noticed carries no "is anything wired in" branch.
     """
     return None
 
@@ -193,9 +182,9 @@ def no_variables_to_follow(widget: object, name: str) -> TkVariable | None:
 class TabbedWidgets(Protocol):
     """Whatever is keeping a notebook's tabs reachable, if anything is.
 
-    A protocol rather than an import: the implementation lives in `tabs`, which
-    already imports this module for its store and its property ids, and one
-    seam declared here is cheaper than untangling that into a third.
+    A protocol rather than an import: `tabs` already imports this module for its
+    store and its property ids, and one seam here is cheaper than a third module
+    to break the cycle.
     """
 
     def refresh(self, widget: TkWidget) -> None: ...
@@ -208,9 +197,8 @@ class TabbedWidgets(Protocol):
 class NoTabs:
     """For a Tk that needs none, and for every spec not about tabs.
 
-    Same reason as :class:`InertAnnotator`: the alternative is a "is anything
-    installed" branch at each of the three places a notebook is noticed, and
-    those are the branches only ever wrong on the platform nobody is testing on.
+    A null object, same as :class:`InertAnnotator`, so that the three places a
+    notebook is noticed carry no "is anything installed" branch.
     """
 
     def refresh(self, widget: TkWidget) -> None: ...
@@ -227,8 +215,8 @@ class OwningThread:
 
     A value object rather than a method on the annotator, because `describe`
     needs the same rule and cannot get it from there: on a Tk that needs no
-    annotating the annotator is an :class:`InertAnnotator`, whose whole job is
-    to refuse nothing.
+    annotating the annotator is an :class:`InertAnnotator`, which refuses
+    nothing.
     """
 
     ident: int
@@ -243,7 +231,7 @@ class OwningThread:
             return
         # Both layers below here are thread-affine. Reading `winfo_id` off the
         # Tk thread corrupts the interpreter, and a COM apartment belongs to the
-        # thread that entered it — an annotation made from the wrong one is
+        # thread that entered it, so an annotation made from the wrong one is
         # written somewhere no client will ever look.
         raise AnnotationRefused(
             f"thread {caller} reached for widgets owned by thread {self.ident}; "
@@ -274,8 +262,7 @@ def roles_in_force(roles: Mapping[str, Role] | None) -> Mapping[str, Role]:
 
     Laid over the built-in table rather than replacing it: a caller who names
     one class means "and this one too", not "forget the rest". Read by
-    `describe`, which would otherwise tell an application that has already
-    passed `roles=` to go and pass `roles=`.
+    `describe` as well, so that its advice matches the table in force.
     """
     return {**ROLE_FOR_TK_CLASS, **(roles or {})}
 
@@ -285,14 +272,14 @@ class Ledger:
 
     Two readers and one writer: the annotator asks whether a value is already in
     place before paying for a COM call, and `describe` asks what is in place at
-    all. It is deliberately not thread-safe and does not need to be — every path
-    into it is already behind the annotator's owning-thread refusal.
+    all. Deliberately not thread-safe. Every path into it is already behind the
+    annotator's owning-thread refusal.
     """
 
     def __init__(self) -> None:
         self._said: dict[int, dict[PropId, Written]] = {}
         # Kept against the widget's Tk path as well as its handle, so `forget`
-        # can still find it once `winfo_id` has started raising — which it does
+        # can still find it once `winfo_id` has started raising, which it does
         # from the moment Tk begins tearing the widget down.
         self._handles: dict[str, int] = {}
         # Beside the properties rather than among them: an automation id goes
@@ -307,11 +294,10 @@ class Ledger:
     def the_application_chose(self, hwnd: int, prop: PropId) -> bool:
         """Whether this property was said by the application rather than inferred.
 
-        `<Map>` fires every time Tk shows a widget again — a notebook tab
-        reopened, a `pack_forget` undone — and the automatic annotation runs
-        over it each time. Without this, the caption quietly wins back every
-        name the application deliberately gave a widget, on an event the
-        application never sees.
+        `<Map>` fires every time Tk shows a widget again, and the automatic
+        annotation runs over it each time. Without this, the caption quietly
+        wins back every name the application deliberately gave a widget, on an
+        event the application never sees.
         """
         written = self._said.get(hwnd, {}).get(prop)
         return written is not None and written.source is not Wrote.INFERRED
@@ -353,10 +339,8 @@ class _WhatAVariableIsBoundTo:
     """One `trace_add` registration, kept so that it can be taken back off.
 
     A trace lives on the *variable*, which routinely outlives the widget it was
-    bound for: without this the trace goes on firing at a dead window path
-    forever, one unhandled traceback on stderr per write, for the life of the
-    process — and a `forget()` that left it there would find the next write
-    quietly re-announcing the widget the caller had just taken back.
+    bound for. Without this it goes on firing at a dead window path for the life
+    of the process, one unhandled traceback on stderr per write.
     """
 
     variable: TkVariable
@@ -371,10 +355,8 @@ class _TheCaptionAVariableHolds:
     """A variable read as a caption: whatever it holds, tidied the way one is.
 
     A decorator over the variable rather than a transform threaded through the
-    announcing, because the rule belongs to the words and not to the mechanism:
-    a widget named after a caption someone retitles follows that variable
-    exactly as every other bound widget follows one, and the colon is off the
-    words wherever they came from.
+    announcing, because the rule belongs to the words and not to the mechanism.
+    The colon comes off wherever the words came from.
     """
 
     variable: TkVariable
@@ -395,9 +377,7 @@ class _TheVariableAWidgetDeclared:
 
     Held apart from the bindings an application asked for by hand, which sit
     beside it in `_bindings`: only this one is the library's to take back. An
-    application that names a widget itself has the last word, and the binding it
-    never asked for has to stop rather than take that name back on the next
-    write.
+    application that names a widget itself has the last word.
     """
 
     name: str
@@ -432,8 +412,7 @@ class Annotator:
     def add(self, widget: TkWidget) -> None:
         # Before the first question is asked of the widget, rather than at the
         # store below: `winfo_class`, `keys` and `cget` each cross into the Tcl
-        # interpreter, and doing that from a foreign thread corrupts it quietly
-        # — where a misplaced COM write merely goes somewhere nobody reads.
+        # interpreter, and doing that from a foreign thread corrupts it quietly.
         self._owner.refuse_any_other_caller()
         tk_class = widget.winfo_class()
         if tk_class in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
@@ -443,16 +422,13 @@ class Annotator:
             return
         # Written as inferred rather than through `set_role`/`set_name`, so that
         # `describe` can tell a name this package read off the widget from one
-        # the application chose. Only the first can go stale; calling the second
-        # stale would fire on the pattern the README encourages.
+        # the application chose. Only the first can go stale.
         self._infer(widget, PropId.ROLE, role.value)
         name = words_the_widget_shows(widget)
         if name:
             self._infer(widget, PropId.NAME, name)
-        # Last, so that a variable outranks the caption where a widget has both:
-        # a classic `tk.Label` keeps its `-text` in step with its `-textvariable`
-        # and so agrees, and where the two ever disagree the variable is the one
-        # still moving.
+        # Last, so that a variable outranks the caption where a widget has both.
+        # Where the two disagree the variable is the one still moving.
         self._follow_whatever_variable_the_widget_declares(widget, role)
 
     def _infer(self, widget: TkWidget, prop: PropId, value: str | int) -> None:
@@ -470,10 +446,8 @@ class Annotator:
         declared = variable_the_widget_declares(widget)
         following = self._declared.get(path)
         if following is not None and following.name == declared:
-            # `<Map>` fires on every unhide, tab change and geometry shuffle,
-            # and `add_acc_object` is the escape hatch the README tells an
-            # application to call. Following again on each would stack a trace
-            # per event, on a variable that lives as long as the application.
+            # Following again on each `<Map>` would stack a trace per event, on
+            # a variable that lives as long as the application.
             return
         prop = _what_a_declared_variable_is(role)
         if following is None and self.ledger.the_application_chose(
@@ -481,8 +455,8 @@ class Annotator:
         ):
             # The application has said this property itself, once or by binding
             # a variable of its own. `<Map>` fires on events it never sees, so a
-            # binding made on one of them would quietly take that word back —
-            # where a binding already ours is ours to move.
+            # binding made on one of them would quietly take that word back. A
+            # binding already ours is ours to move.
             return
         # Whatever it declared before this, whether or not it declares anything
         # now: two traces on two variables would both fire, in registration
@@ -508,9 +482,8 @@ class Annotator:
         """Name a widget after the label that captions it, and follow it if it moves.
 
         In Tk a caption is a *sibling* and nothing records the relationship, so
-        no amount of reading the widget can find it: this is the application
-        saying it, and it is said once for both properties a caption can be
-        kept in.
+        no amount of reading the widget can find it. This is the application
+        saying it.
         """
         self._owner.refuse_any_other_caller()
         variable = self._whatever_variable_the_label_declares(label)
@@ -534,8 +507,8 @@ class Annotator:
                 "set_acc_name(widget, ...)."
             )
         # Read once and stale from the next `config(text=...)`, exactly as every
-        # other caption in this package is — say it again to re-read it, or
-        # drive the label from a variable, which is followed above.
+        # other caption in this package is. Say it again to re-read it, or drive
+        # the label from a variable, which is followed above.
         self.set_name(widget, a_caption_read_as_a_name(words))
 
     def name_of(self, widget: TkWidget) -> str | None:
@@ -570,14 +543,13 @@ class Annotator:
 
     def bind_text_variable(self, widget: TkWidget, variable: TkVariable) -> None:
         # The override for the variable a widget declares, and the whole answer
-        # for a widget that declares none — the name a client reads is often not
-        # the one on screen, and only the application knows which variable
-        # really says who the widget is.
+        # for a widget that declares none. Only the application knows which
+        # variable really says who the widget is.
         self._the_application_has_the_last_word_on(widget, PropId.NAME)
         self._keep_in_step_with(widget, variable, PropId.NAME)
 
     def bind_value_variable(self, widget: TkWidget, variable: TkVariable) -> None:
-        # The contents of an entry are not on the widget to be read back — they
+        # The contents of an entry are not on the widget to be read back. They
         # are in the variable, and where the widget did not name that variable
         # itself, only the application knows which one it is.
         self._the_application_has_the_last_word_on(widget, PropId.VALUE)
@@ -613,9 +585,8 @@ class Annotator:
         self, label: TkWidget
     ) -> TkVariable | None:
         # `None` for a label driving itself from `-text`, and for one whose
-        # variable nothing platform-specific can reach — on a Tk with no such
-        # variable the declared name is a string and nothing more, and the words
-        # the label is showing are still the honest answer.
+        # variable nothing platform-specific can reach. In the second case the
+        # words the label is showing are still the honest answer.
         declared = variable_the_widget_declares(label)
         if declared == _NO_VARIABLE_AT_ALL:
             return None
@@ -625,9 +596,9 @@ class Annotator:
         self, widget: TkWidget, variable: TkVariable, prop: PropId
     ) -> _WhatAVariableIsBoundTo:
         # Said once here as well as on every write from now on: a trace fires on
-        # the *next* change and never for the one already made, so a binding that
-        # only traced would leave the widget announcing whatever it was annotated
-        # with before the variable existed — for most widgets, nothing at all.
+        # the *next* change and never for the one already made, so a binding
+        # that only traced would leave the widget announcing whatever it held
+        # before the variable existed. For most widgets, nothing at all.
         callback_name = variable.trace_add(
             _A_WRITE,
             lambda *_: self._announce_unless_the_widget_has_gone(
@@ -643,11 +614,11 @@ class Annotator:
         self, widget: TkWidget, variable: TkVariable, prop: PropId
     ) -> None:
         # Second line behind `forget`, which is what actually takes the trace
-        # off. A widget can still go away by a route that never reaches it — an
-        # annotator driven directly rather than through `enable()`, or an earlier
-        # `<Destroy>` handler that raised before ours ran — and the write that
-        # follows lands inside Tcl's own callback, where the application has no
-        # call of its own to wrap it in.
+        # off. A widget can still go away by a route that never reaches it: an
+        # annotator driven directly rather than through `enable()`, or an
+        # earlier `<Destroy>` handler that raised before ours ran. The write
+        # that follows lands inside Tcl's own callback, where the application
+        # has no call of its own to wrap it in.
         if not widget.winfo_exists():
             return
         self._announce(widget, variable, prop)
@@ -663,7 +634,7 @@ class Annotator:
         """Stop following a declared variable for a property the application is setting.
 
         Released rather than merely outranked. The trace fires from inside Tcl,
-        on a write the application makes to its own variable — so a binding left
+        on a write the application makes to its own variable, so a binding left
         in place would take back the name or the value it had just chosen, with
         no call of its own anywhere in the traceback.
         """
@@ -734,13 +705,11 @@ class Annotator:
     def _refuse_a_window_that_already_names_itself(self, widget: TkWidget) -> None:
         if widget.winfo_class() not in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
             return
-        # `add()` has always skipped these, but the manual calls walked straight
-        # past that rule — and this is the one case where doing as asked is
-        # worse than refusing. `winfo_id()` on a toplevel answers with the
-        # container child Tk puts every widget under, not with the window, so
-        # the property lands on an inner pane: the window stays unnamed, and a
-        # client reading the pane finds a confident, wrong answer where before
-        # it found none.
+        # The one case where doing as asked is worse than refusing.
+        # `winfo_id()` on a toplevel answers with the container child Tk puts
+        # every widget under, not with the window, so the property lands on an
+        # inner pane: the window stays unnamed, and a client reading the pane
+        # finds a confident, wrong answer where before it found none.
         raise AnnotationRefused(
             f"{widget} is a window, and a window already has an accessible name "
             "from `wm title` — which is what resolves it for every query that "
@@ -757,21 +726,18 @@ class Annotator:
 class InertAnnotator:
     """An annotator for the Tks that need none, answering to everything, doing nothing.
 
-    Where it plugs in: `install()` hands one back for `NATIVE` and
-    `UNSUPPORTED`. The alternative is every function on the public surface
-    repeating the same "is there anything installed" branch, and an application
-    repeating a platform check around every call it makes — which is the kind of
-    thing that is only ever wrong on the platform the author is not using.
+    `install()` hands one back for `NATIVE` and `UNSUPPORTED`. The alternative
+    is every function on the public surface repeating the same "is there
+    anything installed" branch, and an application repeating a platform check
+    around every call it makes.
     """
 
     def __init__(self, roles: Mapping[str, Role] | None = None) -> None:
         # Carried rather than discarded so that `describe` can say what a widget
         # class *would* have been announced as, on a platform where nothing was.
         self.roles = roles_in_force(roles)
-        # An empty one, for the same reason this class exists at all: it keeps
-        # the "is there anything installed" branch out of `describe`, which
-        # would otherwise be the one branch only ever wrong on the platform its
-        # author is not using.
+        # Empty, for the same reason this class exists at all: it keeps the "is
+        # there anything installed" branch out of `describe` too.
         self.ledger = Ledger()
 
     def add(self, widget: TkWidget) -> None: ...
@@ -790,7 +756,7 @@ class InertAnnotator:
         # `None` rather than the caption the widget is showing: nothing here was
         # written, so anything working names out from the widgets around one
         # reports having named nothing rather than claiming names no client can
-        # read — which is the same honesty `describe` leads its report with.
+        # read.
         return None
 
     def set_value(self, widget: TkWidget, value: str) -> None: ...
@@ -919,10 +885,9 @@ def words_the_widget_shows(widget: TkWidget) -> str | None:
     one with nowhere to keep words never could.
     """
     # Asked rather than attempted: an entry, a listbox and a canvas have no
-    # `-text` option at all, and reading one raises. There is nothing else on a
-    # widget that is a name — the path is an implementation detail and the
-    # class is not a label — so one without any words stays unnamed rather than
-    # named something the application never wrote.
+    # `-text` option at all, and reading one raises. Nothing else on a widget is
+    # a name, so one without any words stays unnamed rather than named something
+    # the application never wrote.
     options_this_widget_has = widget.keys()
     for where in _WHERE_A_WIDGET_KEEPS_ITS_WORDS:
         if where in options_this_widget_has:
@@ -933,10 +898,9 @@ def words_the_widget_shows(widget: TkWidget) -> str | None:
 def a_caption_read_as_a_name(caption: str) -> str:
     """A label's words as the name of the widget it captions: "Host:" names "Host".
 
-    The punctuation and nothing else. Anything cleverer — dropping a leading
-    verb, expanding an abbreviation — would be this package inventing words the
-    application never wrote, and a name nobody can find in their own source is
-    worse than a slightly long one.
+    The punctuation and nothing else. Anything cleverer would be this package
+    inventing words the application never wrote, and a name nobody can find in
+    their own source is worse than a slightly long one.
     """
     return caption.strip().removesuffix(_HOW_A_CAPTION_IS_PUNCTUATED).strip()
 
@@ -945,11 +909,10 @@ def _what_a_declared_variable_is(role: Role) -> PropId:
     """Whether the variable driving this widget is what it *holds* or what it *is*.
 
     The same `-textvariable` option means two different things, and the role is
-    what says which: in a control a client asks the contents of, the variable is
-    those contents; in anything else — a status label, a button, a menubutton —
-    the widget has no separate caption at all, so the variable is its whole
-    name. Answering one question with the other is how "Title" ends up read back
-    as whatever somebody typed into the box beneath it.
+    what says which. In a control a client asks the contents of, the variable is
+    those contents. In anything else the widget has no separate caption at all,
+    so the variable is its whole name. Answering one question with the other is
+    how "Title" ends up read back as whatever somebody typed into the box below.
     """
     return (
         PropId.VALUE if role in _ROLES_WHOSE_VARIABLE_IS_WHAT_THEY_HOLD else PropId.NAME

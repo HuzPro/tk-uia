@@ -2,13 +2,13 @@
 
 `enable()` records what it installed on the package, because the surface an
 application calls is `tk_uia.set_acc_name(widget, ...)` and not a handle it has
-to carry around. That state is the one thing in the package a spec can leave
-behind for the next one, so it is put back after every one of them.
+to carry around. That module state is the one thing a spec can leave behind for
+the next one, so it is put back after every one of them.
 
 The rest of this file belongs to the gui specs: the fixture application is
-launched into a process of its own and handed back as the window a UI
-Automation client sees, because an annotation read back inside the process that
-wrote it proves nothing about the bridge to UI Automation.
+launched into a process of its own and handed back as the window a UI Automation
+client sees, because an annotation read back inside the process that wrote it
+proves nothing about the bridge.
 """
 
 from __future__ import annotations
@@ -29,10 +29,8 @@ FIXTURE_APPS = Path(__file__).parent / "fixture_apps"
 
 # A `skipif` marks a test; it cannot stop pytest importing the module carrying
 # it. The gui specs reach `uiautomation` and the Tk fixture app at module scope,
-# and both are Windows-only — `uiautomation` is a win32-marked dev dependency,
-# and a Linux CPython is not guaranteed to carry `_tkinter` at all. So off
-# Windows they are not collected, otherwise the lane whose entire job is to
-# prove this package needs neither dies during collection instead.
+# and both are Windows-only. So off Windows they are not collected, or the lane
+# whose job is to prove this package needs neither dies during collection.
 collect_ignore_glob = [] if sys.platform == "win32" else ["test_gui_*.py"]
 
 # Tk paints in well under a second here; the rest is the interpreter starting.
@@ -69,10 +67,10 @@ class RunningApp:
         """Have the application do something to itself, and say when it did.
 
         A dropped file rather than a click, because a click is the one thing a
-        UI Automation client cannot make a Tk button feel — the limitation
+        UI Automation client cannot make a Tk button feel. A spec that drove
+        this channel with the mouse would be asserting on the very thing
         `test_an_annotated_button_still_cannot_be_pressed_through_its_invoke_pattern`
-        exists to pin down. A spec that drove this channel with the mouse would
-        be asserting on the very thing it is trying to measure.
+        measures.
         """
         (self.commands / command).write_text("", encoding="utf-8")
 
@@ -81,11 +79,11 @@ def the_widgets_the_application_shows(window: Any) -> list[Any]:
     """Every control under Tk's own container, and none of Windows' chrome.
 
     Here rather than in one spec module because two of them need it: the
-    annotations are read back this way, and so is the description's claim that
-    a client can see the names it says it wrote.
+    annotations are read back this way, and so is the description's claim that a
+    client can see the names it says it wrote.
     """
-    # Imported inside the function for the same reason the fixture below does
-    # it: this module is imported on platforms with no `uiautomation`.
+    # Imported inside the function: this module is imported on platforms with no
+    # `uiautomation`.
     import uiautomation as auto
 
     container = auto.PaneControl(
@@ -108,7 +106,7 @@ def annotated_app(tmp_path: Path) -> Iterator[RunningApp]:
 
 @pytest.fixture
 def newly_roled_app(tmp_path: Path) -> Iterator[RunningApp]:
-    """One of every widget class that gained a role in 0.5.0."""
+    """One of every widget class whose role was chosen by measurement."""
     yield from _the_app_in("newly_roled_app.py", tmp_path)
 
 
@@ -119,8 +117,6 @@ def notebook_app(tmp_path: Path) -> Iterator[RunningApp]:
 
 
 def _the_app_in(fixture_app: str, commands: Path) -> Iterator[RunningApp]:
-    # Imported inside the fixture rather than at module scope: conftest is
-    # imported on every platform, including the one with no `uiautomation`.
     import uiautomation as auto
 
     title = f"tk-uia fixture {uuid.uuid4()}"
@@ -145,7 +141,7 @@ def _why_no_window_appeared(app: subprocess.Popen[str], title: str) -> str:
             f"{_READY_TIMEOUT_SECONDS:.0f}s, and the fixture app is still running"
         )
     # It refused to start, and the reason it printed is the only useful thing
-    # left — most likely `enable()` reporting a strategy other than ANNOTATED.
+    # left. Most likely `enable()` reported a strategy other than ANNOTATED.
     return (
         f"the fixture app exited {app.returncode} before painting:\n{app.stderr.read()}"
     )

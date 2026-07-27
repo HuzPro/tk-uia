@@ -1,16 +1,14 @@
 """What this application has told Windows about its widgets, and what it has not.
 
-Where it plugs in: `tk_uia.describe(root)` hands this module the installation
-`enable()` made, and it reads two things — the annotator's ledger, for what was
-written, and the live widget tree, for what was never reached. It talks to COM
-not at all and to `uiautomation` not at all; nothing here is evidence that a
-client can read what was written, and the report says so in as many words.
+`tk_uia.describe(root)` hands this module the installation `enable()` made, and
+it reads two things: the annotator's ledger, for what was written, and the live
+widget tree, for what was never reached. It touches neither COM nor
+`uiautomation`, so nothing here is evidence that a client can read what was
+written. The report says so in as many words.
 
-One known and accepted blind spot, which follows from that: `forget(widget)`
-clears the recorded automation id, and nothing in Win32 resets `GWLP_ID`, so a
-forgotten widget goes on carrying its control id while this stops reporting it.
-`forget` and `describe` are a rare pairing, and inventing state to track it
-would be inventing state to describe a window this module cannot read.
+One accepted blind spot follows from that. `forget(widget)` clears the recorded
+automation id, and nothing in Win32 resets `GWLP_ID`, so a forgotten widget goes
+on carrying its control id while this stops reporting it.
 """
 
 from __future__ import annotations
@@ -40,14 +38,13 @@ from tk_uia.tkversion import Strategy
 class Gap(Enum):
     """Something a client will not get from a widget, and why.
 
-    The member name is the stable identity — a client-side dump comparing what
+    The member name is the stable identity: a client-side dump comparing what
     was written against what it can read matches on it. The value is the
-    sentence the report prints, held here rather than in a lookup table beside
-    it so that the reason cannot fall out of step with the member.
+    sentence the report prints, held here rather than in a lookup table so that
+    the reason cannot fall out of step with the member.
 
-    Every member corresponds to a caveat the README already documents. That is
-    what keeps this catalogue closed: the description is those caveats applied
-    to one application, and it claims nothing the README does not.
+    Every member corresponds to a caveat the README already documents, which is
+    what keeps the catalogue closed.
     """
 
     NO_ROLE_FOR_ITS_CLASS = (
@@ -140,7 +137,7 @@ class WidgetDescription:
     also_written: Mapping[PropId, str | int]
     gaps: tuple[Gap, ...]
     # A notebook's tabs, which are not widgets and appear nowhere else in this
-    # report — they have window handles of their own and nothing to walk to.
+    # report. They have window handles of their own and nothing to walk to.
     tabs: tuple[str, ...] = ()
 
 
@@ -186,9 +183,8 @@ def _and_whichever_of_them_a_client_cannot_tell_apart(
     A pass of its own, after every widget has been described, because nothing
     about a widget on its own says this: both of the "Browse..." buttons are
     correctly typed and correctly named, and the fault is that they are named
-    the same thing. It is here rather than in the renderer so that `.widgets`
-    carries it too — the data and the page have to say the same thing, or
-    neither of them is worth reading.
+    the same thing. Here rather than in the renderer, so that `.widgets` carries
+    it too.
     """
     windows = _the_windows_a_client_scopes_a_query_to(widgets)
     asked_for = tuple(
@@ -202,10 +198,9 @@ def _and_whichever_of_them_a_client_cannot_tell_apart(
 
 
 def _carrying_the_ambiguity_as_well(widget: WidgetDescription) -> WidgetDescription:
-    # Appended to whatever the widget already carries rather than replacing it,
-    # which is where this differs from UNMAPPED_SINCE_ANNOTATED: two buttons a
-    # client cannot tell apart are still two buttons it cannot press, and
-    # neither of those reasons stops the other being worth acting on.
+    # Appended rather than replacing, which is where this differs from
+    # UNMAPPED_SINCE_ANNOTATED: two buttons a client cannot tell apart are still
+    # two buttons it cannot press.
     return replace(widget, gaps=(*widget.gaps, Gap.NAME_NOT_UNIQUE))
 
 
@@ -214,9 +209,9 @@ class _WhatAClientWouldAskFor:
     """A window, a control type and a name: the whole of an ordinary query.
 
     Two widgets answering to one of these is the ambiguity. The window is part
-    of it because a client scopes a query to one — it resolves the window by
-    its title and searches inside it — so a dialog's "Confirm" and the main
-    window's are two answers to two different questions and not a collision.
+    of it because a client scopes a query to one, resolving it by title and
+    searching inside it. So a dialog's "Confirm" and the main window's are two
+    answers to two different questions and not a collision.
     """
 
     window: str
@@ -230,7 +225,7 @@ def _how_a_client_would_ask_for(
     # A widget with no role or no name cannot be asked for at all, and is
     # already reported as whichever of those it is missing. Calling every
     # anonymous pane a duplicate of every other would put most of an
-    # unannotated window under a heading whose advice does not apply to it.
+    # unannotated window under a heading whose advice does not apply.
     if widget.role is None or widget.name is None:
         return None
     return _WhatAClientWouldAskFor(
@@ -264,8 +259,8 @@ def _the_windows_a_client_scopes_a_query_to(
 def _the_window_holding(path: str, windows: tuple[str, ...]) -> str:
     # The nearest one, so that a dialog opened from a dialog scopes to itself
     # rather than to the window behind it. A walk that started below every
-    # toplevel — describe(some_frame) — finds none, and everything it reached is
-    # inside one window anyway.
+    # toplevel, as `describe(some_frame)` does, finds none, and everything it
+    # reached is inside one window anyway.
     return max(
         (window for window in windows if _is_inside(path, window)),
         key=len,
@@ -321,8 +316,8 @@ def _how_it_went(description: Description) -> Iterator[str]:
     how_many = len(description.widgets)
     if description.strategy is not Strategy.ANNOTATED:
         # First, and before a single row: a window where the gate stood down
-        # renders as a page of blanks, and an author who read that as a clean
-        # bill of health would be exactly wrong.
+        # renders as a page of blanks, which an author could read as a clean
+        # bill of health.
         yield textwrap.fill(
             f"enable() reported {description.strategy.name}, so nothing here was "
             f"annotated: every one of the {how_many} widgets under "
@@ -535,7 +530,7 @@ def _what_was_written_about(
         # "no accessible name" is not what an author needs to hear about a
         # widget a client cannot see at all, and the two have opposite fixes.
         # Measured against a real tabbed dialog, this is 23 widgets after one
-        # tab change — every annotation intact, every one of them unreadable.
+        # tab change, every annotation intact and every one of them unreadable.
         return replace(written, gaps=(Gap.UNMAPPED_SINCE_ANNOTATED,))
     if found.widget.winfo_id() != hwnd:
         # Asked once the ledger has answered, and reported instead of every
@@ -581,8 +576,8 @@ def _what_is_missing_from(
     if written.role in _ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN:
         missing.append(Gap.ITEMS_NOT_IN_THE_TREE)
     # A notebook whose tabs were found and given handles is not hollow. One
-    # whose strip yielded nothing still is, and saying so is the whole point:
-    # the scan can come up empty on a notebook Tk has not laid out yet.
+    # whose strip yielded nothing still is: the scan can come up empty on a
+    # notebook Tk has not laid out yet.
     if written.role is Role.PAGE_TAB_LIST and not written.tabs:
         missing.append(Gap.ITEMS_NOT_IN_THE_TREE)
     if written.role is Role.PUSH_BUTTON:
@@ -597,8 +592,7 @@ def _the_name_no_longer_matches_the_caption_it_came_from(
     if name is None or shows_now is None:
         return False
     # Only a name this package read off the widget can have gone stale. A name
-    # the application chose over a shorter caption — `Button(text="OK")` named
-    # "Confirm order", which the README encourages — is meant to differ, and
+    # the application chose over a shorter caption is meant to differ, and
     # calling it stale is how a diagnostic teaches its reader to ignore it.
     return said[PropId.NAME].source is Wrote.INFERRED and name != shows_now
 
@@ -641,9 +635,9 @@ _THE_CAVEAT_THIS_REPORT_CARRIES = textwrap.fill(
     width=_HOW_WIDE_THE_REASONS_READ,
 )
 
-# Everything else a widget can be annotated with — description, help, default
-# action and state — goes on an indented sub-line instead, so that the table
-# stays narrow enough for the paths in it never to need truncating.
+# Everything else a widget can be annotated with goes on an indented sub-line
+# instead, so that the table stays narrow enough for the paths in it never to
+# need truncating.
 _THE_PROPERTIES_THE_TABLE_HAS_A_COLUMN_FOR = frozenset(
     {PropId.ROLE, PropId.NAME, PropId.VALUE}
 )
@@ -653,28 +647,19 @@ _THE_PROPERTIES_THE_TABLE_HAS_A_COLUMN_FOR = frozenset(
 # entry that genuinely needs `set_acc_name` under a list nobody will read.
 _ROLES_NOBODY_ANNOUNCES = frozenset({Role.GROUPING, Role.SCROLL_BAR})
 
-# The roles the MSAA-to-UIA bridge hands a ValuePattern to. Annotating one of
-# these is what turns Tk's anonymous pane into a control a client will ask the
-# contents of — and it answers `''` until an application says otherwise.
-#
-# Read off COVERAGE.md's `patterns` column rather than reasoned about, since
-# every one of those cells was read back from another process: `Value` is
-# measured on `tk.Entry`, `tk.Text` and `tk.Spinbox`, and on `ttk.Entry`,
-# `ttk.Combobox` and `ttk.Spinbox` — three roles between them. A `tk.Scrollbar`
-# offers `RangeValue`, which is a different pattern and not this. The one that
-# almost was not here is `ttk.Progressbar`: carrying the pattern and answering
-# wrongly are different claims, so it waited for its own measurement. Read back
-# three ways, its `ProgressBarControl` answers `''` with nothing written and
-# still `''` after the widget's own `-value` moved — the proxy never serves the
-# number the bar is showing, and only `set_acc_value` reads back. That is the
-# entry's failure mode exactly, so it takes the entry's gap.
+# The roles the MSAA-to-UIA bridge hands a ValuePattern to, which answers `''`
+# until an application says otherwise. Read off COVERAGE.md's `patterns` column
+# rather than reasoned about: every one of those cells was read back from
+# another process. `ttk.Progressbar` is here because it fails the same way, not
+# because it holds a number a client can reach; its ValuePattern answers `''`
+# with nothing written, and still `''` after the widget's own `-value` moved.
 _ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF = frozenset(
     {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON, Role.PROGRESS_BAR}
 )
 
 # The roles whose whole point is what is inside them. Tk gives one window handle
-# per widget and annotation works on handles, so the rows, items and tabs need
-# MSAA's child-id model — a different piece of machinery, and not this one.
+# per widget and annotation works on handles, so the rows, items and tabs would
+# need MSAA's child-id model, which is a different piece of machinery.
 _ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN = frozenset({Role.LIST, Role.OUTLINE})
 
 
@@ -682,7 +667,7 @@ def _why_nothing_was_written(
     found: _AsTheWalkFoundIt, roles: Mapping[str, Role]
 ) -> tuple[Gap, ...]:
     # Ordered, and the order is the answer: a widget is routinely both role-less
-    # and never mapped — every `tk.Menu` is — and "no role for class 'Menu'" is
+    # and never mapped, as every `tk.Menu` is, and "no role for class 'Menu'" is
     # what a reader can act on where "never mapped" is trivia.
     if found.tk_class in WINDOWS_THAT_ALREADY_NAME_THEMSELVES:
         return (Gap.NAMED_BY_ITS_TITLE,)

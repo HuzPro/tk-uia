@@ -1,19 +1,18 @@
 """Prints the description of a deliberately mixed Tk window, gaps and all.
 
-Where it plugs in: nothing imports this. It is the script behind the report in
-the README's *"What your own application tells Windows"* section, so that a
-reader who doubts a line of it can re-run it rather than take it on trust.
+Nothing imports this. It is the script behind the report in the README's *"What
+your own application tells Windows"* section, so a reader who doubts a line of
+it can re-run it rather than take it on trust.
 
-The window is built to contain one of everything worth reporting: a label named
-from its own caption, a button named and numbered by hand, an entry nobody
-named, an entry whose value follows a variable, a label driven by a
-`textvariable`, a canvas no role table has heard of, a listbox whose rows are
-invisible, ttk widgets, a notebook whose second tab has never been shown, a
-frame that is never packed, a label whose caption moved on after annotation, and
-a second window.
+The window contains one of everything worth reporting: a label named from its
+own caption, a button named and numbered by hand, an entry nobody named, an
+entry whose value follows a variable, a label driven by a `textvariable`, a
+canvas no role table has heard of, a listbox whose rows are invisible, ttk
+widgets, a notebook whose second tab has never been shown, a frame that is never
+packed, a label whose caption moved on after annotation, and a second window.
 
 It reads nothing back from Windows and asks no UI Automation client anything.
-That is the point, and the report says so in its own last paragraph.
+The report says so in its own last paragraph.
 
     python probes/what_your_app_tells_windows.py
 """
@@ -38,8 +37,8 @@ IN_PROGRESS = "in progress"
 NEW_TASK_NUMBER = 4207
 
 # Small on purpose. The packer drops whatever it cannot fit and `<Map>` never
-# fires for it — the failure this whole report exists to make visible, and one
-# that raises nothing anywhere.
+# fires for it, raising nothing anywhere: the failure this report exists to make
+# visible.
 _A_WINDOW_TOO_SMALL_FOR_EVERYTHING_IN_IT = "360x420"
 
 
@@ -58,9 +57,9 @@ class Widgets:
 
 def main() -> None:
     widgets = _a_window_with_one_of_everything_worth_reporting()
-    # Realised and mapped before accessibility is switched on, so that the sweep
-    # over what is already on screen is the path taken — and so that whatever
-    # the geometry manager could not fit has already failed to map.
+    # Realised and mapped before accessibility is switched on, so the path taken
+    # is the sweep over what is already on screen, and so whatever the geometry
+    # manager could not fit has already failed to map.
     widgets.root.update()
 
     tk_uia.enable(widgets.root)

@@ -2,8 +2,8 @@
 
 Two halves, and both are needed: a binding for everything Tk maps from now on,
 and a sweep of everything already on screen. `<Map>` fires once per widget, on
-the way up — a window that is already showing when `enable()` is called will
-never fire it again, and without the sweep those widgets stay anonymous forever.
+the way up, so a window already showing when `enable()` is called will never
+fire it again and without the sweep stays anonymous forever.
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ def test_a_widget_destroyed_after_enabling_gives_its_handle_back_clean() -> None
     label = FakeWidget("Label", _A_LABEL_HANDLE, text="ready")
     root.announce("<Map>", label)
 
-    # When Tk destroys it, passing only the path — which is all `<Destroy>`
+    # When Tk destroys it, passing only the path, which is all `<Destroy>`
     # carries once the widget object has already gone
     root.announce("<Destroy>", str(label))
 
@@ -117,17 +117,16 @@ def test_a_widget_destroyed_after_enabling_lets_go_of_the_variable_it_was_follow
     root.announce("<Map>", label)
     installation.annotator.bind_text_variable(label, status)
 
-    # When Tk destroys the label and the variable goes on being written, which
-    # is the ordinary shape of a variable: it belongs to the application, not to
-    # the widget, and routinely outlives every widget that ever displayed it
+    # When Tk destroys the label and the variable goes on being written, as a
+    # variable does: it belongs to the application, not to the widget, and
+    # routinely outlives every widget that ever displayed it
     label.destroy()
     root.announce("<Destroy>", str(label))
     status.set("task created")
 
     # Then the trace is off the variable rather than merely inert. A guard that
     # declined to announce would leave the registration in place for the life of
-    # the process, firing on every write — a slow leak in a long-running
-    # application, and one more thing between a variable and being garbage.
+    # the process, firing on every write.
     assert status.traces_left() == _NOTHING_STILL_LISTENING, (
         f"{status.traces_left()} trace(s) outlived the widget they were "
         "registered for, and will go on firing at a dead window path forever"
@@ -149,9 +148,8 @@ def test_a_widget_already_showing_follows_the_variable_it_declares_from_the_star
     status.set("task created")
 
     # Then the label announces what the variable says now. The widget told Tk
-    # which variable drives it when it was built, and the whole point of this is
-    # that an application does not have to tell this package the same thing
-    # again — so the wiring from `enable()` down to the trace has to be real.
+    # which variable drives it when it was built, so the wiring from `enable()`
+    # down to the trace has to be real for an application to say nothing.
     assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "task created", (
         "the variable the widget declares is not being followed at all: "
         f"{store.properties(_A_LABEL_HANDLE)}"
@@ -192,8 +190,8 @@ def test_the_whole_surface_can_still_be_called_where_there_is_nothing_to_annotat
     installation.annotator.forget(label)
 
     # Then every one of them is a no-op rather than an error. An application
-    # that has to guard each call in a platform check will get one of them
-    # wrong, and the failure will only ever show up on the other platform.
+    # guarding each call in a platform check will get one of them wrong, and the
+    # failure only ever shows up on the other platform.
     assert installation.strategy is Strategy.UNSUPPORTED
     assert store.writes == [], (
         f"reached for MSAA on a machine without it: {store.writes}"

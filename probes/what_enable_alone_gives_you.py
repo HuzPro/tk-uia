@@ -1,16 +1,15 @@
 """Measures what `enable()` on its own leaves a client able to read, and what it does not.
 
-Where it plugs in: nothing imports this. It is the script behind the README's
-caveats — the *"one call makes it findable and readable"* headline, the entry
+Nothing imports this. It is the script behind the README's caveats: the entry
 whose ValuePattern is empty until somebody binds it, the accessible name that
 goes stale after `config(text=...)`, and the checkbutton whose checked state is
-never conveyed. Run it and the numbers in the README are either reproduced or
-falsified; that is the only reason it exists.
+never conveyed. Run it and those claims are either reproduced or falsified.
 
 It launches a Tk window that calls `enable(root)` and then deliberately says
 nothing else, into a process of its own, and reads it back through UI Automation
-from this one — the same arrangement as the gui specs, for the same reason: an
-annotation read inside the process that wrote it proves nothing about the bridge.
+from this one. Same arrangement as the gui specs, and for the same reason: an
+annotation read inside the process that wrote it proves nothing about the
+bridge.
 
     python probes/what_enable_alone_gives_you.py
 """
@@ -73,8 +72,8 @@ def an_application_that_only_calls_enable(title: str, commands: Path) -> None:
     tk.Button(root, text=NEW_TASK).pack(pady=10)
     tk.Entry(root, width=30, textvariable=tk.StringVar(value=SHOPPING)).pack(pady=10)
     # Two checkbuttons that differ only in whether they are ticked, and one
-    # widget that is disabled: if a client cannot tell these apart, state is not
-    # being conveyed however confidently the control type reads.
+    # widget that is disabled. A client that cannot tell these apart is not
+    # being told about state, however confidently the control type reads.
     ticked = tk.IntVar(value=1)
     tk.Checkbutton(root, text=TICKED, variable=ticked).pack()
     tk.Checkbutton(root, text=UNTICKED, variable=tk.IntVar(value=0)).pack()
@@ -87,8 +86,7 @@ def an_application_that_only_calls_enable(title: str, commands: Path) -> None:
         raise SystemExit(f"enable() reported {strategy}: nothing here is annotated")
 
     handlers = {
-        # The widget changes its words the ordinary way, and says nothing to
-        # this package about it.
+        # The widget changes its words the ordinary way, saying nothing here.
         RESTYLE_THE_LABEL: lambda: headline.config(text=RESTYLED),
         # The documented workaround: the annotator re-reads `-text`.
         RE_ADD_THE_LABEL: lambda: tk_uia.add_acc_object(headline),

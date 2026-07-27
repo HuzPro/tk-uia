@@ -3,16 +3,14 @@
 Two things the doubles cannot reach. The first is contact with real tkinter:
 `keys()` really returns a list, `cget` really hands back a Tcl object, and
 `winfo_children()` on a root really includes the toplevels and menus Tk put
-there — a description specified only against `FakeWidget` would be specified
+there. A description specified only against `FakeWidget` would be specified
 against a widget somebody wrote to make it pass.
 
-The second is the whole point of the feature. The description says what tk-uia
+The second is the point of the feature. The description says what tk-uia
 *believes* it wrote, and every failure mode this package has returns `S_OK` and
 does nothing. So the second spec reads the description out of a live
-application, reads the same window back through UI Automation from this
-process, and checks the claim against what a client can actually see. That
-comparison is the thing that catches an annotation which went nowhere, and it
-belongs in the suite rather than only in a recipe nobody runs.
+application, reads the same window back through UI Automation from this process,
+and checks the claim against what a client can actually see.
 """
 
 from __future__ import annotations
@@ -64,8 +62,8 @@ def test_describing_a_real_tk_window_names_its_widgets_by_their_real_tk_classes_
         f"something other than a live Tk:\n{report}"
     )
 
-    # And the unknown_class_widget — the one class the role table has never heard of — is
-    # reported as carrying nothing, with the reason
+    # And the one class the role table has never heard of is reported as
+    # carrying nothing, with the reason
     assert "NO_ROLE_FOR_ITS_CLASS" in report, (
         f"the unknown_class_widget this application deliberately leaves unannotated is not "
         f"reported as unwritten:\n{report}"
@@ -97,11 +95,10 @@ def test_every_name_the_description_says_it_wrote_is_a_name_a_client_in_another_
     }
 
     # Then every name the description claims is one a client really sees. This
-    # is the half of the cross-repo comparison that can live in this repo, and
-    # it is the only thing that catches the failure this package is built
-    # around: `IAccPropServices` accepts a write to a window handle nobody
-    # owns, answers `S_OK`, and changes nothing — after which the description
-    # goes on reporting a name no client will ever read.
+    # is the only thing that catches the failure this package is built around:
+    # `IAccPropServices` accepts a write to a window handle nobody owns, answers
+    # `S_OK`, and changes nothing, after which the description goes on reporting
+    # a name no client will ever read.
     unread = {path: name for path, name in claimed.items() if name not in readable}
 
     assert unread == {}, (

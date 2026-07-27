@@ -1,11 +1,10 @@
 """A real `ttk.Notebook`, answering the three questions the tab scan asks.
 
-Where it plugs in: `enable()` wraps each notebook it meets in one of these and
-hands it to `tabs_on`. A humble object — the only decision in it is that a point
-Tk refuses to name a tab for is a point with no tab on it, which is the whole
-reason the seam exists: `tabs.py` cannot catch a `TclError` without importing
-tkinter, and importing tkinter is what the package's Linux lane proves it does
-not do.
+`enable()` wraps each notebook it meets in one of these and hands it to
+`tabs_on`. The only decision in it is that a point Tk refuses to name a tab for
+is a point with no tab on it, which is the reason the seam exists: `tabs.py`
+cannot catch a `TclError` without importing tkinter, and the package's Linux
+lane proves it does not.
 
 There is no public API for a tab's rectangle. `index @x,y` is the same question
 Tk answers for a real mouse click, so scanning with it is the one measurement
@@ -27,8 +26,8 @@ class TkTabStrip:
     def settle(self) -> None:
         """Let Tk finish laying the strip out before anything measures it.
 
-        Idle tasks only — never `update()`, which would drain the event queue
-        and re-enter whatever binding is asking for this.
+        Idle tasks only, never `update()`, which would drain the event queue and
+        re-enter whatever binding is asking for this.
         """
         self._notebook.update_idletasks()
 

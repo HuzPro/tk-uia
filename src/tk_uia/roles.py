@@ -1,8 +1,8 @@
 """The MSAA role numbers Tk widget classes are announced as.
 
-Where it plugs in: the annotator looks a widget's ``winfo_class()`` up here and
-writes the number it finds as `PROPID_ACC_ROLE`. Nothing else in the package
-knows what a "button" is.
+The annotator looks a widget's ``winfo_class()`` up here and writes the number
+it finds as `PROPID_ACC_ROLE`. Nothing else in the package knows what a "button"
+is.
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ class Role(Enum):
     SLIDER = 51
     SPIN_BUTTON = 52
     PAGE_TAB_LIST = 60
-    # `oleacc.h` calls this SPLITBUTTON, and BUTTONMENU (0x39) reads as the more
-    # obviously named thing — measured, it is a `MenuItemControl`, which would
+    # `oleacc.h` calls this SPLITBUTTON. BUTTONMENU (0x39) reads as the more
+    # obviously named thing and measures as a `MenuItemControl`, which would
     # have a screen reader announce a menu *item* for a button that is not in a
     # menu at all. This one reads as `SplitButtonControl`: a button with a menu
     # attached, which is what a Menubutton is.
@@ -87,10 +87,10 @@ ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
         "TPanedwindow": Role.GROUPING,
         "TSeparator": Role.SEPARATOR,
         "TSizegrip": Role.GRIP,
-        # A menu is never mapped, so nothing here is ever written to one — and
-        # that is the point of the entry. Without it `describe()` blames the
-        # missing role, which reads as "add one and this will work"; with it the
-        # report says NEVER_MAPPED, which is the truth and is not fixable.
+        # A menu is never mapped, so nothing here is ever written to one, which
+        # is the point of the entry. Without it `describe()` blames the missing
+        # role, reading as "add one and this will work"; with it the report says
+        # NEVER_MAPPED, which is the truth and is not fixable.
         "Menu": Role.MENU_POPUP,
     }
 )

@@ -1,9 +1,8 @@
 """Running a call on a thread that does not own the widgets, and catching what it says.
 
-Two specs need this — one for annotating, one for describing — and both are
-about a refusal that has to arrive as an exception on the calling thread rather
-than as a traceback printed by a worker nobody is watching. It is a helper
-rather than a double, so it lives beside them instead of in `doubles.py`.
+The refusal has to arrive as an exception on the calling thread rather than as a
+traceback printed by a worker nobody is watching. A helper rather than a double,
+so it lives here instead of in `doubles.py`.
 """
 
 from __future__ import annotations

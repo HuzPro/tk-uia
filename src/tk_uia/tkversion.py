@@ -1,8 +1,8 @@
 """Whether this package should annotate a Tk, defer to it, or stand aside.
 
-Where it plugs in: `enable()` asks this first and reports the answer back to its
-caller, so a suite can assert which path it got rather than discovering months
-later that the gate mis-fired and the whole thing quietly did nothing.
+`enable()` asks this first and reports the answer back to its caller, so a suite
+can assert which path it got rather than discovering later that the gate
+mis-fired and the whole thing quietly did nothing.
 
 Everything is asked of the interpreter rather than of `sys.platform` or
 `tkinter.TkVersion`: the interpreter is the thing whose behaviour is in
@@ -71,13 +71,12 @@ def _version_of(interpreter: TkInterpreter) -> tuple[int, ...]:
 
 def _offers_its_own_accessibility(interpreter: TkInterpreter) -> bool:
     # Asked through Tcl's own `catch` rather than by letting the error cross
-    # into Python, which would mean catching whatever tkinter chose to raise —
+    # into Python, which would mean catching whatever tkinter chose to raise,
     # and this module cannot import tkinter to name it.
     #
     # The subcommand is one Tk cannot have, so what comes back is Tk's own list
-    # of the subcommands it does have. That is how the accessibility ensemble
-    # is found without running any part of it: these commands are new, still in
-    # beta, and have never been executed here or anywhere else.
+    # of the subcommands it does have. That is how the accessibility ensemble is
+    # found without running any part of it.
     interpreter.call(
         "catch", _A_SUBCOMMAND_TK_WILL_NEVER_HAVE, _WHERE_TK_LEAVES_ITS_COMPLAINT
     )

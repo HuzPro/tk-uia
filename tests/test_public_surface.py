@@ -44,8 +44,8 @@ def test_switching_accessibility_on_where_there_is_none_says_so_and_stays_callab
     tk_uia.forget(label)
 
     # Then it is told plainly that nothing was annotated, and not one of those
-    # calls raised. The return value is the whole point: without it, "annotated"
-    # and "the gate mis-fired and this did nothing" are the same silence.
+    # calls raised. Without the return value, "annotated" and "the gate
+    # mis-fired and this did nothing" are the same silence.
     assert strategy is Strategy.UNSUPPORTED, (
         f"claimed {strategy} on a machine with no MSAA to annotate through"
     )
@@ -58,15 +58,15 @@ def test_switching_accessibility_on_a_second_time_hands_back_the_installation_al
     root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False))
     the_first_time = tk_uia.enable(root)
 
-    # When something switches it on again — a library being defensive, a dialog
+    # When something switches it on again: a library being defensive, a dialog
     # module enabling for its own window, a restarted startup path
     the_second_time = tk_uia.enable(root)
 
     # Then Tk was told once. A second pair of bindings leaves a stale annotator
-    # auto-annotating widgets that `forget()` — which reaches only the newest —
-    # can no longer take back, and every call leaks an `IAccPropServices` that
-    # nothing ever releases. `bind_all` binds on the `all` bindtag, so the first
-    # installation already covers every window this application will open.
+    # auto-annotating widgets that `forget()` can no longer take back, since it
+    # reaches only the newest, and every call leaks an `IAccPropServices`.
+    # `bind_all` binds on the `all` bindtag, so the first installation already
+    # covers every window this application will open.
     assert root.class_bindings == [
         (_A_WIDGET_APPEARED, _ALONGSIDE),
         (_A_WIDGET_DIED, _ALONGSIDE),
@@ -88,9 +88,8 @@ def test_saying_something_before_accessibility_is_switched_on_is_refused() -> No
     with pytest.raises(AnnotationRefused) as refusal:
         tk_uia.set_acc_name(label, "status")
 
-    # Then it is told. Doing nothing quietly is the failure mode this whole
-    # package exists to refuse, and it would be indistinguishable from a Tk that
-    # is simply not annotatable.
+    # Then it is told. Doing nothing quietly would be indistinguishable from a
+    # Tk that is simply not annotatable.
     assert "enable" in str(refusal.value), (
         f"the refusal has to say what was skipped: {refusal.value}"
     )
@@ -107,9 +106,8 @@ def test_describing_an_application_that_has_not_switched_accessibility_on_is_ref
         tk_uia.describe(root)
 
     # Then it is told, in the same words every other call uses. A report saying
-    # "enable() was never called" is tempting — it is the number one cause of
-    # "nothing works" — but there would be no honest strategy to head it with,
-    # and the refusal already is the complete answer.
+    # "enable() was never called" is tempting, being the number one cause of
+    # "nothing works", but there would be no honest strategy to head it with.
     assert "enable" in str(refusal.value), (
         f"the refusal has to say what was skipped: {refusal.value}"
     )
@@ -125,8 +123,7 @@ def test_every_call_an_application_makes_says_what_it_does_when_asked() -> None:
     ]
 
     # Then every one of them answers. This surface is the only documentation
-    # most callers will ever see — a library about making things announce
-    # themselves cannot have a public API that says nothing about itself.
+    # most callers will ever see.
     assert silent == [], f"no docstring on {silent}, so hover and help() show nothing"
 
 
@@ -141,9 +138,9 @@ def test_importing_the_package_reaches_for_neither_tkinter_nor_windows() -> None
     )
 
     # Then both import, and a store can be built without reaching for any of it.
-    # This is not housekeeping: it is what lets every spec above run on Linux,
-    # where the CPython that CI installs is not guaranteed to carry `_tkinter`
-    # at all, and it is why an application can call `enable()` unconditionally.
+    # This is what lets every spec above run on Linux, where the CPython CI
+    # installs is not guaranteed to carry `_tkinter` at all, and why an
+    # application can call `enable()` unconditionally.
     assert attempt.returncode == 0, (
         f"the package cannot be imported without Tk or Windows:\n{attempt.stderr}"
     )

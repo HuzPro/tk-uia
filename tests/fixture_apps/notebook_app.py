@@ -1,9 +1,7 @@
 """A Tk application whose whole point is a notebook, for the tab specs to read.
 
-Kept apart from `annotated_app.py` rather than folded into it: a notebook's tabs
-are the one thing in this package that is not a widget, reached by a mechanism
-of its own, and a fixture that grew a notebook would make every unrelated spec
-pay for scanning one.
+Kept apart from `annotated_app.py`, because a fixture that grew a notebook would
+make every unrelated spec pay for scanning one.
 
 The window titles itself from `argv` so that several runs, or a window left
 behind by a crashed one, cannot be mistaken for each other.
@@ -47,8 +45,7 @@ class Widgets:
 def main(title: str, commands: Path) -> None:
     widgets = _a_window_with_a_notebook(title)
     # Painted before accessibility is switched on, so the tab strip has a
-    # geometry to scan. This is also the path a real application takes: a
-    # notebook laid out at startup and `enable()` called once afterwards.
+    # geometry to scan, and so this is the path a real application takes.
     widgets.root.update_idletasks()
     _accessibility_switched_on(widgets.root)
     _watching_for_commands(widgets, commands)
@@ -97,9 +94,9 @@ def _remove_the_selected_tab(widgets: Widgets) -> None:
 
 
 def _rename_the_first_tab(widgets: Widgets) -> None:
-    # A plain `tab(0, text=...)` fires no event at all — the same shape as a
-    # `config(text=...)` on a label, and documented the same way: an application
-    # that renames a tab says so with `add_acc_object(notebook)`.
+    # A plain `tab(0, text=...)` fires no event at all, the same shape as a
+    # `config(text=...)` on a label: an application that renames a tab says so
+    # with `add_acc_object(notebook)`.
     widgets.notebook.tab(0, text=RENAMED)
     tk_uia.add_acc_object(widgets.notebook)
 

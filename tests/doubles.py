@@ -1,9 +1,9 @@
 """Stand-ins for the two things the annotator talks to: Windows, and Tk.
 
-Neither is available to a spec — one needs a desktop, the other a display — and
-both are narrow enough to answer honestly in a dict. Everything the package
-decides is decided above this line, so these doubles are the reason the whole
-suite runs on a machine with no Tk, no display and no Windows.
+One needs a desktop and the other a display, and both are narrow enough to
+answer honestly in a dict. Everything the package decides is decided above this
+line, so these doubles are why the whole suite runs on a machine with no Tk, no
+display and no Windows.
 """
 
 from __future__ import annotations
@@ -56,10 +56,10 @@ class FakeWidget:
 
     Every method here goes through the Tcl interpreter in a real Tk, so every
     method here refuses a caller from another thread. That is *stricter* than Tk
-    itself, deliberately: real Tk mostly answers, and corrupts the interpreter
-    quietly instead — a failure a spec could never see. The rule under test is
-    that the annotator turns a foreign caller away before touching Tk at all,
-    and a double that answered would let a guard that fires afterwards pass.
+    itself, deliberately: real Tk mostly answers and corrupts the interpreter
+    quietly instead, which is a failure a spec could never see. The rule under
+    test is that the annotator turns a foreign caller away before touching Tk at
+    all, and a double that answered would let a late guard pass.
     """
 
     def __init__(
@@ -84,19 +84,17 @@ class FakeWidget:
         # `-label`, and it is the one widget in the toolkit built that way.
         if label is not None:
             self._options["label"] = label
-        # The Tcl *name* of a variable, which is all a widget carries: measured,
-        # `cget("textvariable")` answers `'PY_VAR0'` where one is declared and
-        # `''` where the option exists and nobody filled it in. Only the classes
-        # that really have the option get it — an entry does, a `tk.Text` does
-        # not, and the difference is what `keys()` is asked for.
+        # The Tcl *name* of a variable, which is all a widget carries. Only the
+        # classes that really have the option get it: an entry does, a `tk.Text`
+        # does not, and the difference is what `keys()` is asked for.
         if textvariable is not None:
             self._options["textvariable"] = textvariable
         self._mapped = mapped
         self._children = list(children)
-        # A real Tk path encodes ancestry — a dialog is `.!toplevel` and the
-        # button in it is `.!toplevel.!button` — and the one built here from the
-        # class and the handle is unique and says nothing about who holds it.
-        # A spec that turns on which window a widget is in says so instead.
+        # A real Tk path encodes ancestry: a dialog is `.!toplevel` and the
+        # button in it is `.!toplevel.!button`. The one built here from the
+        # class and the handle is unique and says nothing about who holds it, so
+        # a spec that turns on which window a widget is in passes `path=`.
         self._path = path if path is not None else f".!{tk_class.lower()}{hwnd}"
         self._destroyed = False
 
@@ -116,7 +114,7 @@ class FakeWidget:
 
     def winfo_exists(self) -> bool:
         # Answers rather than raises, as Tcl's `winfo exists` does for a path it
-        # no longer has — which is what makes it usable as a liveness check.
+        # no longer has, which is what makes it usable as a liveness check.
         self._only_from_the_thread_that_owns_tk()
         return not self._destroyed
 
@@ -214,9 +212,7 @@ class VariablesByName:
 
     Stands in for `tk_uia._tkvars`: a widget declares the *name* of a variable
     and nothing else, so something has to turn that name into a value and
-    somewhere to hang a trace. Here that is a dict; there it is four calls into
-    Tcl, made rather than wrapped in a `tkinter.Variable` — one of those unsets
-    the application's own variable when it is collected.
+    somewhere to hang a trace. Here that is a dict.
 
     A name nobody owns answers `None`, which is what a Tk with no such variable
     answers too, and means the widget is left exactly as it was.

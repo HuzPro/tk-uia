@@ -6,7 +6,7 @@ of anonymous panes. `enable(root)` annotates each widget through MSAA, which
 Windows bridges to UI Automation, and the tree starts telling the truth.
 
 The names re-exported here are the whole public surface, and they deliberately
-mirror TIP 733 — Tk 9.1's own accessibility API — so that moving to it later is
+mirror TIP 733, Tk 9.1's own accessibility API, so that moving to it later is
 close to a rename. `enable()` returns which of the three things it did, because
 "annotated" and "the version gate mis-fired and this did nothing at all" are
 otherwise the same silence.
@@ -14,8 +14,8 @@ otherwise the same silence.
 Importing this module reaches for neither `tkinter` nor `ctypes.windll`: the
 type names below are only needed by a type checker, and the platform is not
 touched until `enable()` runs. That is what lets the whole spec suite run on a
-machine with no Tk, no display and no Windows — which matters practically too,
-since a Linux CPython is not guaranteed to carry `_tkinter` at all.
+machine with no Tk, no display and no Windows, where a Linux CPython is not
+guaranteed to carry `_tkinter` at all.
 """
 
 from __future__ import annotations
@@ -77,16 +77,17 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
     """Annotate this application's widgets, and say which way it went.
 
     A widget driven by a `textvariable` is followed from here on: the widget
-    already told Tk which variable it shows, so its name — or its value, where
-    a client asks the contents of the control — stays in step with no further
-    call. Saying something yourself takes it back, permanently.
+    already told Tk which variable it shows, so its name stays in step with no
+    further call. Where a client asks the contents of the control, the variable
+    is read as its value instead. Saying something yourself takes it back,
+    permanently.
 
     Idempotent: a second call reports what the first one did and installs
     nothing further. `bind_all` binds on the `all` bindtag, so one installation
-    already covers every window the application will ever open — where a second
-    would stack another pair of `<Map>`/`<Destroy>` bindings, leave a stale
-    annotator auto-annotating widgets that `forget()` can no longer reach, and
-    leak one more `IAccPropServices` that nothing releases.
+    already covers every window the application will ever open. A second would
+    stack another pair of `<Map>`/`<Destroy>` bindings, leave a stale annotator
+    auto-annotating widgets that `forget()` can no longer reach, and leak one
+    more `IAccPropServices` that nothing releases.
     """
     global _installed
     if _installed is not None:
@@ -145,15 +146,14 @@ def label_for(label: tkinter.Misc, widget: tkinter.Misc) -> None:
     """Say that this label is the caption for that widget, and name it accordingly.
 
     The Tk answer to Qt's `QLabel.setBuddy` and HTML's `<label for=...>`. An
-    entry has no words of its own and in Tk its caption is a *sibling* — nothing
-    in the toolkit records the relationship, so nothing can read it back. Said
-    once here, the widget answers to the label's words, without the colon a
-    caption ends with: `label_for(tk.Label(text="Host:"), entry)` names the
-    entry `'Host'`.
+    entry has no words of its own, and in Tk its caption is a *sibling* that
+    nothing in the toolkit records a relationship to. Said once here, the widget
+    answers to the label's words, without the colon a caption ends with:
+    `label_for(tk.Label(text="Host:"), entry)` names the entry `'Host'`.
 
     Where the label declares a `-textvariable`, the name follows that variable
     from then on. Where it does not, the words are read once and go stale on the
-    next `config(text=...)`, exactly as `add_acc_object`'s do — call this again
+    next `config(text=...)`, exactly as `add_acc_object`'s do; call this again
     to re-read them. A label showing nothing at all raises `AnnotationRefused`
     rather than naming the widget the empty string.
     """
@@ -165,7 +165,7 @@ def infer_names_from_layout(root: tkinter.Misc) -> tuple[NamedByTheLayout, ...]:
 
     The retrofit: every entry is named after the caption beside it, and every
     "Browse..." button is qualified with the row it acts on. Deliberately not
-    part of `enable()` — this reads a widget's name off the widgets *around* it,
+    part of `enable()`. This reads a widget's name off the widgets *around* it,
     which Tk records nothing about, so it is a guess rather than a reading. The
     library never guesses on its own; this is a convention you have recognised
     in your own window and asked to have applied.
@@ -219,7 +219,7 @@ def bind_text_variable(widget: tkinter.Misc, variable: tkinter.Variable) -> None
 
     The variable a widget declares in its `-textvariable` is followed by
     `enable()` already. This is for the widget that declares none, and for the
-    application whose announced name is not the one on screen — it replaces the
+    application whose announced name is not the one on screen. It replaces the
     automatic binding rather than joining it.
     """
     _annotator().bind_text_variable(widget, variable)
@@ -258,8 +258,8 @@ def describe(root: tkinter.Misc) -> Description:
     """Say what this application has told Windows about the widgets under `root`.
 
     Reports what tk-uia believes it wrote, which is not evidence that a client
-    can read it — see the caveat the report closes with. `print()` it for the
-    report; read `.widgets` for the same thing as data.
+    can read it; see the caveat the report closes with. `print()` it for the
+    report, or read `.widgets` for the same thing as data.
     """
     return _describe(root, _the_installation())
 

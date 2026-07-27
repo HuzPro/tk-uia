@@ -1,23 +1,22 @@
 """One window holding every widget classic Tkinter has, for the survey to read.
 
-Where it plugs in: `coverage_matrix.py` launches this, reads the window through
-UI Automation before and after `enable()`, and joins the two by rectangle. It is
-also runnable on its own if you just want to look at it:
+`coverage_matrix.py` launches this, reads the window through UI Automation
+before and after `enable()`, and joins the two by rectangle. Also runnable on
+its own if you just want to look at it:
 
     python probes/every_classic_tk_widget.py "classic tk zoo" .
 
 Every widget class `tkinter` exposes is here, including the three that do not
-behave like ordinary children and are the likeliest to come out unsupported:
+behave like ordinary children:
 
-- `Menu` is not a child widget at all — it is posted. One is attached to the
-  window as its menubar and one to the `Menubutton`, and neither ever maps.
+- `Menu` is posted rather than laid out. One is attached to the window as its
+  menubar and one to the `Menubutton`, and neither ever maps.
 - `Toplevel` is a window of its own, which tk-uia deliberately refuses to
   annotate because `wm title` already names it correctly.
 - `Canvas` draws its own contents, so there is nothing under it to expose.
 
 `OptionMenu` is included even though it is a `Menubutton` underneath, because
-what an application writes is `tk.OptionMenu` and the survey is read by people
-who write that.
+what an application writes is `tk.OptionMenu`.
 """
 
 from __future__ import annotations
@@ -41,12 +40,10 @@ NEVER_SHOWS = frozenset(
 
 
 # What only the application knows. `enable()` names a widget from its own words,
-# and most of these have none: an entry's caption is a *sibling* label and Tk
-# records no relationship between them, so inferring one would be this package
-# guessing at a layout convention.
+# and most of these have none.
 #
-# The two decorative widgets are named too, which a real application should not
-# do — a separator exists to be looked at, not announced, and naming it makes a
+# The decorative widgets are named too, which a real application should not do:
+# a separator exists to be looked at, not announced, and naming it makes a
 # screen reader read out furniture. They are named here because the survey's job
 # is to show every widget *can* be reached.
 WHAT_TO_CALL_THEM = {
@@ -119,8 +116,8 @@ def _a_listbox(root: tk.Tk) -> tk.Listbox:
 
 def _a_canvas(root: tk.Tk) -> tk.Canvas:
     canvas = tk.Canvas(root, width=120, height=60, bg="white")
-    # Drawn rather than packed: a canvas's contents are paint, which is the
-    # whole reason it is the one fixture the pixel fallback still exists for.
+    # Drawn rather than packed: a canvas's contents are paint, and there is no
+    # child widget under it for a client to reach.
     canvas.create_text(60, 30, text="painted words")
     return canvas
 

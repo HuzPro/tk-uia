@@ -24,10 +24,12 @@ Everything up to *Publish* is proven; everything from *Publish* down is the plan
    `## Unreleased`, and the date is today's.
 5. **`COVERAGE.md` is regenerated** if anything touched roles or annotation:
    `python probes/coverage_matrix.py`. It is measured, not written.
-6. **The README's numbers still hold.** The ones that go stale first are the
-   `describe()` sample under *What your own application tells Windows* (re-run
-   `probes/what_your_app_tells_windows.py` and paste), the gui spec count, and
-   the coverage ratios.
+6. **The documented numbers still hold.** They live in `docs/GUIDE.md`, and the
+   ones that go stale first are the `describe()` sample under *What your own
+   application tells Windows* (re-run `probes/what_your_app_tells_windows.py`
+   and paste), the gui spec count in *Measured*, and the coverage ratios. The
+   `describe()` sample in `COOKBOOK.md` carries a version banner and goes stale
+   the same way.
 
 ## Build
 
@@ -137,10 +139,10 @@ import name, or a different name entirely — is the maintainer's and belongs in
 
 2. **Cut a GitHub release** against that tag, with the CHANGELOG section for the
    version as its body.
-3. **Flip the README's install instructions.** *Quickstart* currently opens with
-   "tk-uia is **not on PyPI** — publishing is out of scope for now" and a
-   `git clone` + `pip install -e .`. Once the upload has succeeded that sentence
-   is false, and it becomes:
+3. **Flip the README's install instructions.** The *Install* section currently
+   opens with "tk-uia is not on PyPI yet" and gives a `git clone` +
+   `pip install -e .`. Once the upload has succeeded that sentence is false, and
+   the block becomes:
 
    ```bash
    pip install tk-uia
@@ -165,7 +167,9 @@ import name, or a different name entirely — is the maintainer's and belongs in
 - **The Python classifiers stop at 3.13**, which is what has been tested. 3.14
   runs the same code and is not claimed, because a classifier is a claim.
 - **The README is the PyPI long description**, and PyPI does not resolve
-  relative links. `COOKBOOK.md`, `ROADMAP.md`, `COVERAGE.md` and `LICENSE` all
-  render on the project page as links that go nowhere. Either rewrite them to
-  absolute GitHub URLs before the first upload, or accept it; both are defensible
-  and neither should be decided by whoever happens to be running the build.
+  relative links. Every link in `README.md` that points at a repo file is
+  therefore an absolute `https://github.com/HuzPro/tk-uia/blob/main/…` URL, and
+  `COOKBOOK.md` and `docs/GUIDE.md` follow the same rule so that a reader who
+  arrives from PyPI does not fall off the second page. In-page `#anchor` links
+  stay relative. Anything added to those three files has to keep the
+  convention; nothing enforces it.

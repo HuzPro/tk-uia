@@ -1,21 +1,19 @@
 """One window holding every widget `ttk` has, for the survey to read.
 
-Where it plugs in: the themed half of what `coverage_matrix.py` measures. Also
-runnable on its own:
+The themed half of what `coverage_matrix.py` measures. Also runnable on its own:
 
     python probes/every_ttk_widget.py "ttk zoo" .
 
 Every widget class `tkinter.ttk` exposes is here. Three are worth knowing about
 before reading the results:
 
-- `ttk.LabeledScale` and `ttk.OptionMenu` are *composites* — a `TFrame` and a
+- `ttk.LabeledScale` and `ttk.OptionMenu` are *composites*: a `TFrame` and a
   `TMenubutton` with widgets inside them. What a client sees is the container,
   and the survey reports the container's class rather than pretending otherwise.
-- `ttk.Notebook` is the one widget whose contents this package reaches: since
-  0.4.0 each tab is given a window handle of its own.
+- `ttk.Notebook` is the one widget whose contents this package reaches, each tab
+  being given a window handle of its own.
 - `ttk.Sizegrip` and `ttk.Separator` show nothing and do nothing; they are here
-  because "every widget" means every widget, and a survey that quietly dropped
-  the boring ones would not be a survey.
+  because a survey that quietly dropped the boring ones would not be a survey.
 
 There is no themed `Text`, `Listbox`, `Canvas` or `Message`: ttk does not
 replace those, and an application that wants them uses the classic widget.
@@ -38,8 +36,8 @@ TITLE = "tk-uia ttk widget zoo"
 NEVER_SHOWS = frozenset({"ttk.Menu (on a Menubutton)"})
 
 
-# The themed half of the same idea. See the classic zoo for why the decorative
-# two are named here and should not be in a real application.
+# See the classic zoo for why the decorative two are named here and should not
+# be in a real application.
 WHAT_TO_CALL_THEM = {
     "ttk.Entry": "Task title",
     "ttk.Combobox": "Priority",

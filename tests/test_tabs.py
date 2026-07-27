@@ -1,10 +1,8 @@
 """A notebook's tabs, which have no window handle until this gives them one.
 
-Tk draws a notebook's tab strip inside the notebook's own window, so there is
-nothing for `SetHwndProp` to annotate and a client sees a tab control with no
-tabs in it. Everything specified here decides *what* handles should exist and
-what each should say; making one is four lines of Win32 behind a seam, and the
-gui specs are what prove a client can read them.
+Everything specified here decides *what* handles should exist and what each
+should say. Making one is four lines of Win32 behind a seam, and the gui specs
+are what prove a client can read them.
 """
 
 from __future__ import annotations
@@ -20,7 +18,7 @@ class FakeStrip:
 
     Tabs sit side by side along the top of the notebook and share a height,
     which is how ttk lays a strip out. `tab_at` answers None off the strip,
-    where the real one raises — the seam is what turns one into the other.
+    where the real one raises; the seam is what turns one into the other.
     """
 
     def __init__(
@@ -117,8 +115,8 @@ _HOW_FAR_A_SELECTED_TAB_STANDS_PROUD = 2
 
 def test_a_strip_whose_selected_tab_stands_proud_still_yields_every_tab() -> None:
     # Given the strip ttk really draws: the selected tab is taller than its
-    # neighbours at both ends, so the topmost row of the strip crosses that tab
-    # and no other. Measured on Tk 8.6.15 — tab 0 ran rows 0..23, the rest 2..21.
+    # neighbours at both ends, so the topmost row crosses that tab and no other.
+    # Measured on Tk 8.6.15: tab 0 ran rows 0..23, the rest 2..21.
     strip = FakeStrip(
         spans={index: (index * 40, index * 40 + 40) for index in range(3)},
         texts={0: "Alpha", 1: "Beta", 2: "Gamma"},
@@ -128,8 +126,8 @@ def test_a_strip_whose_selected_tab_stands_proud_still_yields_every_tab() -> Non
     found = tabs_on(strip)
 
     # Then all three are found. A scan that measured across the first row that
-    # answered would report one tab and call the notebook done — which is a
-    # notebook a client can see the selected page of and never leave.
+    # answered would report one tab and call the notebook done, leaving a client
+    # able to see the selected page and never leave it.
     assert [tab.text for tab in found] == ["Alpha", "Beta", "Gamma"], (
         f"found {[tab.text for tab in found]}; the scan crossed a row that only "
         "the selected tab reaches"
@@ -154,9 +152,8 @@ def test_the_layout_is_left_to_settle_before_a_single_thing_is_measured() -> Non
 
     tabs_on(strip)
 
-    # Then nothing was. Tk lays a strip out on idle, so a tab added a moment ago
-    # is not yet where it will be — measured, adding a tab and scanning straight
-    # afterwards finds the strip exactly as it was and misses the new one.
+    # Then nothing was. Tk lays a strip out on idle: measured, adding a tab and
+    # scanning straight afterwards finds the strip exactly as it was.
     assert strip.measurements_before_settling == 0, (
         f"{strip.measurements_before_settling} measurements were taken against a "
         "layout Tk had not finished"
@@ -237,9 +234,8 @@ def test_a_surrendered_window_is_cleared_before_windows_can_hand_it_out_again() 
 
     handles.refresh(_A_NOTEBOOK, _ITS_HANDLE, tabs_on(a_strip_of("Alpha")))
 
-    # Cleared, and cleared *first*: an annotation outliving the handle it was
-    # made on is the recycling hazard the ledger already guards against, and here
-    # the package owns the handle rather than merely borrowing it.
+    # Cleared, and cleared *first*: Windows hands the same handle out again, and
+    # here the package owns the handle rather than merely borrowing it.
     assert store.cleared == [surplus]
     assert store.properties(surplus) == {}
 

@@ -37,10 +37,10 @@ and a package that costs an application nothing to install.
 
 - **`describe(root)`, so an application can ask what it has told Windows.** A
   row per widget with everything that was written about it, and for every widget
-  it did not write, a named reason drawn from the caveats the README already
-  documents. It walks the live widget tree and reads the annotation ledger; it
-  touches neither UI Automation nor COM, so runtime dependencies stay at zero
-  and the whole report renders on a Linux CPython with no `tkinter` at all. The
+  it did not write, a named reason drawn from the caveats `docs/GUIDE.md`
+  already documents. It walks the live widget tree and reads the annotation
+  ledger; it touches neither UI Automation nor COM, so runtime dependencies stay
+  at zero and the whole report renders on a Linux CPython with no `tkinter`. The
   strategy leads the report, because a page of blanks on a machine where
   `enable()` stood down would otherwise read as a clean bill of health. Nothing
   in it is verification, and it says so in its own last paragraph.
@@ -63,7 +63,7 @@ and a package that costs an application nothing to install.
   is evidenced. What is missing is a run against NVDA with its speech captured
   (the `nvda_speech` log, or the NVDA Remote add-on), asserting that moving
   focus to the button announces "New Task button" rather than merely that the
-  tree says so. **The README carries this as a checklist** — see *Not yet
+  tree says so. **`docs/GUIDE.md` carries this as a checklist** — see *Not yet
   verified: a real screen reader* — because the individual checks are the work,
   and several of them (a value announced on focus, nothing announced twice) test
   claims this library has no other way to falsify.
@@ -157,9 +157,9 @@ reason it was made.
 - **Non-goal: annotating other processes.** `IAccPropServices` annotates the
   calling process's own windows. Reaching across does not raise — it silently
   does nothing, and can corrupt an annotation the other process made properly.
-  The README documents the `SetWindowTextW` names-only rescue for applications
-  you cannot modify, with that warning attached; it will not be wrapped in an
-  API here, because an API is an invitation.
+  `docs/GUIDE.md` documents the `SetWindowTextW` names-only rescue for
+  applications you cannot modify, with that warning attached; it will not be
+  wrapped in an API here, because an API is an invitation.
 - **Non-goal: non-Windows platforms.** MSAA is a Windows API. `enable()` returns
   `UNSUPPORTED` off Windows so that cross-platform applications can call it
   unconditionally, and the whole unit suite runs there — but that exists to keep
