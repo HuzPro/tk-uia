@@ -85,6 +85,10 @@ widget out; `describe()` says who answers for what and why not.
   Invoked event belongs after a posted press completes.
 - **`ILegacyIAccessibleProvider`**, so `set_acc_action` and `set_acc_state`
   reach UIA clients on provided widgets the way they reach MSAA ones.
+- **A per-tab name override, when somebody demonstrates the want.** A tab's
+  caption is its name in almost every real window, tabs are not widgets so
+  `set_acc_name` cannot reach them, and every public hook is an API to keep
+  honest forever; this waits for a real case.
 - **Role-driven pattern acquisition.** `set_acc_role(widget,
   Role.PUSH_BUTTON)` on a canvas button should be able to bring a working
   Invoke with it, once there is an honest way to say what pressing means for

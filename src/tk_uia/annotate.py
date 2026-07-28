@@ -393,10 +393,13 @@ class _WhatAVariableIsBoundTo:
 
     A trace lives on the *variable*, which routinely outlives the widget it was
     bound for, and goes on firing at a dead window path until it is removed.
+    The property it drives is kept so the application's last word on that
+    property can release it and no other.
     """
 
     variable: TkVariable
     callback_name: str
+    prop: PropId
 
     def let_go(self) -> None:
         self.variable.trace_remove(_A_WRITE, self.callback_name)
@@ -649,7 +652,7 @@ class Annotator:
                 widget, variable, prop
             ),
         )
-        bound = _WhatAVariableIsBoundTo(variable, callback_name)
+        bound = _WhatAVariableIsBoundTo(variable, callback_name, prop)
         self._bindings.setdefault(str(widget), []).append(bound)
         self._announce(widget, variable, prop)
         return bound
@@ -671,16 +674,29 @@ class Annotator:
     def _the_application_has_the_last_word_on(
         self, widget: TkWidget, prop: PropId
     ) -> None:
-        """Stop following a declared variable for a property the application is setting.
+        """Stop everything driving a property the application is setting itself.
 
         Released rather than merely outranked: a binding left in place fires
-        from inside Tcl and takes back the word the application just chose.
+        from inside Tcl and takes back the word the application just chose,
+        whether it came from a declared variable, a bound one, or a caption.
         """
         path = str(widget)
         following = self._declared.get(path)
-        if following is None or following.prop is not prop:
-            return
-        self._let_go_of_the_variable_the_widget_declared(path)
+        if following is not None and following.prop is prop:
+            self._let_go_of_the_variable_the_widget_declared(path)
+        self._let_go_of_whatever_else_drives(path, prop)
+
+    def _let_go_of_whatever_else_drives(self, path: str, prop: PropId) -> None:
+        still_standing = []
+        for binding in self._bindings.get(path, ()):
+            if binding.prop is prop:
+                binding.let_go()
+            else:
+                still_standing.append(binding)
+        if still_standing:
+            self._bindings[path] = still_standing
+        else:
+            self._bindings.pop(path, None)
 
     def _let_go_of_the_variable_the_widget_declared(self, path: str) -> None:
         following = self._declared.pop(path, None)

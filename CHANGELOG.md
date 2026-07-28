@@ -52,6 +52,12 @@ changes are raised as property-changed events.
   a name, and its `CANNOT_BE_PRESSED` reason now tells a hand-assigned role
   apart from a wired class instead of claiming a pattern a client cannot get.
 - `dir(tk_uia)` offers the public surface and nothing else.
+- **The application's last word releases every binding driving that
+  property**, not only the widget's declared variable: `set_acc_name` after a
+  `label_for` whose caption shows a variable used to leave the caption's
+  binding registered, and the caption's next write took the name back.
+  `set_acc_value` had the same hole against `bind_value_variable`. Both
+  released now, and only the binding driving that property.
 
 ## 0.6.3 - 2026-07-28
 

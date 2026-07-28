@@ -1127,3 +1127,67 @@ def test_forgetting_a_widget_releases_the_variable_it_was_following_on_its_own()
     assert store.properties(_A_LABEL_HANDLE) == {}, (
         f"forget() left the widget annotated: {store.properties(_A_LABEL_HANDLE)}"
     )
+
+
+def test_a_name_set_by_hand_is_never_taken_back_by_a_caption_bound_before_it() -> None:
+    # Given an entry named after a caption whose words come from a variable
+    store = RecordingStore()
+    what_the_caption_says = FakeVariable("Host:")
+    annotator = Annotator(
+        store,
+        variables=VariablesByName(
+            {_THE_VARIABLE_THE_WIDGET_DECLARES: what_the_caption_says}
+        ),
+    )
+    caption = FakeWidget(
+        "Label", _A_LABEL_HANDLE, textvariable=_THE_VARIABLE_THE_WIDGET_DECLARES
+    )
+    entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+    annotator.add(caption)
+    annotator.add(entry)
+    annotator.label_for(caption, entry)
+    listening_while_bound = what_the_caption_says.traces_left()
+
+    # When the application says the name itself, and the caption later moves
+    annotator.set_name(entry, "Primary host")
+    what_the_caption_says.set("Server:")
+
+    # Then the application has the last word, and keeps it: the caption's
+    # binding was released, not merely outranked for one write
+    assert store.properties(_AN_ENTRY_HANDLE)[PropId.NAME] == "Primary host", (
+        "a caption bound before set_acc_name took the name back on its next "
+        "write, days after the application chose otherwise"
+    )
+    # Exactly the entry's binding: the caption still follows the variable for
+    # its own name, which is enable()'s doing and nobody else's business here.
+    assert what_the_caption_says.traces_left() == listening_while_bound - 1, (
+        "the entry's caption binding is still registered and will fire at it "
+        "for as long as the variable lives"
+    )
+    assert store.properties(_A_LABEL_HANDLE)[PropId.NAME] == "Server:", (
+        "releasing the entry's binding took the caption's own following with it"
+    )
+
+
+def test_a_value_set_by_hand_is_never_taken_back_by_a_variable_bound_before_it() -> (
+    None
+):
+    # Given an entry whose value follows a variable the application bound
+    store = RecordingStore()
+    contents = FakeVariable("draft one")
+    annotator = Annotator(store)
+    entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
+    annotator.add(entry)
+    annotator.bind_value_variable(entry, contents)
+
+    # When the application writes the value itself, and the variable moves on
+    annotator.set_value(entry, "the version that shipped")
+    contents.set("draft two")
+
+    # Then the hand-written value stands, and the binding is gone
+    assert store.properties(_AN_ENTRY_HANDLE)[PropId.VALUE] == (
+        "the version that shipped"
+    ), "a variable bound before set_acc_value took the value back"
+    assert contents.traces_left() == _NOTHING_STILL_LISTENING, (
+        "the value binding is still registered on the variable"
+    )
