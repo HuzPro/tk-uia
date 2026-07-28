@@ -45,6 +45,14 @@ and a package that costs an application nothing to install.
   `enable()` stood down would otherwise read as a clean bill of health. Nothing
   in it is verification, and it says so in its own last paragraph.
 
+## Shipped in v0.6
+
+- **Publishing to PyPI.** `pip install tk-uia`. A release is a tag push: the
+  publish workflow builds the artifacts, refuses a tag that disagrees with
+  `__version__`, and uploads through Trusted Publishing with no token stored
+  anywhere. [RELEASING.md](RELEASING.md) has the flow. The first upload claimed
+  the name.
+
 ## Next
 
 - **The cross-repo comparison, as a recipe rather than a tool.** `describe()`
@@ -130,18 +138,6 @@ and a package that costs an application nothing to install.
   can be thousands of them, where a notebook has four, so the entry above
   stands. The lesson is narrower and worth keeping: "this needs a different
   mechanism" was a conclusion nobody had tried to falsify.
-
-- **Publishing to PyPI: built in 0.6.0, and not uploaded.** Out of scope for
-  v0.1 by decision rather than by omission, and now most of the way done: the
-  sdist and the wheel build clean from `pyproject.toml`, the wheel carries
-  `py.typed` and nothing that is not the package, and it installs into a virtual
-  environment that has never seen this repository with zero dependencies, where
-  `enable()` on a withdrawn root reports `ANNOTATED`. What is left is the upload
-  itself, which needs the maintainer's PyPI account and an API token, and the
-  README's install section, which still says clone-and-`pip install -e .` and is
-  the true instruction until then. [RELEASING.md](RELEASING.md) has the steps in
-  order. The name was verified free when this project started; nothing reserves
-  a PyPI name, and the first successful upload is what claims it.
 
 - **`infer_names_from_layout` should prefer the nearest caption by position.**
   It picks a row's subject by child order today, which matched every row of the

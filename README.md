@@ -16,13 +16,8 @@ change to the window.
 
 ## Install
 
-Not on PyPI yet ([RELEASING.md](https://github.com/HuzPro/tk-uia/blob/main/RELEASING.md)
-has the plan). Install from a clone:
-
 ```bash
-git clone https://github.com/HuzPro/tk-uia
-cd tk-uia
-pip install -e .
+pip install tk-uia
 ```
 
 Windows only. On other platforms `enable()` returns `UNSUPPORTED` and does
