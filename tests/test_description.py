@@ -1171,8 +1171,7 @@ def test_the_report_says_which_patterns_each_widget_answers_for_itself() -> None
         )
 
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
-                    children=[button])
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[button])
     providers = Providers(RecordingPlatform(), wiring)
     installation = install(root, RecordingStore(), providers=providers)
 
@@ -1188,8 +1187,7 @@ def test_the_report_says_which_patterns_each_widget_answers_for_itself() -> None
 def test_a_provided_headline_counts_the_widgets_answering_for_themselves() -> None:
     # Given an installation where providers were wired in
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
-                    children=[button])
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[button])
     installation, _ = _an_installation_with_providers(root)
 
     # When the application asks
@@ -1207,8 +1205,7 @@ def test_a_provided_headline_counts_the_widgets_answering_for_themselves() -> No
 def test_a_widget_left_to_the_proxy_is_reported_with_the_reason() -> None:
     # Given a button the application left to the proxy
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
-                    children=[button])
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[button])
     installation, providers = _an_installation_with_providers(root)
     providers.leave_to_the_proxy(button)
 
@@ -1263,8 +1260,9 @@ def test_a_decorative_separator_is_left_alone_rather_than_pressed_to_take_a_name
 ):
     # Given a separator, which is furniture a screen reader should pass over
     separator = FakeWidget("TSeparator", _A_SCROLLBAR_HANDLE + 1)
-    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
-                    children=[separator])
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[separator]
+    )
     installation = install(root, RecordingStore())
 
     # When the application asks what it has told Windows

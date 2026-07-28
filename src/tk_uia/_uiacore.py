@@ -404,9 +404,7 @@ class _ComLayer:
                 return _UIA_E_INVALIDOPERATION
         except Exception:  # noqa: BLE001 - a COM callback must never raise
             return _E_FAIL
-        return self._act(
-            this, Pattern.VALUE, lambda answers: answers.write(text or "")
-        )
+        return self._act(this, Pattern.VALUE, lambda answers: answers.write(text or ""))
 
     def _value(self, this: int, out: int) -> int:
         try:

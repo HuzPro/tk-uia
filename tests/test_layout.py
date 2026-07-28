@@ -394,18 +394,37 @@ def test_a_grid_form_names_each_entry_after_the_caption_on_its_own_grid_row() ->
     store = RecordingStore()
     annotator = Annotator(store)
     frame = a_row_of(
-        FakeWidget("Label", _A_CAPTION, text="Server:", managed_by="grid",
-                   grid_row=0, grid_column=0),
-        FakeWidget("Entry", _AN_ENTRY, managed_by="grid",
-                   grid_row=0, grid_column=1),
-        FakeWidget("Label", _A_SECOND_CAPTION, text="Port:", managed_by="grid",
-                   grid_row=1, grid_column=0),
-        FakeWidget("Entry", _A_SECOND_ENTRY, managed_by="grid",
-                   grid_row=1, grid_column=1),
-        FakeWidget("Label", _A_THIRD_CAPTION, text="Username:",
-                   managed_by="grid", grid_row=2, grid_column=0),
-        FakeWidget("Entry", _A_THIRD_ENTRY, managed_by="grid",
-                   grid_row=2, grid_column=1),
+        FakeWidget(
+            "Label",
+            _A_CAPTION,
+            text="Server:",
+            managed_by="grid",
+            grid_row=0,
+            grid_column=0,
+        ),
+        FakeWidget("Entry", _AN_ENTRY, managed_by="grid", grid_row=0, grid_column=1),
+        FakeWidget(
+            "Label",
+            _A_SECOND_CAPTION,
+            text="Port:",
+            managed_by="grid",
+            grid_row=1,
+            grid_column=0,
+        ),
+        FakeWidget(
+            "Entry", _A_SECOND_ENTRY, managed_by="grid", grid_row=1, grid_column=1
+        ),
+        FakeWidget(
+            "Label",
+            _A_THIRD_CAPTION,
+            text="Username:",
+            managed_by="grid",
+            grid_row=2,
+            grid_column=0,
+        ),
+        FakeWidget(
+            "Entry", _A_THIRD_ENTRY, managed_by="grid", grid_row=2, grid_column=1
+        ),
     )
     root = a_window_of(frame)
     already_annotated(root, annotator)
@@ -419,9 +438,7 @@ def test_a_grid_form_names_each_entry_after_the_caption_on_its_own_grid_row() ->
         (str(root.winfo_children()[0].winfo_children()[1]), "Server"),
         (str(root.winfo_children()[0].winfo_children()[3]), "Port"),
         (str(root.winfo_children()[0].winfo_children()[5]), "Username"),
-    ], (
-        f"a gridded frame was read as one row: {[(n.path, n.name) for n in named]}"
-    )
+    ], f"a gridded frame was read as one row: {[(n.path, n.name) for n in named]}"
 
 
 def test_a_grid_row_is_read_across_its_columns_rather_than_in_creation_order() -> None:
@@ -430,12 +447,23 @@ def test_a_grid_row_is_read_across_its_columns_rather_than_in_creation_order() -
     store = RecordingStore()
     annotator = Annotator(store)
     frame = a_row_of(
-        FakeWidget("Entry", _AN_ENTRY, managed_by="grid",
-                   grid_row=0, grid_column=1),
-        FakeWidget("Label", _A_SECOND_CAPTION, text="px", managed_by="grid",
-                   grid_row=0, grid_column=2),
-        FakeWidget("Label", _A_CAPTION, text="Width:", managed_by="grid",
-                   grid_row=0, grid_column=0),
+        FakeWidget("Entry", _AN_ENTRY, managed_by="grid", grid_row=0, grid_column=1),
+        FakeWidget(
+            "Label",
+            _A_SECOND_CAPTION,
+            text="px",
+            managed_by="grid",
+            grid_row=0,
+            grid_column=2,
+        ),
+        FakeWidget(
+            "Label",
+            _A_CAPTION,
+            text="Width:",
+            managed_by="grid",
+            grid_row=0,
+            grid_column=0,
+        ),
     )
     root = a_window_of(frame)
     already_annotated(root, annotator)

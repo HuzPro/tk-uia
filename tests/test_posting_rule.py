@@ -61,11 +61,14 @@ class AValue:
 
 def _blueprint_for(widget, poster, **wiring_fields):
     platform = RecordingPlatform()
-    fields = {"words": lambda: None, "is_enabled": lambda: True,
-              "post": poster, "still_there": widget.winfo_exists}
+    fields = {
+        "words": lambda: None,
+        "is_enabled": lambda: True,
+        "post": poster,
+        "still_there": widget.winfo_exists,
+    }
     fields.update(wiring_fields)
-    providers = Providers(platform, lambda _: WidgetWiring(**fields),
-                          said=Ledger())
+    providers = Providers(platform, lambda _: WidgetWiring(**fields), said=Ledger())
     providers.attach(widget)
     return platform.hosted[widget.winfo_id()]
 

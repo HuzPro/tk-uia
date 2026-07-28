@@ -67,9 +67,7 @@ _UIA_CONTROL_TYPE_FOR_ROLE: Mapping[Role, int] = {
     Role.MENU_BUTTON: 50000,
 }
 
-_THE_ROLE_BEHIND_EACH_NUMBER: Mapping[int, Role] = {
-    role.value: role for role in Role
-}
+_THE_ROLE_BEHIND_EACH_NUMBER: Mapping[int, Role] = {role.value: role for role in Role}
 
 
 class InvokeWiring(Protocol):
@@ -188,9 +186,7 @@ class SelectionAnswers:
     is_selected: Callable[[], bool]
 
 
-Answers = (
-    InvokeAnswers | ToggleAnswers | ValueAnswers | RangeAnswers | SelectionAnswers
-)
+Answers = InvokeAnswers | ToggleAnswers | ValueAnswers | RangeAnswers | SelectionAnswers
 
 
 def _nobody_said_a_value() -> str | None:

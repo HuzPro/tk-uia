@@ -51,9 +51,7 @@ class _AChoice:
     def __init__(self, widget: TkWidget) -> None:
         self._widget = widget
         self.select = widget.invoke
-        self.is_selected = _guarded(
-            lambda: _holds_its_own_value(widget), nothing=False
-        )
+        self.is_selected = _guarded(lambda: _holds_its_own_value(widget), nothing=False)
 
 
 class _TheTextOfAnEntry:

@@ -277,9 +277,7 @@ class TabHandles:
         hwnd = self._windows.create(parent, *tab.rectangle)
         self._say_what_it_is(hwnd, tab)
         if wire is not None:
-            self._activation.attach(
-                hwnd, wire(lambda: self.position_of(path, hwnd))
-            )
+            self._activation.attach(hwnd, wire(lambda: self.position_of(path, hwnd)))
         return _AHandledTab(tab, hwnd)
 
     def _brought_into_step(self, standing: _AHandledTab, now: Tab) -> _AHandledTab:

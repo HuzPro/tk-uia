@@ -27,9 +27,7 @@ def test_a_followed_variable_write_reaches_the_notifier_with_the_new_value() -> 
         variables=VariablesByName({_A_DECLARED_VARIABLE: variable}),
         notifier=notifier,
     )
-    entry = FakeWidget(
-        "Entry", _AN_ENTRY_HANDLE, textvariable=_A_DECLARED_VARIABLE
-    )
+    entry = FakeWidget("Entry", _AN_ENTRY_HANDLE, textvariable=_A_DECLARED_VARIABLE)
     annotator.add(entry)
     heard_before = len(notifier.heard)
 

@@ -87,9 +87,7 @@ def test_an_invoke_that_opens_a_modal_dialog_leaves_the_process_answering_uia(
     # Given a button whose command opens a modal messagebox
     import uiautomation as auto
 
-    button = auto.ButtonControl(
-        searchFromControl=provided_app.window, Name=OPEN_DIALOG
-    )
+    button = auto.ButtonControl(searchFromControl=provided_app.window, Name=OPEN_DIALOG)
 
     # When a client presses it
     button.GetPattern(auto.PatternId.InvokePattern).Invoke()
@@ -183,9 +181,7 @@ def test_a_radiobutton_selects_through_selection_item_and_reports_selected(
     import uiautomation as auto
 
     radio = auto.RadioButtonControl(searchFromControl=provided_app.window, Name=HIGH)
-    assert (
-        radio.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is False
-    )
+    assert radio.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is False
 
     # When a client selects it
     radio.GetPattern(auto.PatternId.SelectionItemPattern).Select()
@@ -284,8 +280,9 @@ def test_a_readonly_combobox_takes_a_value_a_user_could_have_chosen(
         GREEN,
         "SetValue on a readonly combobox never landed",
     )
-    heard = auto.TextControl(searchFromControl=provided_app.window,
-                             SubName="the app heard")
+    heard = auto.TextControl(
+        searchFromControl=provided_app.window, SubName="the app heard"
+    )
     _eventually(
         lambda: heard.Name,
         chose(GREEN),
@@ -311,8 +308,9 @@ def test_a_readonly_combobox_refuses_a_value_nobody_offered(
     assert combobox.GetPattern(auto.PatternId.ValuePattern).Value == RED, (
         "a value no user could have chosen went through anyway"
     )
-    heard = auto.TextControl(searchFromControl=provided_app.window,
-                             SubName="the app heard")
+    heard = auto.TextControl(
+        searchFromControl=provided_app.window, SubName="the app heard"
+    )
     assert heard.Name == chose(NOTHING_YET), (
         "the app heard a selection event for a refused write"
     )
@@ -324,13 +322,9 @@ def test_a_notebook_tab_is_selected_through_its_provider_without_a_click(
     # Given the notebook, open on its first page
     import uiautomation as auto
 
-    tab = auto.TabItemControl(
-        searchFromControl=provided_app.window, Name=ADVANCED_TAB
-    )
+    tab = auto.TabItemControl(searchFromControl=provided_app.window, Name=ADVANCED_TAB)
     assert tab.Exists(5, 0.25), "the second tab never got a window of its own"
-    assert (
-        tab.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is False
-    )
+    assert tab.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is False
 
     # When a client selects the second tab through its pattern
     tab.GetPattern(auto.PatternId.SelectionItemPattern).Select()
@@ -397,6 +391,4 @@ def test_a_value_said_by_hand_reaches_a_uia_client_where_the_class_has_none(
     assert pattern is not None and pattern.Value == THE_SELECTED_ROW, (
         "set_acc_value on a listbox is invisible to UIA clients"
     )
-    assert pattern.IsReadOnly is True, (
-        "a said value pretended a client could write it"
-    )
+    assert pattern.IsReadOnly is True, "a said value pretended a client could write it"

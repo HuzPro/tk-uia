@@ -41,6 +41,7 @@ def chose(colour: str) -> str:
     """How the app reports the selection event it saw, where a spec can read it."""
     return f"the app heard {colour}"
 
+
 _NEVER = 0
 
 
@@ -56,9 +57,7 @@ def main(title: str, commands: Path) -> None:
     tk.Label(root, text="Task list").pack(pady=6)
 
     pressed = tk.StringVar(value=presses(PRESSES, _NEVER))
-    new_task = tk.Button(
-        root, text=NEW_TASK, command=lambda: _count(pressed, PRESSES)
-    )
+    new_task = tk.Button(root, text=NEW_TASK, command=lambda: _count(pressed, PRESSES))
     new_task.pack(pady=4)
     tk.Label(root, textvariable=pressed).pack()
 
@@ -69,9 +68,9 @@ def main(title: str, commands: Path) -> None:
     ).pack(pady=4)
 
     ttk_pressed = tk.StringVar(value=presses(TTK_PRESSES, _NEVER))
-    ttk.Button(
-        root, text=SAVE, command=lambda: _count(ttk_pressed, TTK_PRESSES)
-    ).pack(pady=4)
+    ttk.Button(root, text=SAVE, command=lambda: _count(ttk_pressed, TTK_PRESSES)).pack(
+        pady=4
+    )
     tk.Label(root, textvariable=ttk_pressed).pack()
 
     proxy_pressed = tk.StringVar(value=presses(PROXY_PRESSES, _NEVER))
@@ -108,8 +107,10 @@ def main(title: str, commands: Path) -> None:
     tk.Label(root, textvariable=chosen).pack()
 
     notebook = ttk.Notebook(root)
-    for page_name, page_words in ((GENERAL_TAB, ON_THE_FIRST_PAGE),
-                                  (ADVANCED_TAB, ON_THE_SECOND_PAGE)):
+    for page_name, page_words in (
+        (GENERAL_TAB, ON_THE_FIRST_PAGE),
+        (ADVANCED_TAB, ON_THE_SECOND_PAGE),
+    ):
         page = ttk.Frame(notebook)
         ttk.Label(page, text=page_words).pack(padx=8, pady=8)
         notebook.add(page, text=page_name)

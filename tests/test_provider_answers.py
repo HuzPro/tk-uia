@@ -78,14 +78,17 @@ class AReadOnlyRange:
         return True
 
 
-def _attached(widget: FakeWidget, platform: RecordingPlatform, said: Ledger,
-              **wiring_fields):
-    fields = {"words": lambda: None, "is_enabled": lambda: True,
-              "post": HeldPoster(), "still_there": widget.winfo_exists}
+def _attached(
+    widget: FakeWidget, platform: RecordingPlatform, said: Ledger, **wiring_fields
+):
+    fields = {
+        "words": lambda: None,
+        "is_enabled": lambda: True,
+        "post": HeldPoster(),
+        "still_there": widget.winfo_exists,
+    }
     fields.update(wiring_fields)
-    providers = Providers(
-        platform, lambda _: WidgetWiring(**fields), said=said
-    )
+    providers = Providers(platform, lambda _: WidgetWiring(**fields), said=said)
     providers.attach(widget)
     return platform.hosted[widget.winfo_id()]
 
@@ -95,8 +98,7 @@ def test_a_name_the_application_chose_outranks_the_words_the_widget_shows() -> N
     said = Ledger()
     said.record(_A_BUTTON_HANDLE, PropId.NAME, "Create a task", Wrote.SAID_ONCE)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = _attached(button, RecordingPlatform(), said,
-                          words=lambda: "New Task")
+    blueprint = _attached(button, RecordingPlatform(), said, words=lambda: "New Task")
 
     # When a client asks for its name
     # Then the application's word wins
@@ -113,8 +115,7 @@ def test_a_name_the_package_only_inferred_never_outranks_what_the_widget_shows_n
     said = Ledger()
     said.record(_A_BUTTON_HANDLE, PropId.NAME, "New Task", Wrote.INFERRED)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="Save Task")
-    blueprint = _attached(button, RecordingPlatform(), said,
-                          words=lambda: "Save Task")
+    blueprint = _attached(button, RecordingPlatform(), said, words=lambda: "Save Task")
 
     # When a client asks
     # Then it hears what the widget shows now, not the stale echo of map time
@@ -129,8 +130,9 @@ def test_a_name_nobody_chose_is_read_off_the_widget_at_the_moment_a_client_asks(
 ):
     # Given a button nobody named, whose words keep changing
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="Step 1")
-    blueprint = _attached(button, RecordingPlatform(), Ledger(),
-                          words=lambda: str(button.cget("text")))
+    blueprint = _attached(
+        button, RecordingPlatform(), Ledger(), words=lambda: str(button.cget("text"))
+    )
 
     # When the words change and a client asks again
     button.says_something_else("Step 2")
@@ -146,16 +148,14 @@ def test_a_role_the_application_chose_decides_the_control_type_a_client_is_told(
 ):
     # Given an entry the application re-roled into a button
     said = Ledger()
-    said.record(_AN_ENTRY_HANDLE, PropId.ROLE, Role.PUSH_BUTTON.value,
-                Wrote.SAID_ONCE)
+    said.record(_AN_ENTRY_HANDLE, PropId.ROLE, Role.PUSH_BUTTON.value, Wrote.SAID_ONCE)
     entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
     blueprint = _attached(entry, RecordingPlatform(), said)
 
     # When a client asks what kind of control it is
     # Then the chosen role decides, through the same table as the class role
     assert blueprint.control_type() == _BUTTON_CONTROL, (
-        f"the class won over the application's chosen role: "
-        f"{blueprint.control_type()}"
+        f"the class won over the application's chosen role: {blueprint.control_type()}"
     )
 
 
@@ -168,9 +168,7 @@ def test_a_widget_with_no_name_anywhere_answers_no_name_rather_than_an_invented_
 
     # When a client asks
     # Then the honest answer is nothing
-    assert blueprint.name() is None, (
-        f"a nameless widget invented {blueprint.name()!r}"
-    )
+    assert blueprint.name() is None, f"a nameless widget invented {blueprint.name()!r}"
     assert blueprint.control_type() == _EDIT_CONTROL
 
 
@@ -178,8 +176,9 @@ def test_is_enabled_is_read_from_the_widget_at_the_moment_a_client_asks() -> Non
     # Given a button that gets disabled after it was attached
     truth = {"enabled": True}
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = _attached(button, RecordingPlatform(), Ledger(),
-                          is_enabled=lambda: truth["enabled"])
+    blueprint = _attached(
+        button, RecordingPlatform(), Ledger(), is_enabled=lambda: truth["enabled"]
+    )
 
     # When the application disables it and a client asks
     truth["enabled"] = False
@@ -194,8 +193,9 @@ def test_help_and_description_the_application_set_are_answered_to_a_client() -> 
     # Given a button carrying chosen help and description
     said = Ledger()
     said.record(_A_BUTTON_HANDLE, PropId.HELP, "the help", Wrote.SAID_ONCE)
-    said.record(_A_BUTTON_HANDLE, PropId.DESCRIPTION, "the description",
-                Wrote.SAID_ONCE)
+    said.record(
+        _A_BUTTON_HANDLE, PropId.DESCRIPTION, "the description", Wrote.SAID_ONCE
+    )
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
     blueprint = _attached(button, RecordingPlatform(), said)
 
@@ -227,8 +227,7 @@ def test_toggle_state_is_read_from_the_variable_behind_the_widget() -> None:
 def test_a_radiobutton_answers_selection_item_and_never_toggle() -> None:
     # Given a radio, which can be selected but never cycled off
     radio = FakeWidget("Radiobutton", _A_RADIO_HANDLE, text="High")
-    blueprint = _attached(radio, RecordingPlatform(), Ledger(),
-                          selection=ASelection())
+    blueprint = _attached(radio, RecordingPlatform(), Ledger(), selection=ASelection())
 
     # When a client asks what it can do
     # Then it hears SelectionItem alone; Toggle on a radio promises an
@@ -241,8 +240,9 @@ def test_a_radiobutton_answers_selection_item_and_never_toggle() -> None:
 def test_a_progressbar_refuses_a_range_write_and_says_it_is_read_only() -> None:
     # Given a progressbar, whose numbers a client may read and never set
     bar = FakeWidget("TProgressbar", _A_BAR_HANDLE)
-    blueprint = _attached(bar, RecordingPlatform(), Ledger(),
-                          range_value=AReadOnlyRange())
+    blueprint = _attached(
+        bar, RecordingPlatform(), Ledger(), range_value=AReadOnlyRange()
+    )
 
     # When a client asks
     answers = blueprint.patterns[Pattern.RANGE_VALUE]

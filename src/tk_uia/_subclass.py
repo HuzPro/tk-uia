@@ -31,7 +31,9 @@ class WindowSubclasses:
     ) -> None:
         self._respond[hwnd] = respond
         self._gone[hwnd] = gone
-        if not _comctl32().SetWindowSubclass(hwnd, self._the_one_proc(), _OUR_SUBCLASS_ID, 0):
+        if not _comctl32().SetWindowSubclass(
+            hwnd, self._the_one_proc(), _OUR_SUBCLASS_ID, 0
+        ):
             self._respond.pop(hwnd, None)
             self._gone.pop(hwnd, None)
             raise ctypes.WinError(ctypes.get_last_error())

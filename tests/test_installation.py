@@ -225,9 +225,7 @@ def test_a_tk_that_answers_for_itself_never_hears_about_providers() -> None:
     # Given a Tk with its own accessibility, and a provider layer offered anyway
     providers = RecordingProvidedWidgets()
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    root = FakeRoot(
-        FakeInterpreter("9.1.0", "win32", native=True), children=[button]
-    )
+    root = FakeRoot(FakeInterpreter("9.1.0", "win32", native=True), children=[button])
 
     # When accessibility is switched on
     installation = install(root, RecordingStore(), providers=providers)
