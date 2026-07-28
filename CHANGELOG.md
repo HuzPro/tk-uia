@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.3 - 2026-07-28
+
+The release that puts releasing itself under automation. No library code
+changed.
+
+- **Publishing is a tag push.** `.github/workflows/publish.yml` builds and
+  uploads to PyPI through Trusted Publishing on any `v*` tag, and refuses a tag
+  whose number differs from `__version__`, so a mistyped tag publishes nothing.
+  No API token is stored in this repository or anywhere else. `RELEASING.md`
+  now describes this flow in place of the manual twine upload it used to plan.
+
 ## 0.6.2 - 2026-07-28
 
 A fresh-eyes pass drove all of it: somebody who had never seen this package read
