@@ -26,6 +26,8 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    # Windows names where the work happens; the package installs and imports
+    # anywhere, and enable() answers UNSUPPORTED elsewhere.
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

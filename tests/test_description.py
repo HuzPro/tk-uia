@@ -1256,3 +1256,40 @@ def test_the_reason_providers_stood_down_reaches_the_headline() -> None:
     assert "built without threads" in report, (
         f"the stand-down reason never reached the report:\n{report}"
     )
+
+
+def test_a_decorative_separator_is_left_alone_rather_than_pressed_to_take_a_name() -> (
+    None
+):
+    # Given a separator, which is furniture a screen reader should pass over
+    separator = FakeWidget("TSeparator", _A_SCROLLBAR_HANDLE + 1)
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
+                    children=[separator])
+    installation = install(root, RecordingStore())
+
+    # When the application asks what it has told Windows
+    description = describe(root, installation)
+    its_row = next(w for w in description.widgets if w.tk_class == "TSeparator")
+
+    # Then nothing suggests naming it: an announced separator is noise, and
+    # real accessibility guidance says to leave decoration silent
+    assert Gap.NO_NAME not in its_row.gaps, (
+        "the report pressed a decorative separator to take a name"
+    )
+
+
+def test_the_cannot_be_pressed_reason_tells_a_hand_role_apart_from_a_wired_class() -> (
+    None
+):
+    # Given the sentence a canvas button's author will read
+    # Then it names the real distinction: wired classes press, a role assigned
+    # by hand brings no pattern yet, and it never claims a pattern a client
+    # cannot measurably get
+    assert "role assigned by hand" in Gap.CANNOT_BE_PRESSED.value, (
+        "the reason never tells a hand-assigned role apart from a wired class, "
+        "which reads as a contradiction under a PROVIDED headline"
+    )
+    assert "advertises an InvokePattern" not in Gap.CANNOT_BE_PRESSED.value, (
+        "the reason claims an InvokePattern a client measurably cannot obtain "
+        "on a provided widget"
+    )

@@ -383,3 +383,68 @@ def test_working_names_out_from_a_thread_that_does_not_own_the_widgets_is_refuse
         f"a foreign thread got through to Tk with {refusal!r}"
     )
     assert store.writes == [], f"a foreign thread reached the store: {store.writes}"
+
+
+_A_THIRD_CAPTION = 0x000508C1
+_A_THIRD_ENTRY = 0x000508C2
+
+
+def test_a_grid_form_names_each_entry_after_the_caption_on_its_own_grid_row() -> None:
+    # Given the most common form shape there is: one frame, three gridded rows
+    store = RecordingStore()
+    annotator = Annotator(store)
+    frame = a_row_of(
+        FakeWidget("Label", _A_CAPTION, text="Server:", managed_by="grid",
+                   grid_row=0, grid_column=0),
+        FakeWidget("Entry", _AN_ENTRY, managed_by="grid",
+                   grid_row=0, grid_column=1),
+        FakeWidget("Label", _A_SECOND_CAPTION, text="Port:", managed_by="grid",
+                   grid_row=1, grid_column=0),
+        FakeWidget("Entry", _A_SECOND_ENTRY, managed_by="grid",
+                   grid_row=1, grid_column=1),
+        FakeWidget("Label", _A_THIRD_CAPTION, text="Username:",
+                   managed_by="grid", grid_row=2, grid_column=0),
+        FakeWidget("Entry", _A_THIRD_ENTRY, managed_by="grid",
+                   grid_row=2, grid_column=1),
+    )
+    root = a_window_of(frame)
+    already_annotated(root, annotator)
+
+    # When the convention is applied
+    named = the_convention_applied_to(root, annotator)
+
+    # Then each entry takes the caption on its own grid row, never the first
+    # caption in the frame
+    assert [(one.path, one.name) for one in named] == [
+        (str(root.winfo_children()[0].winfo_children()[1]), "Server"),
+        (str(root.winfo_children()[0].winfo_children()[3]), "Port"),
+        (str(root.winfo_children()[0].winfo_children()[5]), "Username"),
+    ], (
+        f"a gridded frame was read as one row: {[(n.path, n.name) for n in named]}"
+    )
+
+
+def test_a_grid_row_is_read_across_its_columns_rather_than_in_creation_order() -> None:
+    # Given a grid row built out of order, with a trailing unit label created
+    # before the caption that really names the row
+    store = RecordingStore()
+    annotator = Annotator(store)
+    frame = a_row_of(
+        FakeWidget("Entry", _AN_ENTRY, managed_by="grid",
+                   grid_row=0, grid_column=1),
+        FakeWidget("Label", _A_SECOND_CAPTION, text="px", managed_by="grid",
+                   grid_row=0, grid_column=2),
+        FakeWidget("Label", _A_CAPTION, text="Width:", managed_by="grid",
+                   grid_row=0, grid_column=0),
+    )
+    root = a_window_of(frame)
+    already_annotated(root, annotator)
+
+    # When the convention is applied
+    named = the_convention_applied_to(root, annotator)
+
+    # Then the leftmost caption speaks for the row: columns order a grid row,
+    # not the order somebody happened to build it in
+    assert [one.name for one in named] == ["Width"], (
+        f"creation order won over the grid: {[(n.path, n.name) for n in named]}"
+    )

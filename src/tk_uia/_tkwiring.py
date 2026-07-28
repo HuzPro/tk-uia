@@ -68,10 +68,30 @@ class _TheTextOfAnEntry:
 
 
 class _TheTextOfACombobox:
+    """A combobox is select-only under `readonly`, not unchangeable: a user
+    still picks from the dropdown, so UIA read-only counts `disabled` alone."""
+
     def __init__(self, widget: TkWidget) -> None:
+        self._widget = widget
         self.read = _guarded(lambda: str(widget.get()), nothing="")
-        self.write = widget.set
-        self.is_read_only = _guarded(lambda: _cannot_be_typed_in(widget), nothing=True)
+        self.is_read_only = _guarded(lambda: _is_disabled(widget), nothing=True)
+
+    def write(self, text: str) -> None:
+        widget = self._widget
+        if _selects_rather_than_types(widget):
+            offered = _the_values_it_offers(widget)
+            if text not in offered:
+                raise ValueError(
+                    f"{text!r} is not among the values this combobox offers "
+                    f"({', '.join(repr(value) for value in offered)}); a "
+                    "readonly combobox takes only a choice a user could make"
+                )
+            widget.set(text)
+            # The one action a user has here is a dropdown choice, and a
+            # dropdown choice fires this event.
+            widget.event_generate("<<ComboboxSelected>>")
+            return
+        widget.set(text)
 
 
 class _TheTextOfAText:
@@ -189,6 +209,18 @@ def _cannot_be_typed_in(widget: TkWidget) -> bool:
     if instate is not None:
         return bool(instate(["disabled"])) or bool(instate(["readonly"]))
     return str(widget.cget("state")) in ("disabled", "readonly")
+
+
+def _selects_rather_than_types(widget: TkWidget) -> bool:
+    instate = getattr(widget, "instate", None)
+    return bool(instate(["readonly"])) if instate is not None else False
+
+
+def _the_values_it_offers(widget: TkWidget) -> tuple[str, ...]:
+    values = widget.cget("values")
+    if isinstance(values, (list, tuple)):
+        return tuple(str(value) for value in values)
+    return tuple(str(value) for value in widget.tk.splitlist(values))
 
 
 def _holds_its_on_value(widget: TkWidget) -> bool:

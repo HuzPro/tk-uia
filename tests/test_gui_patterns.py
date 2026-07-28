@@ -12,20 +12,25 @@ import pytest
 
 from tests.conftest import RunningApp
 from tests.fixture_apps.provided_app import (
+    A_COLOUR_NOBODY_OFFERED,
     ADVANCED_TAB,
     CONFIRMATION,
+    GREEN,
     HIGH,
     NEW_TASK,
+    NOTHING_YET,
     NOTIFY,
     ON_THE_SECOND_PAGE,
     OPEN_DIALOG,
     PRESSES,
     PROXY_BUTTON,
     PROXY_PRESSES,
+    RED,
     SAVE,
     THE_HELP,
     TITLE_ENTRY,
     TTK_PRESSES,
+    chose,
     presses,
 )
 
@@ -252,6 +257,67 @@ def test_help_the_application_set_reaches_a_uia_client_in_provider_mode(
     )
 
 
+def test_a_readonly_combobox_takes_a_value_a_user_could_have_chosen(
+    provided_app: RunningApp,
+) -> None:
+    # Given the readonly combobox, which a user changes through its dropdown
+    import uiautomation as auto
+
+    combobox = auto.ComboBoxControl(searchFromControl=provided_app.window)
+    pattern = combobox.GetPattern(auto.PatternId.ValuePattern)
+
+    # Then it never claims to be unchangeable: a select-only combobox is not
+    # read-only in UIA's sense, or every client refuses the write unasked
+    assert pattern.IsReadOnly is False, (
+        "a readonly combobox told clients its value cannot change, which is "
+        "only true of a disabled one"
+    )
+    assert pattern.Value == RED
+
+    # When a client chooses a value from the list
+    pattern.SetValue(GREEN)
+
+    # Then the choice lands, and the app hears the same event a dropdown
+    # choice would have fired
+    _eventually(
+        lambda: combobox.GetPattern(auto.PatternId.ValuePattern).Value,
+        GREEN,
+        "SetValue on a readonly combobox never landed",
+    )
+    heard = auto.TextControl(searchFromControl=provided_app.window,
+                             SubName="the app heard")
+    _eventually(
+        lambda: heard.Name,
+        chose(GREEN),
+        "the app never heard <<ComboboxSelected>> for a choice made through UIA",
+    )
+
+
+def test_a_readonly_combobox_refuses_a_value_nobody_offered(
+    provided_app: RunningApp,
+) -> None:
+    # Given the readonly combobox
+    import uiautomation as auto
+
+    combobox = auto.ComboBoxControl(searchFromControl=provided_app.window)
+
+    # When a client writes something outside the list a user could choose from
+    with pytest.raises(Exception):  # noqa: B017 - the COMError type lives client-side
+        combobox.GetPattern(auto.PatternId.ValuePattern).SetValue(
+            A_COLOUR_NOBODY_OFFERED
+        )
+
+    # Then the value stands and the app heard nothing
+    assert combobox.GetPattern(auto.PatternId.ValuePattern).Value == RED, (
+        "a value no user could have chosen went through anyway"
+    )
+    heard = auto.TextControl(searchFromControl=provided_app.window,
+                             SubName="the app heard")
+    assert heard.Name == chose(NOTHING_YET), (
+        "the app heard a selection event for a refused write"
+    )
+
+
 def test_a_notebook_tab_is_selected_through_its_provider_without_a_click(
     provided_app: RunningApp,
 ) -> None:
@@ -306,4 +372,31 @@ def test_a_widget_left_to_the_proxy_reads_as_annotation_alone_from_outside(
     assert tally() == presses(PROXY_PRESSES, _NEVER), (
         "a widget left to the proxy was pressed through the tree, so the "
         "opt-out did not opt out"
+    )
+
+
+def test_a_value_said_by_hand_reaches_a_uia_client_where_the_class_has_none(
+    provided_app: RunningApp,
+) -> None:
+    # Given a listbox, whose rows are not in the tree, carrying a value the
+    # application said about itself with set_acc_value
+    import uiautomation as auto
+
+    from tests.fixture_apps.provided_app import SEARCH_RESULTS, THE_SELECTED_ROW
+
+    results = auto.ListControl(
+        searchFromControl=provided_app.window, Name=SEARCH_RESULTS
+    )
+    assert results.Exists(5, 0.25)
+
+    # When a client asks for its value
+    pattern = results.GetPattern(auto.PatternId.ValuePattern)
+
+    # Then the application's word is served, read-only, rather than lost to
+    # everyone but raw MSAA clients
+    assert pattern is not None and pattern.Value == THE_SELECTED_ROW, (
+        "set_acc_value on a listbox is invisible to UIA clients"
+    )
+    assert pattern.IsReadOnly is True, (
+        "a said value pretended a client could write it"
     )

@@ -142,7 +142,7 @@ prints four, because then nobody had said anything about the entries either:
 | | |
 |---|---|
 | A form you are writing now, ten rows or fewer | **`label_for` per row.** It is explicit, it is in your source next to the widgets it talks about, and a reader of your code can see what the entry will be called. |
-| A dialog that already exists, or one with dozens of rows | **`infer_names_from_layout(root)`.** One call, and it returns every name it chose so you can read the whole of the guess before shipping it. |
+| A dialog that already exists, or one with dozens of rows | **`infer_names_from_layout(root)`.** One call, whether the rows are frames or `grid` rows inside one frame, and it returns every name it chose so you can read the whole of the guess before shipping it. |
 | A row the convention gets wrong | **`set_acc_name(widget, ...)`.** A name you chose is never replaced, whether you said it before the call or after it. |
 
 The two mix freely, and neither is part of `enable()` on purpose. A layout is
@@ -166,8 +166,9 @@ print(tk_uia.describe(root))
 With `enable()` and the two `label_for` calls, that prints:
 
 ```
-tk-uia 0.6.2 -- what this application has told Windows it is showing
-enable() reported ANNOTATED. 12 widgets under .: 11 written to, 1 not.
+tk-uia 0.7.0 -- what this application has told Windows it is showing
+enable() reported PROVIDED. 12 widgets under .: 11 written to, 1 not.
+6 of them answer UIA themselves with working patterns; the rest are typed and named through the proxy.
 
 WIDGET            CLASS        ROLE               NAME                        VALUE  ID
 ----------------  -----------  -----------------  --------------------------  -----  --
@@ -175,13 +176,19 @@ WIDGET            CLASS        ROLE               NAME                        VA
 .!frame           Frame        GROUPING (20)      -                           -      -
 .!frame.!label    Label        STATIC_TEXT (41)   'Task file:'                -      -
 .!frame.!entry    Entry        TEXT (42)          'Task file'                 -      -
+    answers UIA itself, with working: Value
 .!frame.!button   Button       PUSH_BUTTON (43)   'Browse...'                 -      -
+    answers UIA itself, with working: Invoke
 .!frame2          Frame        GROUPING (20)      -                           -      -
 .!frame2.!label   Label        STATIC_TEXT (41)   'Output folder:'            -      -
 .!frame2.!entry   Entry        TEXT (42)          'Output folder'             -      -
+    answers UIA itself, with working: Value
 .!frame2.!button  Button       PUSH_BUTTON (43)   'Browse...'                 -      -
+    answers UIA itself, with working: Invoke
 .!checkbutton-1   Checkbutton  CHECK_BUTTON (44)  'Overwrite existing files'  -      -
+    answers UIA itself, with working: Toggle
 .!button          Button       PUSH_BUTTON (43)   'Create'                    -      -
+    answers UIA itself, with working: Invoke
 .!label           Label        STATIC_TEXT (41)   'Ready.'                    -      -
     kept in step with a variable: name
 
@@ -196,21 +203,6 @@ WHAT A CLIENT WILL NOT GET, AND WHY
     window at once.
       .!frame.!button  (Button)
       .!frame2.!button  (Button)
-
-  NO_VALUE  (2)
-    no accessible value. The role gives this widget a ValuePattern it did
-    not have before, and it reads '' until something writes one -- a
-    confident wrong answer where bare Tk gave none. bind_value_variable().
-      .!frame.!entry  (Entry)
-      .!frame2.!entry  (Entry)
-
-  CANNOT_BE_PRESSED  (3)
-    advertises an InvokePattern and a DefaultAction that press nothing. Tk
-    buttons are owner-drawn, so the proxy's synthesised BM_CLICK goes into
-    the void. Clients must click.
-      .!frame.!button  (Button)
-      .!frame2.!button  (Button)
-      .!button  (Button)
 
 LEFT ALONE ON PURPOSE
 
@@ -229,18 +221,21 @@ it.
 
 ### How to read that
 
-Read the headline first. `enable() reported ANNOTATED` is the line that says the
-window was annotated at all. On a Tk 9.1, or off Windows, it reads `NATIVE` or
-`UNSUPPORTED` and every row below is blank. That is why the strategy comes
-before the table rather than after it.
+Read the headline first. `enable() reported PROVIDED` is the line that says
+the widgets both carry annotations and answer UI Automation themselves. On a
+Tk 9.1, or off Windows, it reads `NATIVE` or `UNSUPPORTED` and every row below
+is blank; under `annotate_only()` it reads `ANNOTATED`. That is why the
+strategy comes before the table rather than after it.
 
-The table is what a client will read: a role, a name and a value per widget.
-`.!label` carries `kept in step with a variable: name`, which is the status line
-following `status`. Nothing goes stale there, ever.
+The table is what a client will read: a role, a name and a value per widget,
+and under each widget that acts, the patterns that genuinely work. The
+`Browse...` rows carry a working Invoke: a client presses them through the
+tree, no clicking. `.!label` carries `kept in step with a variable: name`,
+which is the status line following `status`. Nothing goes stale there, ever.
 
-Below the table are the gaps. Three of them here, plus a fourth heading that is
-not a fault at all. `NAMED_BY_ITS_TITLE` is the report saying it left the window
-alone because `root.title("New Task")` already named it correctly.
+Below the table are the gaps: one here, plus a heading that is not a fault at
+all. `NAMED_BY_ITS_TITLE` is the report saying it left the window alone
+because `root.title("New Task")` already named it correctly.
 
 - **`NAME_NOT_UNIQUE`** is the one to fix. Both `Browse...` buttons are
   correctly typed and correctly named, and they are named *the same thing*. A
@@ -253,15 +248,14 @@ alone because `root.title("New Task")` already named it correctly.
   `infer_names_from_layout(root)`, which does that for every row at once. Take
   the retrofit route above and this heading is gone, with the rest of the report
   unchanged.
-- **`NO_VALUE`** is a decision to make. Annotating an entry gives it a
-  ValuePattern it did not have in bare Tk, and until something says what is in
-  the box it answers `''`. That is a confident wrong answer where bare Tk gave
-  no answer at all, so it is worth a decision rather than a shrug. It costs one
-  word at construction, `tk.Entry(file_row, textvariable=chosen_file)`, and
-  `enable()` follows the variable from there. Or one line afterwards,
-  `bind_value_variable(task_file, chosen_file)`.
-- **`CANNOT_BE_PRESSED`** has nothing to fix and is worth knowing. Every
-  annotated Tk button says it can be invoked and cannot be. See below.
+
+Two gaps this window used to show are gone because the widgets answer for
+themselves now. The entries' values are read live out of the widgets when a
+client asks, so there is no confident empty answer to warn about (a
+`textvariable` is still worth one word at construction: it is what keeps the
+MSAA view current and what raises change events). And the buttons genuinely
+press, so `CANNOT_BE_PRESSED` appears only for a widget left to the proxy or
+a role assigned by hand.
 
 `describe()` reports what tk-uia believes it wrote, and says so in its own last
 paragraph. It is not a client, and it is not proof. Reading the same window back
@@ -278,6 +272,34 @@ and the two entries `label_for` reached come back `UNMAPPED_SINCE_ANNOTATED`.
 The `root.update()` above is what makes the report describe the window you are
 looking at. In a running application, `root.after(0, ...)` or a debug key
 binding does the same job.
+
+## A list of results, while its rows are not in the tree
+
+A `tk.Listbox` is findable and its rows are not exposed (the README's
+Limitations say so, and `describe()` reports it per widget as
+`ITEMS_NOT_IN_THE_TREE`). Until they are, the least-bad pattern for the
+common "list of search results" window is to name the list and mirror the
+selected row into its accessible value:
+
+```python
+results = tk.Listbox(root)
+tk_uia.enable(root)
+tk_uia.set_acc_name(results, "Search results")
+
+def say_the_selection(_event):
+    chosen = results.curselection()
+    if chosen:
+        tk_uia.set_acc_value(results, results.get(chosen[0]))
+
+results.bind("<<ListboxSelect>>", say_the_selection, add="+")
+```
+
+A client then reads the list's current row from its ValuePattern (read-only:
+the value is the application's word about itself, so clients cannot write
+it), and a screen reader following focus hears the list's name. It is a
+mirror of the selection, not access to the rows; browsing the list still
+means arrow keys in the app, and the rows themselves stay on the
+[ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md).
 
 ## What a screen reader user gets
 

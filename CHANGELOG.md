@@ -35,6 +35,23 @@ changes are raised as property-changed events.
 - On a Tcl built without thread support, providers stand down and `enable()`
   reports `ANNOTATED`, with the reason carried into the report. Tk 9.1+
   (TIP 733) still stands everything down to `NATIVE`.
+- **A readonly combobox is operable.** It never claims `IsReadOnly` (a
+  select-only combobox is not unchangeable), `SetValue` takes exactly the
+  values a user could pick and refuses anything else, and a landed choice
+  fires the same `<<ComboboxSelected>>` a dropdown choice would. A write to
+  an editable combobox is typing and fires no selection event, matching Tk.
+- **A value said with `set_acc_value` reaches UIA clients** on widgets whose
+  class carries no live value of its own (a listbox, a canvas): served
+  read-only through ValuePattern rather than being readable by raw MSAA
+  clients alone.
+- **`infer_names_from_layout` reads grid forms.** A frame laid out with
+  `grid` groups into rows by `grid_info()`, each read across its columns, so
+  a gridded Server/Port/Username frame names each entry after its own
+  caption instead of naming all three after the first.
+- `describe()` no longer presses decorative separators and sizegrips to take
+  a name, and its `CANNOT_BE_PRESSED` reason now tells a hand-assigned role
+  apart from a wired class instead of claiming a pattern a client cannot get.
+- `dir(tk_uia)` offers the public surface and nothing else.
 
 ## 0.6.3 - 2026-07-28
 

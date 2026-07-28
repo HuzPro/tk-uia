@@ -68,6 +68,12 @@ _providers: Providers | None = None
 _trouble = Trouble()
 
 
+def __dir__() -> list[str]:
+    # The public surface and nothing else: without this, completion offers the
+    # typing imports and every submodule.
+    return sorted(__all__)
+
+
 def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> Strategy:
     """Annotate this application's widgets and make them answer UIA themselves.
 
@@ -270,8 +276,9 @@ def set_acc_description(widget: tkinter.Misc, description: str) -> None:
 def set_acc_action(widget: tkinter.Misc, action: str) -> None:
     """Say what activating this widget would do, as a verb ("Press").
 
-    This reaches the MSAA view; a provided widget's working Invoke is what a
-    UIA client gets, and a widget left to the proxy advertises without acting.
+    This reaches the MSAA view only, and it is an announcement, not a wiring:
+    on a widget whose class carries no working pattern (a role assigned by
+    hand included), the advertised action does nothing when a client calls it.
     """
     _annotator().set_action(widget, action)
 

@@ -43,6 +43,9 @@ tk_uia.enable(root)
 root.mainloop()
 ```
 
+`enable()` comes first: every other call (`set_acc_name`, `label_for`, the
+`bind_*` family) refuses until it has run.
+
 | Widget | Bare Tk | After `enable()` |
 |---|---|---|
 | `tk.Button(text="New Task")` | `ButtonControl`, no name, Invoke does nothing | `ButtonControl`, `Name='New Task'`, Invoke presses it |
@@ -72,8 +75,9 @@ real form end to end.
 - `label_for(label, entry)` records which caption names which field.
   `infer_names_from_layout(root)` retrofits an existing dialog in one call and
   reports every name it chose.
-- `describe(root)` prints an audit of what a client gets and what is missing,
-  with a reason and a fix per widget. Usable as data for CI gating.
+- `describe(root)` returns an audit you can `print()`: what a client gets and
+  what is missing, with a reason and a fix per widget. Usable as data for CI
+  gating.
 - Notebook tabs become real tab controls a client can switch without a click.
 - `annotate_only(root)` keeps the previous annotation-only behaviour, and
   `leave_to_the_proxy(widget)` opts a single widget out.
@@ -84,6 +88,13 @@ real form end to end.
 - In-process only. You can make your own application accessible, not someone
   else's.
 - Listbox rows and Treeview items are not exposed. Notebook tabs are.
+- A combobox has no ExpandCollapse yet, so a client cannot open its dropdown;
+  choosing goes through `ValuePattern.SetValue`, which on a readonly combobox
+  takes exactly the values a user could pick and fires the same
+  `<<ComboboxSelected>>` a dropdown choice would.
+- `infer_names_from_layout` is a guess by convention: rows are frames, or grid
+  rows within a frame, read across their columns. It returns every name it
+  chose; read the guess before shipping it.
 - A widget left to the MSAA proxy advertises an `InvokePattern` that does
   nothing; that is the proxy's own behaviour, and `describe()` says which
   widgets it applies to.

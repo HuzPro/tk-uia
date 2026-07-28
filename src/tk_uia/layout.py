@@ -103,12 +103,34 @@ def _the_rows_under(root: TkWidget) -> Iterator[TkWidget]:
 def _whatever_this_row_names(
     row: TkWidget, names: NamesWidgets
 ) -> Iterator[NamedByTheLayout]:
-    children = tuple(row.winfo_children())
-    subject = _what_this_row_is_about(children)
-    if subject is None:
-        return
-    for child in children:
-        yield from _whatever_naming_this_child_comes_to(child, subject, names)
+    for children in _the_lines_this_row_holds(row):
+        subject = _what_this_row_is_about(children)
+        if subject is None:
+            continue
+        for child in children:
+            yield from _whatever_naming_this_child_comes_to(child, subject, names)
+
+
+def _the_lines_this_row_holds(row: TkWidget) -> Iterator[tuple[TkWidget, ...]]:
+    """A frame's rows: itself for a packed one, each grid row for a gridded one.
+
+    Grid rows are read across their columns, so the leftmost caption speaks
+    for the row however the widgets happened to be created.
+    """
+    packed: list[TkWidget] = []
+    gridded: dict[int, list[tuple[int, TkWidget]]] = {}
+    for child in row.winfo_children():
+        placement = child.grid_info() if child.winfo_manager() == "grid" else {}
+        if placement:
+            gridded.setdefault(int(str(placement["row"])), []).append(
+                (int(str(placement["column"])), child)
+            )
+        else:
+            packed.append(child)
+    for _, line in sorted(gridded.items()):
+        yield tuple(child for _, child in sorted(line, key=lambda cell: cell[0]))
+    if packed:
+        yield tuple(packed)
 
 
 def _what_this_row_is_about(children: Sequence[TkWidget]) -> _WhatARowIsAbout | None:

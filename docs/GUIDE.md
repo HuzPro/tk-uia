@@ -166,7 +166,14 @@ those rows. It walks the tree and applies the convention the layout is already
 following. A **row** is a frame, or a window, since status bars are packed
 straight onto toplevels. Its **subject** is the first label in it that is not
 showing a variable, or failing that the button that captions it. Every **entry**
-in the row is named after that subject. Every **button** whose caption says
+in the row is named after that subject.
+
+A frame laid out with `grid` holds several rows, and the inference reads it
+that way: children group by the row number Tk records in `grid_info()`, and
+each grid row is read across its columns, so the leftmost caption speaks for
+its own row however the widgets were created. A Server/Port/Username form
+gridded inside one frame names each entry after its own caption. The return
+value is still the audit: read what it chose before trusting it. Every **button** whose caption says
 nothing on its own (`Browse...`, `Reset to Default`, `?`) is qualified with it,
 as `Browse... for GUI Executable`. Two buttons called "Browse..." in one window
 are indistinguishable to a screen reader user choosing between them and to a
@@ -281,11 +288,23 @@ button.GetInvokePattern().Invoke()
 
 The form's counter reads `presses 1` afterwards. The same holds for the rest
 of the working set: `ValuePattern.SetValue` types into an entry, spinbox,
-combobox or `Text`; `TogglePattern.Toggle` flips a checkbutton;
+editable combobox or `Text`; `TogglePattern.Toggle` flips a checkbutton;
 `SelectionItemPattern.Select` selects a radiobutton or switches a notebook
 tab; `RangeValuePattern.SetValue` moves a scale, and a progressbar refuses the
 write and says it is read-only. No foregrounding, no clicking, no synthesised
 input: the window does not even need to be in front.
+
+A readonly combobox is select-only, not read-only in UIA's sense: `SetValue`
+takes exactly the values a user could pick from the dropdown, refuses anything
+else, and fires the same `<<ComboboxSelected>>` a dropdown choice would.
+Which Tk events a UIA write produces is worth knowing precisely: writing an
+entry or a `Text` runs its variable traces and validators exactly as typing
+does, a readonly-combobox write fires `<<ComboboxSelected>>`, and a write to
+an *editable* combobox is typing, which fires no selection event -- the same
+as a user typing over the field. Opening the dropdown itself (ExpandCollapse)
+is not wired yet; the
+[ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md) names the
+candidate wirings.
 
 Two rules keep that honest:
 

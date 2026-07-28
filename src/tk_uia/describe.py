@@ -94,10 +94,12 @@ class Gap(Enum):
         "strip nothing could be found on."
     )
     CANNOT_BE_PRESSED = (
-        "advertises an InvokePattern and a DefaultAction that press nothing. Tk "
-        "buttons are owner-drawn, so the proxy's synthesised BM_CLICK goes into "
-        "the void. This is the MSAA proxy's behaviour: under enable() the widget "
-        "answers UIA itself and genuinely presses; here it does not."
+        "a press through the tree does nothing here. Whatever the MSAA proxy "
+        "offers for it (a DefaultAction, and on a real button class an Invoke) "
+        "is a synthesised BM_CLICK an owner-drawn Tk widget ignores. Widget "
+        "classes with wired patterns answer UIA themselves and genuinely "
+        "press; a role assigned by hand brings no working pattern yet, so a "
+        "client must click this one."
     )
     LEFT_TO_THE_PROXY = (
         "the application asked for this widget to be left to the MSAA proxy, so "
@@ -672,7 +674,11 @@ _THE_PROPERTIES_THE_TABLE_HAS_A_COLUMN_FOR = frozenset(
 
 # The roles a missing name is not worth reporting for: flagging every container
 # would bury the one entry that genuinely needs `set_acc_name`.
-_ROLES_NOBODY_ANNOUNCES = frozenset({Role.GROUPING, Role.SCROLL_BAR})
+# Decoration included: naming a separator or a sizegrip makes a screen reader
+# read out furniture, which accessibility guidance says not to do.
+_ROLES_NOBODY_ANNOUNCES = frozenset(
+    {Role.GROUPING, Role.SCROLL_BAR, Role.SEPARATOR, Role.GRIP}
+)
 
 # The roles the MSAA-to-UIA bridge hands a ValuePattern to, which answers `''`
 # until the application says otherwise (COVERAGE.md, `patterns` column).

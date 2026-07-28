@@ -60,6 +60,9 @@ class FakeWidget:
         window: bool | None = None,
         children: Sequence[FakeWidget] = (),
         path: str | None = None,
+        managed_by: str = "pack",
+        grid_row: int | None = None,
+        grid_column: int | None = None,
     ) -> None:
         self._owning_thread = threading.get_ident()
         self._tk_class = tk_class
@@ -77,6 +80,9 @@ class FakeWidget:
         if textvariable is not None:
             self._options["textvariable"] = textvariable
         self._mapped = mapped
+        self._managed_by = managed_by
+        self._grid_row = grid_row
+        self._grid_column = grid_column
         self._children = list(children)
         # A real Tk path encodes ancestry: a dialog is `.!toplevel` and the
         # button in it is `.!toplevel.!button`. The default built here says
@@ -121,6 +127,17 @@ class FakeWidget:
     def winfo_children(self) -> Sequence[FakeWidget]:
         self._only_from_the_thread_that_owns_tk()
         return tuple(self._children)
+
+    def winfo_manager(self) -> str:
+        self._only_from_the_thread_that_owns_tk()
+        return self._managed_by
+
+    def grid_info(self) -> Mapping[str, object]:
+        self._only_from_the_thread_that_owns_tk()
+        # Real Tk answers an empty mapping for a widget grid never managed.
+        if self._managed_by != "grid":
+            return {}
+        return {"row": self._grid_row or 0, "column": self._grid_column or 0}
 
     def keys(self) -> Sequence[str]:
         self._only_from_the_thread_that_owns_tk()

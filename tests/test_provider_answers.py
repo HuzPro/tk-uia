@@ -295,3 +295,25 @@ def test_the_ledger_tells_a_chosen_property_apart_from_an_inferred_echo() -> Non
         "an inferred write was handed back as if the application chose it"
     )
     assert ledger.chosen(_A_BUTTON_HANDLE, PropId.HELP) == "chosen help"
+
+
+def test_a_value_the_application_said_is_carried_for_a_class_with_no_live_value() -> (
+    None
+):
+    # Given a listbox, whose class has no value wiring of its own
+    said = Ledger()
+    listbox = FakeWidget("Listbox", _A_BAR_HANDLE)
+    blueprint = _attached(listbox, RecordingPlatform(), said)
+
+    # Then before the application says anything, there is no value to serve
+    assert blueprint.value_the_application_said() is None, (
+        "a value was invented for a widget nobody wrote one on"
+    )
+
+    # When the application says one, as set_acc_value does
+    said.record(_A_BAR_HANDLE, PropId.VALUE, "Rust in production", Wrote.SAID_ONCE)
+
+    # Then a client asking from now on is served it
+    assert blueprint.value_the_application_said() == "Rust in production", (
+        "set_acc_value never reached the answers a UIA client is given"
+    )

@@ -28,6 +28,18 @@ GENERAL_TAB = "General"
 ADVANCED_TAB = "Advanced"
 ON_THE_FIRST_PAGE = "the first page"
 ON_THE_SECOND_PAGE = "the second page"
+RED = "Red"
+GREEN = "Green"
+BLUE = "Blue"
+SEARCH_RESULTS = "Search results"
+THE_SELECTED_ROW = "Rust in production"
+A_COLOUR_NOBODY_OFFERED = "Mauve"
+NOTHING_YET = "-"
+
+
+def chose(colour: str) -> str:
+    """How the app reports the selection event it saw, where a spec can read it."""
+    return f"the app heard {colour}"
 
 _NEVER = 0
 
@@ -84,6 +96,17 @@ def main(title: str, commands: Path) -> None:
 
     ttk.Progressbar(root, value=40, maximum=100).pack(pady=4)
 
+    colour = tk.StringVar(value=RED)
+    combobox = ttk.Combobox(
+        root, state="readonly", values=(RED, GREEN, BLUE), textvariable=colour
+    )
+    combobox.pack(pady=4)
+    chosen = tk.StringVar(value=chose(NOTHING_YET))
+    combobox.bind(
+        "<<ComboboxSelected>>", lambda _event: chosen.set(chose(colour.get()))
+    )
+    tk.Label(root, textvariable=chosen).pack()
+
     notebook = ttk.Notebook(root)
     for page_name, page_words in ((GENERAL_TAB, ON_THE_FIRST_PAGE),
                                   (ADVANCED_TAB, ON_THE_SECOND_PAGE)):
@@ -91,6 +114,11 @@ def main(title: str, commands: Path) -> None:
         ttk.Label(page, text=page_words).pack(padx=8, pady=8)
         notebook.add(page, text=page_name)
     notebook.pack(pady=4)
+
+    results = tk.Listbox(root, height=3)
+    for row in ("Rust in production", "Go in anger", "Zig in doubt"):
+        results.insert("end", row)
+    results.pack(pady=4)
 
     root.update()
 
@@ -103,6 +131,8 @@ def main(title: str, commands: Path) -> None:
         )
 
     tk_uia.set_acc_name(title_entry, TITLE_ENTRY)
+    tk_uia.set_acc_name(results, SEARCH_RESULTS)
+    tk_uia.set_acc_value(results, THE_SELECTED_ROW)
     tk_uia.set_acc_help(new_task, THE_HELP)
     tk_uia.set_acc_description(new_task, THE_DESCRIPTION)
     tk_uia.leave_to_the_proxy(proxy_button)

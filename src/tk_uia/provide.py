@@ -193,6 +193,10 @@ Answers = (
 )
 
 
+def _nobody_said_a_value() -> str | None:
+    return None
+
+
 @dataclass(frozen=True)
 class Blueprint:
     """One widget's answers, resolved; the platform calls these and nothing else."""
@@ -204,6 +208,9 @@ class Blueprint:
     is_enabled: Callable[[], bool]
     is_keyboard_focusable: bool
     patterns: Mapping[Pattern, Answers]
+    # Where the class has no live value of its own, a value the application
+    # said (set_acc_value) is still served to clients, read-only.
+    value_the_application_said: Callable[[], str | None] = _nobody_said_a_value
 
 
 class ProviderPlatform(Protocol):
@@ -374,6 +381,7 @@ class Providers:
             is_enabled=wiring.is_enabled,
             is_keyboard_focusable=bool(patterns),
             patterns=patterns,
+            value_the_application_said=lambda: self._chosen_text(hwnd, PropId.VALUE),
         )
 
     def _role_in_force(self, hwnd: int, role: Role) -> Role:

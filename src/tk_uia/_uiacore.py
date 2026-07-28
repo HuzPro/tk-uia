@@ -182,6 +182,10 @@ def _hosted_for(this: int) -> _Hosted:
     return _BY_ADDRESS[int(this)]
 
 
+def _the_value_said_for(hosted: _Hosted) -> str | None:
+    return hosted.blueprint.value_the_application_said()
+
+
 def _write_pointer(out: int, address: int | None) -> None:
     ctypes.cast(out, ctypes.POINTER(ctypes.c_void_p))[0] = address
 
@@ -321,6 +325,9 @@ class _ComLayer:
                 return _S_OK
             answers = hosted.blueprint.patterns.get(asked)
             if answers is None:
+                if asked is Pattern.VALUE and _the_value_said_for(hosted) is not None:
+                    _write_pointer(out, ctypes.addressof(hosted.shells["value"]))
+                    hosted.refcount += 1
                 return _S_OK
             # A button with nothing to run does not advertise a press.
             if asked is Pattern.INVOKE and not answers.offered():
@@ -390,17 +397,40 @@ class _ComLayer:
     # -- IValueProvider --
 
     def _set_value(self, this: int, text: str | None) -> int:
+        try:
+            if _hosted_for(this).blueprint.patterns.get(Pattern.VALUE) is None:
+                # A said value is the application's word about itself; nobody
+                # writes the application's words for it.
+                return _UIA_E_INVALIDOPERATION
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
         return self._act(
             this, Pattern.VALUE, lambda answers: answers.write(text or "")
         )
 
     def _value(self, this: int, out: int) -> int:
+        try:
+            hosted = _hosted_for(this)
+            if hosted.blueprint.patterns.get(Pattern.VALUE) is None:
+                _write_pointer(
+                    out, _oleaut32().SysAllocString(_the_value_said_for(hosted) or "")
+                )
+                return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
         def answer(answers: ValueAnswers) -> None:
             _write_pointer(out, _oleaut32().SysAllocString(answers.read()))
 
         return self._tell(this, Pattern.VALUE, answer)
 
     def _value_read_only(self, this: int, out: int) -> int:
+        try:
+            if _hosted_for(this).blueprint.patterns.get(Pattern.VALUE) is None:
+                ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = 1
+                return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
         return self._tell(
             this,
             Pattern.VALUE,

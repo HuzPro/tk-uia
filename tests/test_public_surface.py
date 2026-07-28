@@ -150,3 +150,17 @@ import tk_uia._accprop
 
 tk_uia._accprop.AccPropServicesStore()
 """
+
+
+def test_completion_offers_the_public_surface_and_nothing_else() -> None:
+    # Given the package as an IDE or a curious REPL sees it
+    import tk_uia
+
+    # When completion asks what is here
+    offered = dir(tk_uia)
+
+    # Then it is the public surface alone: no typing imports, no submodules
+    assert offered == sorted(tk_uia.__all__), (
+        f"dir() leaks names beyond __all__: "
+        f"{sorted(set(offered) - set(tk_uia.__all__))}"
+    )
