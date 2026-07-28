@@ -222,10 +222,18 @@ class FakeInterpreter:
     The wording of the complaint is the wording Tk 8.6.15 actually produced.
     """
 
-    def __init__(self, patchlevel: str, windowing_system: str, *, native: bool) -> None:
+    def __init__(
+        self,
+        patchlevel: str,
+        windowing_system: str,
+        *,
+        native: bool,
+        threaded: bool = True,
+    ) -> None:
         self._answers = {
             ("info", "patchlevel"): patchlevel,
             ("tk", "windowingsystem"): windowing_system,
+            ("set", "tcl_platform(threaded)"): "1" if threaded else "0",
         }
         self._native = native
         self._variables: dict[str, str] = {}
@@ -316,3 +324,60 @@ _TK_SUBCOMMANDS = (
     "useinputmethods",
     "windowingsystem",
 )
+
+
+class RecordingPlatform:
+    """A provider platform that keeps every blueprint it was handed."""
+
+    def __init__(self) -> None:
+        self.hosted: dict[int, object] = {}
+        self.unhosted: list[int] = []
+        self.announced: list[tuple[int, int, object]] = []
+
+    def host(self, hwnd: int, blueprint: object) -> None:
+        self.hosted[hwnd] = blueprint
+
+    def unhost(self, hwnd: int) -> None:
+        self.unhosted.append(hwnd)
+        self.hosted.pop(hwnd, None)
+
+    def announce_change(self, hwnd: int, uia_property: int, now: object) -> None:
+        self.announced.append((hwnd, uia_property, now))
+
+
+class HeldPoster:
+    """A poster that holds what was posted, so a spec can run it later."""
+
+    def __init__(self) -> None:
+        self.held: list = []
+
+    def __call__(self, action) -> None:
+        self.held.append(action)
+
+    def run_everything_posted(self) -> None:
+        while self.held:
+            self.held.pop(0)()
+
+
+class RecordingNotifier:
+    """A notifier that keeps every change it was told about."""
+
+    def __init__(self) -> None:
+        self.heard: list[tuple[int, object, object]] = []
+
+    def changed(self, hwnd: int, prop: object, now: object) -> None:
+        self.heard.append((hwnd, prop, now))
+
+
+class RecordingProvidedWidgets:
+    """A provider layer that keeps what install() handed it."""
+
+    def __init__(self) -> None:
+        self.attached: list[object] = []
+        self.forgotten: list[str] = []
+
+    def attach(self, widget: object) -> None:
+        self.attached.append(widget)
+
+    def forget(self, path: str) -> None:
+        self.forgotten.append(path)

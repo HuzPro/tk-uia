@@ -1129,3 +1129,130 @@ def _what_the_description_says_about(
         if widget.path == path:
             return widget
     raise AssertionError(f"{path} is not in the description at all: {description}")
+
+
+def _an_installation_with_providers(root, wiring_for=None):
+    from tests.doubles import HeldPoster, RecordingPlatform
+    from tk_uia.provide import Providers, WidgetWiring
+
+    def _bare_wiring(widget):
+        return WidgetWiring(
+            words=lambda: None,
+            is_enabled=lambda: True,
+            post=HeldPoster(),
+            still_there=widget.winfo_exists,
+        )
+
+    providers = Providers(
+        RecordingPlatform(), wiring_for if wiring_for is not None else _bare_wiring
+    )
+    installation = install(root, RecordingStore(), providers=providers)
+    return installation, providers
+
+
+def test_the_report_says_which_patterns_each_widget_answers_for_itself() -> None:
+    # Given a button answering UIA itself with a working Invoke
+    from tests.doubles import HeldPoster, RecordingPlatform
+    from tk_uia.provide import Providers, WidgetWiring
+
+    class AnInvoke:
+        def press(self) -> None: ...
+
+        def offered(self) -> bool:
+            return True
+
+    def wiring(widget):
+        return WidgetWiring(
+            words=lambda: None,
+            is_enabled=lambda: True,
+            post=HeldPoster(),
+            still_there=widget.winfo_exists,
+            invoke=AnInvoke() if widget.winfo_class() == "Button" else None,
+        )
+
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
+                    children=[button])
+    providers = Providers(RecordingPlatform(), wiring)
+    installation = install(root, RecordingStore(), providers=providers)
+
+    # When the application asks what it has told Windows
+    report = str(describe(root, installation))
+
+    # Then the row says the widget answers for itself, and with what
+    assert "answers UIA itself, with working: Invoke" in report, (
+        f"the report never says what the button answers with:\n{report}"
+    )
+
+
+def test_a_provided_headline_counts_the_widgets_answering_for_themselves() -> None:
+    # Given an installation where providers were wired in
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
+                    children=[button])
+    installation, _ = _an_installation_with_providers(root)
+
+    # When the application asks
+    report = str(describe(root, installation))
+
+    # Then the headline says PROVIDED rather than claiming nothing was written
+    assert "enable() reported PROVIDED" in report, (
+        f"a provided installation was reported as something else:\n{report}"
+    )
+    assert "nothing here was annotated" not in report, (
+        "PROVIDED fell into the stood-down headline and reads as a page of blanks"
+    )
+
+
+def test_a_widget_left_to_the_proxy_is_reported_with_the_reason() -> None:
+    # Given a button the application left to the proxy
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False),
+                    children=[button])
+    installation, providers = _an_installation_with_providers(root)
+    providers.leave_to_the_proxy(button)
+
+    # When the application asks
+    report = str(describe(root, installation))
+
+    # Then the choice is reported per widget, in its own words
+    assert Gap.LEFT_TO_THE_PROXY.name in report, (
+        f"the proxy choice is invisible in the report:\n{report}"
+    )
+
+
+def test_trouble_the_callback_machinery_swallowed_appears_in_the_report() -> None:
+    # Given an installation whose callbacks swallowed something
+    from tk_uia.provide import Trouble
+
+    trouble = Trouble()
+    trouble.note("window 0x1234, message 0x3d: something broke")
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False))
+    installation = install(root, RecordingStore(), trouble=trouble)
+
+    # When the application asks
+    report = str(describe(root, installation))
+
+    # Then the swallowed failure is the report's to show, nobody else's
+    assert "WHAT THE PROVIDER MACHINERY SWALLOWED" in report, (
+        f"swallowed trouble never surfaced:\n{report}"
+    )
+    assert "something broke" in report
+
+
+def test_the_reason_providers_stood_down_reaches_the_headline() -> None:
+    # Given an honest downgrade carrying its reason
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False))
+    installation = install(
+        root,
+        RecordingStore(),
+        providers_stood_down_because="this Tcl was built without threads",
+    )
+
+    # When the application asks
+    report = str(describe(root, installation))
+
+    # Then the report says why no widget answers for itself
+    assert "built without threads" in report, (
+        f"the stand-down reason never reached the report:\n{report}"
+    )

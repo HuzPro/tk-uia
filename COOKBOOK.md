@@ -288,13 +288,13 @@ correct and stays correct, and a status line whose name changes when `status`
 does. Before `enable()`, every one of those stops is an anonymous pane or an
 unnamed button, with no name at all.
 
-Three things it does **not** give you, none of them small:
+Things worth knowing at this point:
 
-- Findable and readable is not activatable. An annotated `tk.Button` advertises
-  an `InvokePattern` and a default action of "Press", and both lie. The call
-  returns cleanly and the Tk command never runs. Assistive technology and test
-  tools have to click. [The measurement, and
-  why](https://github.com/HuzPro/tk-uia/blob/main/docs/GUIDE.md#the-limitation-findable-and-readable-is-not-activatable).
+- Activation works through the tree. A client can press the button through its
+  `InvokePattern`, type into the entry through `ValuePattern`, and never touch
+  the mouse; only a widget the application `leave_to_the_proxy()`s keeps the
+  old advertise-and-do-nothing proxy behaviour. [How, and the rules behind
+  it](https://github.com/HuzPro/tk-uia/blob/main/docs/GUIDE.md#activation-what-presses-and-what-only-advertises).
 - What is *inside* a list is not in the tree. A `Listbox` is a findable
   `ListControl` and its rows are not there at all. The same goes for `Treeview`
   items. A `ttk.Notebook`'s tabs are the exception and are reachable. [Caveats

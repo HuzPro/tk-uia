@@ -181,11 +181,13 @@ def _an_entry_holding_a_draft(root: tk.Tk, draft: tk.StringVar) -> tk.Entry:
 
 
 def _accessibility_switched_on(root: tk.Tk) -> None:
-    strategy = tk_uia.enable(root)
+    # annotate_only, deliberately: this suite pins the annotation layer, and
+    # under a provider the same specs would silently measure the wrong one.
+    strategy = tk_uia.annotate_only(root)
     if strategy is not Strategy.ANNOTATED:
         # Loudly: a mis-fired gate leaves every widget as bare Tk left it.
         raise SystemExit(
-            f"tk_uia.enable reported {strategy}, not {Strategy.ANNOTATED}: "
+            f"tk_uia.annotate_only reported {strategy}, not {Strategy.ANNOTATED}: "
             "nothing in this window has been annotated, so the gui specs "
             "would be measuring bare Tk"
         )

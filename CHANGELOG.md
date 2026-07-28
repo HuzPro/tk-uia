@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.7.0 - 2026-07-29
+
+The release where widgets answer UI Automation for themselves. `enable()` now
+installs a native UIA provider on every role-bearing widget beside the MSAA
+annotations it already wrote, so patterns genuinely act instead of advertising:
+`Invoke` presses a button, `Value` types into an entry, `Toggle` flips a
+checkbutton, `SelectionItem` selects a radiobutton or switches a notebook tab,
+and `RangeValue` moves a scale. Names, values, enabled state, help and
+description are pulled live at the moment a client asks, and name and value
+changes are raised as property-changed events.
+
+- **`Strategy` gains `PROVIDED`**, which `enable()` reports on the ordinary
+  Tk 8.6 path. Migration: a caller comparing `strategy is Strategy.ANNOTATED`
+  should say `strategy.annotates`, which is true for both writing strategies.
+  `ANNOTATED` still means what it meant and is what `annotate_only()` reports.
+- **`annotate_only(root)`** is everything 0.6 did, unchanged: one line returns
+  an application to the proxy-only behaviour while keeping every annotation
+  and binding. **`leave_to_the_proxy(widget)`** opts a single widget out.
+- **What the application said still wins.** The provider reads `set_acc_name`,
+  `set_acc_role`, `set_acc_help`, `set_acc_description`, `label_for` and the
+  `bind_*` calls from the same ledger the annotator writes, so every existing
+  call keeps its effect for UIA clients. `set_acc_action` and `set_acc_state`
+  reach the MSAA view only on a provided widget; live `IsEnabled` and the
+  working patterns replace what they carried.
+- **The MSAA proxy's synthesised patterns are superseded on provided
+  widgets.** The proxy offered `Invoke` on buttons, checkbuttons and radios
+  that pressed nothing; provided widgets offer only patterns that act. A
+  button whose `-command` is empty offers no `Invoke` at all. A scrollbar or
+  listbox keeps its typed, named proxy view unchanged.
+- **`describe()`** reports which patterns each widget answers for itself,
+  which widgets were left to the proxy, whatever the callback machinery
+  swallowed, and the reason providers stood down where they did.
+- On a Tcl built without thread support, providers stand down and `enable()`
+  reports `ANNOTATED`, with the reason carried into the report. Tk 9.1+
+  (TIP 733) still stands everything down to `NATIVE`.
+
 ## 0.6.3 - 2026-07-28
 
 The release that puts releasing itself under automation. No library code

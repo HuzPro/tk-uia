@@ -19,9 +19,9 @@ def main(title: str, _commands: Path) -> None:
     root.geometry("420x240")
     root.update_idletasks()
 
-    strategy = tk_uia.enable(root)
+    strategy = tk_uia.annotate_only(root)
     if strategy is not Strategy.ANNOTATED:
-        raise SystemExit(f"tk_uia.enable reported {strategy}, not ANNOTATED")
+        raise SystemExit(f"tk_uia.annotate_only reported {strategy}, not ANNOTATED")
 
     import tkinter.ttk  # noqa: F401  (bind the first copy, as any app would)
 

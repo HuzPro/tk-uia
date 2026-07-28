@@ -9,7 +9,7 @@ to UI Automation. Importing this reaches for neither `tkinter` nor
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from tk_uia.annotate import (
     AnnotationRefused,
@@ -21,13 +21,14 @@ from tk_uia.describe import Description, Gap, WidgetDescription
 from tk_uia.describe import describe as _describe
 from tk_uia.layout import NamedByTheLayout
 from tk_uia.layout import infer_names_from_layout as _names_the_layout_implies
+from tk_uia.provide import Pattern, ProviderRefused, Providers, Trouble
 from tk_uia.roles import ROLE_FOR_TK_CLASS, Role
 from tk_uia.tkversion import Strategy
 
 if TYPE_CHECKING:
     import tkinter
 
-__version__ = "0.6.3"
+__version__ = "0.7.0"
 
 __all__ = [
     "ROLE_FOR_TK_CLASS",
@@ -35,11 +36,14 @@ __all__ = [
     "Description",
     "Gap",
     "NamedByTheLayout",
+    "Pattern",
+    "ProviderRefused",
     "Role",
     "Strategy",
     "WidgetDescription",
     "__version__",
     "add_acc_object",
+    "annotate_only",
     "bind_text_variable",
     "bind_value_variable",
     "check_screenreader",
@@ -48,6 +52,7 @@ __all__ = [
     "forget",
     "infer_names_from_layout",
     "label_for",
+    "leave_to_the_proxy",
     "set_acc_action",
     "set_acc_description",
     "set_acc_help",
@@ -59,10 +64,12 @@ __all__ = [
 ]
 
 _installed: Installation | None = None
+_providers: Providers | None = None
+_trouble = Trouble()
 
 
 def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> Strategy:
-    """Annotate this application's widgets, and say which way it went.
+    """Annotate this application's widgets and make them answer UIA themselves.
 
     Idempotent: a second call reports what the first one did and installs
     nothing further. One installation covers every window the application opens.
@@ -70,6 +77,79 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
     global _installed
     if _installed is not None:
         return _installed.strategy
+    from tk_uia.tkversion import tcl_can_marshal_across_threads
+
+    if not tcl_can_marshal_across_threads(root.tk):
+        # Providers answer on whatever thread a client calls from, which an
+        # unthreaded Tcl cannot hear from safely. Honest downgrade, with the
+        # reason carried into the report.
+        return _annotate_only(
+            root,
+            roles,
+            providers_stood_down_because=(
+                "this Tcl was built without thread support, so a widget could "
+                "not answer a client safely; annotation alone was installed"
+            ),
+        )
+    from tk_uia._subclass import WindowSubclasses
+    from tk_uia._tkwiring import wiring_for
+    from tk_uia._uiacore import ComProviderPlatform
+    from tk_uia.provide import Providers
+
+    global _providers
+    from tk_uia.provide import ProvidedTabs
+
+    platform = ComProviderPlatform(WindowSubclasses(_trouble.note), _trouble.note)
+    providers = Providers(
+        platform, wiring_for, roles, said=_WhateverTheInstallationChose()
+    )
+    _installed = _install_with(
+        root,
+        roles,
+        providers=providers,
+        notifier=_AnnouncesThroughTheProvider(root, platform),
+        tab_activation=ProvidedTabs(platform),
+    )
+    _providers = providers
+    return _installed.strategy
+
+
+def annotate_only(
+    root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None
+) -> Strategy:
+    """Annotate without installing native providers, which is everything 0.6 did.
+
+    The escape hatch: one line here returns an application to the proxy-only
+    behaviour while keeping every annotation and every binding.
+    """
+    if _installed is not None:
+        return _installed.strategy
+    return _annotate_only(root, roles, providers_stood_down_because=None)
+
+
+def _annotate_only(
+    root: tkinter.Misc,
+    roles: Mapping[str, Role] | None,
+    providers_stood_down_because: str | None,
+) -> Strategy:
+    global _installed
+    _installed = _install_with(
+        root,
+        roles,
+        providers=None,
+        providers_stood_down_because=providers_stood_down_because,
+    )
+    return _installed.strategy
+
+
+def _install_with(
+    root: tkinter.Misc,
+    roles: Mapping[str, Role] | None,
+    providers: object | None,
+    notifier: object | None = None,
+    tab_activation: object | None = None,
+    providers_stood_down_because: str | None = None,
+) -> Installation:
     from tk_uia._accprop import AccPropServicesStore
     from tk_uia._overlay import Win32Overlays
     from tk_uia._tkstrip import TkTabStrip, is_a_notebook
@@ -79,11 +159,60 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
 
     store = AccPropServicesStore()
     notebooks = Notebooks(
-        TabHandles(store, Win32Overlays()),
+        TabHandles(store, Win32Overlays(), tab_activation),
         lambda widget: TkTabStrip(widget) if is_a_notebook(widget) else None,
     )
-    _installed = install(root, store, roles, notebooks, a_variable_the_application_owns)
-    return _installed.strategy
+    return install(
+        root,
+        store,
+        roles,
+        notebooks,
+        a_variable_the_application_owns,
+        providers=providers,
+        notifier=notifier,
+        providers_stood_down_because=providers_stood_down_because,
+        trouble=_trouble,
+    )
+
+
+class _WhateverTheInstallationChose:
+    """The application's chosen properties, read from wherever they end up."""
+
+    def chosen(self, hwnd: int, prop: object) -> str | int | None:
+        if _installed is None:
+            return None
+        return _installed.annotator.ledger.chosen(hwnd, prop)
+
+
+class _AnnouncesThroughTheProvider:
+    """Carries a changed property to UIA clients, off the write that changed it.
+
+    The raise itself is posted: raising from inside a trace that a client's
+    own synchronous call fired is a deadlock window.
+    """
+
+    _THE_UIA_PROPERTY_FOR: ClassVar[Mapping[str, int]] = {
+        "NAME": 30005,
+        "VALUE": 30045,
+    }
+
+    def __init__(self, root: tkinter.Misc, platform: object) -> None:
+        self._root = root
+        self._platform = platform
+
+    def changed(self, hwnd: int, prop: object, now: str | int) -> None:
+        uia_property = self._THE_UIA_PROPERTY_FOR.get(getattr(prop, "name", ""))
+        if uia_property is None:
+            return
+        from tkinter import TclError
+
+        try:
+            self._root.after_idle(
+                lambda: self._platform.announce_change(hwnd, uia_property, now)
+            )
+        except TclError:
+            # The application is tearing down; there is nobody left to tell.
+            return
 
 
 def add_acc_object(widget: tkinter.Misc) -> None:
@@ -141,8 +270,8 @@ def set_acc_description(widget: tkinter.Misc, description: str) -> None:
 def set_acc_action(widget: tkinter.Misc, action: str) -> None:
     """Say what activating this widget would do, as a verb ("Press").
 
-    Advertising it does not make it activatable: `InvokePattern` on a Tk button
-    returns cleanly and presses nothing.
+    This reaches the MSAA view; a provided widget's working Invoke is what a
+    UIA client gets, and a widget left to the proxy advertises without acting.
     """
     _annotator().set_action(widget, action)
 
@@ -184,6 +313,17 @@ def set_automation_id(widget: tkinter.Misc, automation_id: int) -> None:
     _annotator().set_automation_id(widget, automation_id)
 
 
+def leave_to_the_proxy(widget: tkinter.Misc) -> None:
+    """Take this widget's native provider back off, leaving the MSAA proxy and its annotations.
+
+    Under NATIVE and UNSUPPORTED nothing was provided; the choice is recorded
+    and nothing else happens.
+    """
+    _the_installation()
+    if _providers is not None:
+        _providers.leave_to_the_proxy(widget)
+
+
 def forget(widget: tkinter.Misc | str) -> None:
     """Take every annotation back off a widget, and stop following its variables.
 
@@ -191,6 +331,8 @@ def forget(widget: tkinter.Misc | str) -> None:
     once the widget object has gone.
     """
     _annotator().forget(widget)
+    if _providers is not None:
+        _providers.detach(str(widget))
 
 
 def describe(root: tkinter.Misc) -> Description:

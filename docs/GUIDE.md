@@ -16,7 +16,8 @@ and the quickstart. This page is everything underneath them.
 - [The API](#the-api)
 - [The caption an entry has, and Tk does not record](#the-caption-an-entry-has-and-tk-does-not-record)
 - [How it works](#how-it-works)
-- [The limitation: findable and readable is not activatable](#the-limitation-findable-and-readable-is-not-activatable)
+- [Activation: what presses, and what only advertises](#activation-what-presses-and-what-only-advertises)
+- [The two views, and which write reaches which](#the-two-views-and-which-write-reaches-which)
 - [The app you cannot modify](#the-app-you-cannot-modify)
 - [Caveats worth knowing](#caveats-worth-knowing)
 - [What your own application tells Windows](#what-your-own-application-tells-windows)
@@ -55,26 +56,30 @@ its behalf.
 | Tk **9.1 or later** | **Nothing. Use Tk's own.** TIP 733 puts MSAA in Tk itself, with the same role mapping. `tk_uia.enable()` detects it, stands down and reports `NATIVE`. |
 | A Tk app you **cannot modify** | **Not this.** Annotation is in-process only. There is a narrow cross-process rescue, described [below](#the-app-you-cannot-modify), but it sets names only, and misusing it corrupts apps that annotate themselves properly. |
 | macOS or Linux | **Not this.** MSAA is a Windows API. `enable()` returns `UNSUPPORTED` and does nothing, so cross-platform code can call it unconditionally. Tk's Linux accessibility is an ATK problem and a different project. |
-| You need the assistive technology or test tool to *press* the button | **Read [the limitation](#the-limitation-findable-and-readable-is-not-activatable) first.** Annotation makes widgets findable and readable. It does not make `InvokePattern` work, and `InvokePattern` on a Tk button lies. |
+| You need the assistive technology or test tool to *press* the button | **tk-uia.** Under `enable()` the widget answers UIA itself and `InvokePattern` genuinely presses; see [Activation](#activation-what-presses-and-what-only-advertises) for the working set and the two rules that keep it honest. |
 | PyQt, wxPython, WinForms, WPF | **Nothing.** They are accessible already. |
 
 ## What one call gives you
 
-`enable()` names every widget that carries its own words, gives every widget the
-right control type, and since 0.6.0 keeps both in step with whatever
-`textvariable` the widget told Tk it shows.
+`enable()` names every widget that carries its own words, gives every widget
+the right control type, keeps both in step with whatever `textvariable` the
+widget told Tk it shows, and makes the widget answer UI Automation for itself:
+names, values and enabled state are pulled live at the moment a client asks,
+and the patterns act. An entry filled by `insert()` rather than driven by a
+variable still reads back correctly to a UIA client, because the answer comes
+from the widget, not from a copy.
 
-What it cannot do on its own is read a value out of a widget that never said
-where it keeps one. An entry filled by `insert()` rather than driven by a
-variable arrives as an `EditControl` whose ValuePattern is `''`. That is
-measured, and it is a confidently wrong answer where bare Tk gave no answer at
-all. One more line (`bind_value_variable`) fixes it.
+The MSAA view that legacy clients read is the annotation layer, and it is
+push-model: there, a widget that never said where it keeps its value reads
+`''` until `bind_value_variable` says so, and that is a confidently wrong
+answer where bare Tk gave no answer at all.
 
-Here is what a UI Automation client reads before and after that one call,
-measured from a **separate process**, against the fixture app in this repo and
+Here is what a UI Automation client reads before and after annotation alone
+(`annotate_only()`, which is also the MSAA view under `enable()`), measured
+from a **separate process**, against the fixture app in this repo and
 `probes/what_enable_alone_gives_you.py`:
 
-| Widget | Bare Tk 8.6 | After `enable()` **alone** | With one more line |
+| Widget | Bare Tk 8.6 | After `annotate_only()` | With one more line |
 |---|---|---|---|
 | `tk.Button(text="New Task")` | `ButtonControl`, `Name=''` | `ButtonControl`, **`Name='New Task'`** | |
 | `tk.Label(text="Task list")` | **`ImageControl`**, `Name=''` | **`TextControl`**, **`Name='Task list'`** | |
@@ -102,7 +107,9 @@ by a `textvariable` is followed. Everything else takes one line.
 
 | Call | What it does |
 |---|---|
-| `enable(root, roles=None)` | Annotate this application, and **return** which of `ANNOTATED` / `NATIVE` / `UNSUPPORTED` happened. Follows every `textvariable` a widget declares. |
+| `enable(root, roles=None)` | Annotate this application, make its widgets answer UIA themselves, and **return** which of `PROVIDED` / `ANNOTATED` / `NATIVE` / `UNSUPPORTED` happened. Follows every `textvariable` a widget declares. |
+| `annotate_only(root, roles=None)` | Everything 0.6 did and nothing more: the escape hatch back to proxy-only behaviour, reporting `ANNOTATED`. |
+| `leave_to_the_proxy(widget)` | Take one widget's native provider back off, keeping its annotations. |
 | `set_acc_name(widget, name)` | The name a screen reader announces. Needed for anything with no `-text` and no `textvariable`. |
 | `label_for(label, widget)` | Say that this label is that widget's caption, Tk's `<label for=…>`. The widget takes the label's words, without the trailing colon, and follows them if the label shows a variable. |
 | `infer_names_from_layout(root)` | The retrofit: apply the row-and-caption convention your form already follows, to every row at once, and report what it named. Asked for explicitly. [See below](#the-caption-an-entry-has-and-tk-does-not-record). |
@@ -117,10 +124,11 @@ by a `textvariable` is followed. Everything else takes one line.
 | `describe(root)` | Say what this application has told Windows about its widgets, and name every widget it did not. |
 | `check_screenreader()` | Whether Windows believes something is reading the screen aloud. |
 
-`enable()` returns its strategy rather than logging it, because "annotated" and
+`enable()` returns its strategy rather than logging it, because "provided" and
 "the version gate mis-fired and this did nothing at all" are otherwise the same
-silence. The fixture app in this repo asserts `Strategy.ANNOTATED` and refuses
-to start otherwise. A suite of your own should do the same.
+silence. The fixture apps in this repo assert the strategy they expect and
+refuse to start otherwise; a suite of your own should do the same, matching on
+`strategy.annotates` if it only cares that annotations were written.
 
 Names are inferred, never invented. A widget with no `-text` gets its **role**
 set and no name at all. A listbox announced as `.!listbox` is worse than one
@@ -257,69 +265,88 @@ usable control type to **0 of 20** widgets and classic tk to 5 of 18. After
 which `wm title` already names. What `enable()` cannot do is *name* most of
 them. That half is yours, and the same document measures it.
 
-## The limitation: findable and readable is not activatable
+## Activation: what presses, and what only advertises
 
-This is the sharpest thing to know before adopting this, and it was measured
-against a real click counter rather than reasoned about.
-
-An annotated `tk.Button` advertises an `InvokePattern` and a `LegacyIAccessible`
-`DefaultAction` of `"Press"`. **Both lie.** Calling `InvokePattern.Invoke()` or
-`LegacyIAccessible.DoDefaultAction()` returns cleanly, with no exception and no
-error code, and the Tk command behind the button never runs. The generic MSAA
-proxy synthesises Invoke from a posted `BM_CLICK`, and every Tk button is
-owner-drawn (`BS_OWNERDRAW`), so that message goes into the void.
-
-There is a spec for this
-(`test_an_annotated_button_still_cannot_be_pressed_through_its_invoke_pattern`),
-which watches a counter inside the fixture app stay at `presses 0` across both
-calls, then move to `presses 1` when the application presses its own button. The
-counter is demonstrably live, and the silence belongs to the client. If a future
-Tk or Windows makes Invoke start working, that spec goes red and tells us this
-section needs rewriting. That is the reason for having it.
-
-**The consequence.** Annotation makes your widgets findable and readable: a
-screen reader can announce them, a test can locate them, a client can read their
-values. Assistive technology and test tools that want to *act* must click and
-type, with synthesised mouse and keyboard input aimed at `BoundingRectangle`,
-which is always correct. Annotating does not perturb hit-testing.
-`ElementFromPoint` at every widget's centre returns the same HWND before and
-after, in all eight cases probed.
-
-Note that synthesised input is subject to Windows' User Interface Privilege
-Isolation, and reading is not. The half of this that works is the durable half.
-
-### What to write instead
-
-Bring the window to the front, then click the middle of the control's rectangle.
-Executed against a small annotated form whose button counts its own presses:
+Under `enable()`, widgets answer UI Automation for themselves, and their
+patterns genuinely act. Measured against a real click counter, from another
+process, with no synthetic input anywhere:
 
 ```python
 import uiautomation as auto
 
 window = auto.WindowControl(searchDepth=1, Name="Tasks")
-window.SetActive()
-
 button = auto.ButtonControl(searchFromControl=window, Name="New Task")
-where = button.BoundingRectangle
-auto.Click(where.left + where.width() // 2, where.top + where.height() // 2)
+button.GetInvokePattern().Invoke()
 ```
 
-The form's status line reads `presses 0` before that block and `presses 1`
-after. `button.GetInvokePattern().Invoke()`, run straight afterwards against the
-same button, leaves it at `presses 1`.
+The form's counter reads `presses 1` afterwards. The same holds for the rest
+of the working set: `ValuePattern.SetValue` types into an entry, spinbox,
+combobox or `Text`; `TogglePattern.Toggle` flips a checkbutton;
+`SelectionItemPattern.Select` selects a radiobutton or switches a notebook
+tab; `RangeValuePattern.SetValue` moves a scale, and a progressbar refuses the
+write and says it is read-only. No foregrounding, no clicking, no synthesised
+input: the window does not even need to be in front.
 
-The `SetActive()` is not politeness. A click is synthesised mouse input aimed at
-a screen coordinate, so it lands on whatever window owns that pixel: with your
-window behind another, the press goes to the window in front and the Tk command
-never runs, which looks *exactly* like the `Invoke` lie above and is a different
-fault entirely. And Windows can refuse to bring a window forward.
-`SetForegroundWindow` obeys only a process that already holds the foreground or
-has had recent input from the user, so `SetActive()` can return having changed
-nothing at all. Read the foreground back, retry, and report a refusal as a
-refusal, rather than letting it arrive later as a click that pressed nothing.
+Two rules keep that honest:
 
+- **Actions answer first and run after.** Invoke, Toggle and Select post the
+  Tk command to the event loop and return, so a command that opens a modal
+  dialog cannot pin the callback that carried it and stall every later
+  question a client asks. `SetValue` is the deliberate exception: it writes
+  synchronously, so a read straight back sees the new text.
+- **A pattern that would do nothing is not offered.** A button whose
+  `-command` is empty answers no InvokePattern at all, rather than one that
+  returns cleanly and presses nothing.
+
+### The proxy's patterns, and the widgets left to it
+
+The MSAA proxy behind an *annotation-only* widget (`annotate_only()`, or
+`leave_to_the_proxy(widget)`) still advertises an `InvokePattern` and a
+`DefaultAction` of `"Press"`, and **both lie**: the proxy synthesises Invoke
+from a posted `BM_CLICK`, every Tk button is owner-drawn, and the message goes
+into the void. There is a spec for this
+(`test_an_annotated_button_still_cannot_be_pressed_through_its_invoke_pattern`),
+which watches a counter stay at `presses 0` across the call and move to
+`presses 1` when the application presses its own button. If Tk or Windows ever
+changes the proxy's behaviour, that spec goes red and this section gets
+rewritten.
+
+A client driving an annotation-only widget must click its
+`BoundingRectangle`, with the window foregrounded first, and synthesised input
+is subject to Windows' User Interface Privilege Isolation.
 [pytest-uia](https://github.com/HuzPro/pytest-uia) does the foregrounding, the
-retrying and the refusal-reporting for you.
+retrying and the refusal-reporting when clicking really is needed.
+
+## The two views, and which write reaches which
+
+Under `enable()` every widget has two faces. UI Automation clients read the
+native provider: name, control type, `IsEnabled`, `HelpText` (30013) and
+`FullDescription` (30159) are pulled live, with what the application *chose*
+(`set_acc_name`, `set_acc_role`, `set_acc_help`, `set_acc_description`,
+`label_for`, the `bind_*` calls) outranking what the widget shows, and what it
+shows outranking any echo of map time. MSAA clients read the annotated proxy,
+untouched; measured with a raw `AccessibleObjectFromWindow` read beside a live
+provider, every annotated property survives.
+
+Two writes are MSAA-view only on a provided widget: `set_acc_action` (the
+working Invoke is what UIA clients get) and `set_acc_state` (live `IsEnabled`
+is). An `ILegacyIAccessibleProvider` to carry them across is on the
+[ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md).
+
+`annotate_only(root)` installs the annotation layer and nothing else, which is
+everything 0.6 did: the escape hatch if the provider layer ever misbehaves in
+your application, one line, no version pin. `leave_to_the_proxy(widget)` is
+the same choice for one widget. On a Tcl built without thread support,
+providers stand down on their own, `enable()` reports `ANNOTATED`, and
+`describe()` prints the reason.
+
+Pattern callbacks arrive on a background thread that UI Automation owns; the
+readers marshal into Tk through its own cross-thread machinery, and actions
+are posted to the event loop, so no application code is ever entered from a
+foreign thread mid-callback. Two costs worth knowing: a `Text` widget's value
+is read in full on every question, which is paid per ask on a large buffer,
+and a `TProgressbar` in `indeterminate` mode reports a `-value` that means
+nothing, because Tk animates it rather than measuring anything.
 
 ## The app you cannot modify
 
@@ -344,18 +371,20 @@ is out of the picture entirely.
 
 ## Caveats worth knowing
 
-### A plain `config(text=…)` leaves the accessible name stale, indefinitely
+### A plain `config(text=…)`: read live by UIA, stale for MSAA, silent to both
 
-Measured: a label annotated as `'Task list'` that later does
-`label.config(text="in progress")` goes on being read as **`'Task list'`**. The
-widget's `-text` is only ever read at `<Map>`, and nothing re-reads it until an
-unmap/remap fires `<Map>` again. Staleness is the worst way an accessibility
-tree can be wrong, because a stale answer is indistinguishable from a true one.
+A provided widget's name is pulled from its `-text` at the moment a UIA client
+asks, so a plain `config(text=...)` is never *wrong* there. It is, however,
+**silent**: no ledger write means no property-changed event, so a client that
+re-asks sees the new words and a subscriber hears nothing. Drive the widget
+from a `StringVar` if the change should announce itself.
 
-Two ways out, both verified. Call **`add_acc_object(widget)`** after the
-`config` and the name is re-read immediately (`'in progress'`). Or drive the
-widget from a `StringVar`, which is the durable answer and, since 0.6.0, needs
-saying to nobody at all.
+The MSAA view stays push-model, and there the staleness is real. Measured: a
+label annotated as `'Task list'` that later does
+`label.config(text="in progress")` goes on being read as **`'Task list'`** by
+an MSAA client. Call **`add_acc_object(widget)`** after the `config` and the
+name is re-read immediately, or drive the widget from a `StringVar`, which is
+the durable answer for every view at once.
 
 ### A declared `textvariable` is followed automatically
 
@@ -403,14 +432,14 @@ The fix is to qualify the caption, with
 window**, since a dialog's `Confirm` and the main window's `Confirm` are two
 answers to two different questions.
 
-### Disabled state is not conveyed, and nothing tracks any state
+### Disabled state: live for UIA clients, a write for MSAA ones
 
-Measured: a `tk.Button(state=DISABLED)` reads back `IsEnabled=True`. The widget
-is greyed on screen and advertised to a client as usable.
-`set_acc_state(widget, 0x1)` (`STATE_SYSTEM_UNAVAILABLE`) does fix it, verified,
-`IsEnabled` becomes `False`. But it is a write and not a subscription. Nothing
-here notices a widget being disabled or re-enabled, so an application that says
-it has to keep saying it. A `bind_state_variable` sibling is on the
+A provided widget answers `IsEnabled` from its own `-state` at the moment a
+client asks, so disabling and re-enabling is conveyed with no call to this
+package. The MSAA view is still push-model: there, a
+`tk.Button(state=DISABLED)` reads back usable until
+`set_acc_state(widget, 0x1)` (`STATE_SYSTEM_UNAVAILABLE`) says otherwise, and
+that is a write, not a subscription. A `bind_state_variable` sibling is on the
 [ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md).
 
 **Checked state is the exception, and it works.** An annotated `Checkbutton` is

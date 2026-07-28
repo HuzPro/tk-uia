@@ -9,7 +9,7 @@ module is platform-specific.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -146,6 +146,65 @@ def _how_far_it_runs_down(strip: TabStrip, x: int, height: int) -> tuple[int, in
 
 
 @dataclass(frozen=True)
+class TabWiring:
+    """The callables that drive one tab, resolving where it stands at call time."""
+
+    text: Callable[[], str]
+    select: Callable[[], None]
+    is_selected: Callable[[], bool]
+    post: Callable[[Callable[[], None]], None]
+    still_there: Callable[[], bool]
+
+
+WiresATab = Callable[[Callable[[], int | None]], TabWiring]
+"""Builds one tab's wiring around a resolver for where that tab stands now."""
+
+
+class TabActivation(Protocol):
+    """Whatever lets a client switch to a tab without a click, if anything does."""
+
+    def attach(self, hwnd: int, wiring: TabWiring) -> None: ...
+
+    def detach(self, hwnd: int) -> None: ...
+
+
+class NoTabActivation:
+    """The null TabActivation, for an installation with nothing to answer through."""
+
+    def attach(self, hwnd: int, wiring: TabWiring) -> None: ...
+
+    def detach(self, hwnd: int) -> None: ...
+
+
+def wiring_over_the_notebook(notebook: object) -> WiresATab:
+    """The wiring a real notebook widget gives each of its tabs."""
+
+    def wire(position_now: Callable[[], int | None]) -> TabWiring:
+        def text() -> str:
+            where = position_now()
+            return "" if where is None else str(notebook.tab(where, "text"))
+
+        def select() -> None:
+            where = position_now()
+            if where is not None:
+                notebook.select(where)
+
+        def is_selected() -> bool:
+            where = position_now()
+            return where is not None and notebook.index("current") == where
+
+        return TabWiring(
+            text=text,
+            select=select,
+            is_selected=is_selected,
+            post=notebook.after_idle,
+            still_there=notebook.winfo_exists,
+        )
+
+    return wire
+
+
+@dataclass(frozen=True)
 class _AHandledTab:
     """One tab, and the window handle standing in for it."""
 
@@ -160,20 +219,42 @@ class TabHandles:
     and is all `<Destroy>` carries.
     """
 
-    def __init__(self, store: AccessibilityStore, windows: OverlayWindows) -> None:
+    def __init__(
+        self,
+        store: AccessibilityStore,
+        windows: OverlayWindows,
+        activation: TabActivation | None = None,
+    ) -> None:
         self._store = store
         self._windows = windows
+        self._activation = activation if activation is not None else NoTabActivation()
         self._handled: dict[str, list[_AHandledTab]] = {}
 
-    def refresh(self, path: str, parent: int, tabs: Sequence[Tab]) -> None:
+    def refresh(
+        self,
+        path: str,
+        parent: int,
+        tabs: Sequence[Tab],
+        wire: WiresATab | None = None,
+    ) -> None:
         """Make the handles for `path` say what these tabs say, and no more."""
         standing = self._handled.get(path, [])
         self._surrender(standing[len(tabs) :])
         kept = list(standing[: len(tabs)])
         self._handled[path] = [
             *(self._brought_into_step(was, now) for was, now in zip(kept, tabs)),
-            *(self._given_a_handle(parent, tab) for tab in tabs[len(kept) :]),
+            *(
+                self._given_a_handle(path, parent, tab, wire)
+                for tab in tabs[len(kept) :]
+            ),
         ]
+
+    def position_of(self, path: str, hwnd: int) -> int | None:
+        """Where this handle's tab stands right now, which is never captured."""
+        for index, handled in enumerate(self._handled.get(path, ())):
+            if handled.hwnd == hwnd:
+                return index
+        return None
 
     def forget(self, path: str) -> None:
         """Give back every handle made for this notebook."""
@@ -190,9 +271,15 @@ class TabHandles:
         for handled in self._handled.values():
             yield from (one.hwnd for one in handled)
 
-    def _given_a_handle(self, parent: int, tab: Tab) -> _AHandledTab:
+    def _given_a_handle(
+        self, path: str, parent: int, tab: Tab, wire: WiresATab | None
+    ) -> _AHandledTab:
         hwnd = self._windows.create(parent, *tab.rectangle)
         self._say_what_it_is(hwnd, tab)
+        if wire is not None:
+            self._activation.attach(
+                hwnd, wire(lambda: self.position_of(path, hwnd))
+            )
         return _AHandledTab(tab, hwnd)
 
     def _brought_into_step(self, standing: _AHandledTab, now: Tab) -> _AHandledTab:
@@ -212,8 +299,9 @@ class TabHandles:
 
     def _surrender(self, handled: Sequence[_AHandledTab]) -> None:
         for one in handled:
-            # Cleared before destroy: Windows recycles handles, and a leftover
-            # annotation would mislabel an unrelated window.
+            # Cleared and detached before destroy: Windows recycles handles,
+            # and a leftover would mislabel or answer for an unrelated window.
+            self._activation.detach(one.hwnd)
             self._store.clear(one.hwnd)
             self._windows.destroy(one.hwnd)
 
@@ -235,7 +323,12 @@ class Notebooks:
         strip = self._strip_for(widget)
         if strip is None:
             return
-        self._handles.refresh(str(widget), widget.winfo_id(), tabs_on(strip))
+        self._handles.refresh(
+            str(widget),
+            widget.winfo_id(),
+            tabs_on(strip),
+            wiring_over_the_notebook(widget),
+        )
 
     def forget(self, path: str) -> None:
         self._handles.forget(path)

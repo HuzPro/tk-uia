@@ -30,14 +30,39 @@ class Strategy(Enum):
     """What `enable()` did, in the caller's terms."""
 
     ANNOTATED = auto()
+    PROVIDED = auto()
     NATIVE = auto()
     UNSUPPORTED = auto()
+
+    @property
+    def annotates(self) -> bool:
+        """Whether MSAA annotations were written, whichever member says so."""
+        return self in _THE_STRATEGIES_THAT_WRITE
+
+
+_THE_STRATEGIES_THAT_WRITE = frozenset({Strategy.ANNOTATED, Strategy.PROVIDED})
 
 
 class TkInterpreter(Protocol):
     """The Tcl interpreter, as the gate uses it."""
 
     def call(self, *args: object) -> object: ...
+
+
+_WHERE_TCL_SAYS_IF_IT_IS_THREADED = "tcl_platform(threaded)"
+
+
+def tcl_can_marshal_across_threads(interpreter: TkInterpreter) -> bool:
+    """Whether a call from a foreign thread reaches this interpreter safely.
+
+    Providers answer clients on whatever thread the request arrives on, which
+    only a threaded Tcl carries back to the interpreter's own thread.
+    """
+    try:
+        return str(interpreter.call("set", _WHERE_TCL_SAYS_IF_IT_IS_THREADED)) == "1"
+    except Exception:  # noqa: BLE001 - this module cannot import tkinter to name TclError
+        # Old enough to have never heard the question is old enough to refuse.
+        return False
 
 
 def strategy_for(interpreter: TkInterpreter) -> Strategy:

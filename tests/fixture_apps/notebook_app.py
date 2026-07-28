@@ -58,11 +58,11 @@ def _a_window_with_a_notebook(title: str) -> Widgets:
 
 
 def _accessibility_switched_on(root: tk.Tk) -> None:
-    strategy = tk_uia.enable(root)
+    strategy = tk_uia.annotate_only(root)
     if strategy is not Strategy.ANNOTATED:
         # Loudly: a mis-fired gate fails every spec below with "the tab is not there".
         raise SystemExit(
-            f"tk_uia.enable reported {strategy}, not {Strategy.ANNOTATED}: "
+            f"tk_uia.annotate_only reported {strategy}, not {Strategy.ANNOTATED}: "
             "there is nothing for the tab specs to read"
         )
 

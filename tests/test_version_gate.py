@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tests.doubles import FakeInterpreter
-from tk_uia.tkversion import Strategy, strategy_for
+from tk_uia.tkversion import Strategy, strategy_for, tcl_can_marshal_across_threads
 
 _THE_NATIVE_API = "tk accessible"
 
@@ -68,4 +68,48 @@ def test_a_tk_that_is_not_talking_to_windows_is_left_entirely_alone() -> None:
     # Then nothing happens, and nothing raises
     assert strategy is Strategy.UNSUPPORTED, (
         f"tried to reach an MSAA interface that is not on this machine: {strategy}"
+    )
+
+
+def test_the_tcl_python_ships_says_it_can_carry_a_call_between_threads() -> None:
+    # Given the threaded Tcl every python.org build bundles
+    interpreter = FakeInterpreter("8.6.15", "win32", native=False)
+
+    # When the gate is asked whether a call can cross threads safely
+    answer = tcl_can_marshal_across_threads(interpreter)
+
+    # Then it can, which is what lets widgets answer clients that call from anywhere
+    assert answer is True, (
+        "the stock threaded Tcl was mistaken for one that cannot marshal, "
+        "which would stand the provider layer down on every ordinary install"
+    )
+
+
+def test_a_tcl_built_without_threads_is_told_apart_so_providers_can_stand_down() -> (
+    None
+):
+    # Given a Tcl someone compiled without thread support
+    interpreter = FakeInterpreter("8.6.15", "win32", native=False, threaded=False)
+
+    # When the gate is asked
+    answer = tcl_can_marshal_across_threads(interpreter)
+
+    # Then the build is told apart, so nothing ever answers a client from a
+    # thread this interpreter cannot hear from
+    assert answer is False, (
+        "an unthreaded Tcl was waved through; a cross-thread call into one "
+        "corrupts quietly, which no client would ever trace back here"
+    )
+
+
+def test_the_strategies_that_wrote_annotations_say_so_through_one_predicate() -> None:
+    # Given the four ways enable() can answer
+    # When each is asked whether MSAA annotations were written
+    # Then the two writing strategies say yes and the two standing down say no
+    assert Strategy.ANNOTATED.annotates and Strategy.PROVIDED.annotates, (
+        "a strategy that wrote annotations denied it; every caller matching "
+        "on ANNOTATED alone needs this predicate to survive PROVIDED"
+    )
+    assert not Strategy.NATIVE.annotates and not Strategy.UNSUPPORTED.annotates, (
+        "a strategy that stood down claimed to have written annotations"
     )

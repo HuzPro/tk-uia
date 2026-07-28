@@ -260,3 +260,135 @@ def test_a_notebook_nothing_reached_reports_no_tabs_rather_than_raising() -> Non
     handles = TabHandles(RecordingStore(), RecordingWindows())
 
     assert handles.on(_A_NOTEBOOK) == ()
+
+
+class RecordingActivation:
+    """A tab activation layer that keeps what it was handed."""
+
+    def __init__(self) -> None:
+        self.attached: dict[int, object] = {}
+        self.detached: list[int] = []
+
+    def attach(self, hwnd: int, wiring: object) -> None:
+        self.attached[hwnd] = wiring
+
+    def detach(self, hwnd: int) -> None:
+        self.detached.append(hwnd)
+
+
+class FakeNotebookWidget:
+    """The notebook, as the tab wiring drives it."""
+
+    def __init__(self, tabs: list[str]) -> None:
+        self.tabs_now = tabs
+        self.current = 0
+        self.selected_with: list[int] = []
+
+    def index(self, what: str) -> int:
+        assert what == "current"
+        return self.current
+
+    def select(self, index: int) -> None:
+        self.selected_with.append(index)
+        self.current = index
+
+    def tab(self, index: int, option: str) -> str:
+        assert option == "text"
+        return self.tabs_now[index]
+
+    def after_idle(self, action) -> None:
+        action()
+
+    def winfo_exists(self) -> bool:
+        return True
+
+
+def test_a_handled_tab_is_offered_for_activation_beside_its_annotation() -> None:
+    # Given a notebook whose handles carry an activation layer
+    from tk_uia.tabs import wiring_over_the_notebook
+
+    store, windows = RecordingStore(), RecordingWindows()
+    activation = RecordingActivation()
+    handles = TabHandles(store, windows, activation)
+    notebook = FakeNotebookWidget(["Alpha", "Beta"])
+
+    # When the strip is scanned
+    handles.refresh(
+        _A_NOTEBOOK,
+        _ITS_HANDLE,
+        tabs_on(a_strip_of("Alpha", "Beta")),
+        wiring_over_the_notebook(notebook),
+    )
+
+    # Then each tab's window was offered for activation, wired to the strip
+    assert len(activation.attached) == 2, (
+        f"{len(activation.attached)} of 2 tabs were offered for activation"
+    )
+    second = list(activation.attached.values())[1]
+    assert second.text() == "Beta", (
+        "the second tab's wiring reads someone else's caption"
+    )
+
+
+def test_selecting_through_a_tabs_wiring_selects_where_it_stands_right_now() -> None:
+    # Given two tabs sharing a caption, and the wiring of the second
+    from tk_uia.tabs import wiring_over_the_notebook
+
+    activation = RecordingActivation()
+    handles = TabHandles(RecordingStore(), RecordingWindows(), activation)
+    notebook = FakeNotebookWidget(["Untitled", "Untitled"])
+    handles.refresh(
+        _A_NOTEBOOK,
+        _ITS_HANDLE,
+        tabs_on(a_strip_of("Untitled", "Untitled")),
+        wiring_over_the_notebook(notebook),
+    )
+    survivor = next(iter(activation.attached.values()))
+
+    # When the strip reorders underneath it and the wiring is asked to select
+    notebook.tabs_now = ["Untitled"]
+    handles.refresh(
+        _A_NOTEBOOK,
+        _ITS_HANDLE,
+        tabs_on(a_strip_of("Untitled")),
+        wiring_over_the_notebook(notebook),
+    )
+    survivor.select()
+
+    # Then it selected the position its window stands at now, never a captured one
+    assert notebook.selected_with == [0], (
+        f"the wiring selected {notebook.selected_with}; a captured index "
+        "would press a tab that no longer exists"
+    )
+
+
+def test_a_surrendered_tab_is_detached_before_its_window_is_destroyed() -> None:
+    # Given a notebook that loses its second tab
+    from tk_uia.tabs import wiring_over_the_notebook
+
+    activation = RecordingActivation()
+    windows = RecordingWindows()
+    handles = TabHandles(RecordingStore(), windows, activation)
+    notebook = FakeNotebookWidget(["Alpha", "Beta"])
+    handles.refresh(
+        _A_NOTEBOOK,
+        _ITS_HANDLE,
+        tabs_on(a_strip_of("Alpha", "Beta")),
+        wiring_over_the_notebook(notebook),
+    )
+    the_second_handle = handles.handles(_A_NOTEBOOK)[1]
+
+    # When the tab goes
+    handles.refresh(
+        _A_NOTEBOOK,
+        _ITS_HANDLE,
+        tabs_on(a_strip_of("Alpha")),
+        wiring_over_the_notebook(notebook),
+    )
+
+    # Then its activation came off, and its window went after
+    assert the_second_handle in activation.detached, (
+        "a surrendered tab's activation was never detached; the recycled "
+        "handle would answer for a dead tab"
+    )
+    assert the_second_handle in windows.destroyed

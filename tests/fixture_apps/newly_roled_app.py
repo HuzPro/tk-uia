@@ -42,9 +42,9 @@ def main(title: str, _commands: Path) -> None:
     )
 
     root.update_idletasks()
-    strategy = tk_uia.enable(root)
+    strategy = tk_uia.annotate_only(root)
     if strategy is not Strategy.ANNOTATED:
-        raise SystemExit(f"tk_uia.enable reported {strategy}, not {Strategy.ANNOTATED}")
+        raise SystemExit(f"tk_uia.annotate_only reported {strategy}, not {Strategy.ANNOTATED}")
 
     for name, widget in named.items():
         tk_uia.set_acc_name(widget, name)

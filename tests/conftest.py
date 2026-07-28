@@ -71,12 +71,19 @@ def the_widgets_the_application_shows(window: Any) -> list[Any]:
 def a_package_that_has_not_been_enabled_yet() -> Iterator[None]:
     yield
     tk_uia._installed = None
+    tk_uia._providers = None
 
 
 @pytest.fixture
 def annotated_app(tmp_path: Path) -> Iterator[RunningApp]:
     """The self-annotating Tk app, up and painted, in a process of its own."""
     yield from _the_app_in("annotated_app.py", tmp_path)
+
+
+@pytest.fixture
+def provided_app(tmp_path: Path) -> Iterator[RunningApp]:
+    """The app whose widgets answer UIA for themselves, patterns and all."""
+    yield from _the_app_in("provided_app.py", tmp_path)
 
 
 @pytest.fixture

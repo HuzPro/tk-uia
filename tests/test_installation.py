@@ -7,6 +7,7 @@ from tests.doubles import (
     FakeRoot,
     FakeVariable,
     FakeWidget,
+    RecordingProvidedWidgets,
     RecordingStore,
     VariablesByName,
 )
@@ -171,4 +172,90 @@ def test_the_whole_surface_can_still_be_called_where_there_is_nothing_to_annotat
     assert installation.strategy is Strategy.UNSUPPORTED
     assert store.writes == [], (
         f"reached for MSAA on a machine without it: {store.writes}"
+    )
+
+
+def test_enabling_with_providers_wired_attaches_them_and_reports_provided() -> None:
+    # Given a provider layer handed in beside the store
+    store = RecordingStore()
+    providers = RecordingProvidedWidgets()
+    already_showing = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(_a_tk_that_needs_annotating(), children=[already_showing])
+
+    # When accessibility is switched on
+    installation = install(root, store, providers=providers)
+
+    # Then the caller hears that widgets answer UIA themselves now
+    assert installation.strategy is Strategy.PROVIDED, (
+        f"providers were wired in but the caller was told {installation.strategy}"
+    )
+
+    # And the widget already on screen answers, as does everything mapped later
+    assert already_showing in providers.attached, (
+        "the widget already showing at enable() time never got its provider"
+    )
+    mapped_later = FakeWidget("Button", _A_LABEL_HANDLE, text="Save")
+    root.announce("<Map>", mapped_later)
+    assert mapped_later in providers.attached, (
+        "a widget mapped after enabling never got its provider"
+    )
+
+    # And a destroyed widget's path is let go
+    root.announce("<Destroy>", str(mapped_later))
+    assert str(mapped_later) in providers.forgotten, (
+        "a destroyed widget's provider bookkeeping was never released"
+    )
+
+
+def test_enabling_with_no_providers_wired_still_reports_annotated() -> None:
+    # Given nothing but the store, which is everything 0.6 did
+    store = RecordingStore()
+    root = FakeRoot(_a_tk_that_needs_annotating())
+
+    # When accessibility is switched on
+    installation = install(root, store)
+
+    # Then the answer is the old one, and still true
+    assert installation.strategy is Strategy.ANNOTATED, (
+        f"a plain install reported {installation.strategy}"
+    )
+
+
+def test_a_tk_that_answers_for_itself_never_hears_about_providers() -> None:
+    # Given a Tk with its own accessibility, and a provider layer offered anyway
+    providers = RecordingProvidedWidgets()
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(
+        FakeInterpreter("9.1.0", "win32", native=True), children=[button]
+    )
+
+    # When accessibility is switched on
+    installation = install(root, RecordingStore(), providers=providers)
+
+    # Then nothing was subclassed and nothing shadows Tk's own answers
+    assert installation.strategy is Strategy.NATIVE
+    assert providers.attached == [], (
+        "a provider was attached over a Tk that answers WM_GETOBJECT itself"
+    )
+
+
+def test_the_reason_providers_stood_down_is_carried_for_the_report() -> None:
+    # Given a build whose Tcl cannot carry a call between threads
+    store = RecordingStore()
+    root = FakeRoot(_a_tk_that_needs_annotating())
+
+    # When accessibility is switched on with providers stood down for a reason
+    installation = install(
+        root,
+        store,
+        providers_stood_down_because=(
+            "this Tcl was built without threads, so nothing could answer a "
+            "client safely"
+        ),
+    )
+
+    # Then the honest downgrade is visible, and the reason travels with it
+    assert installation.strategy is Strategy.ANNOTATED
+    assert "without threads" in (installation.providers_stood_down_because or ""), (
+        "the stand-down reason was dropped on the way to the report"
     )

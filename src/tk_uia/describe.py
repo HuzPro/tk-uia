@@ -96,7 +96,13 @@ class Gap(Enum):
     CANNOT_BE_PRESSED = (
         "advertises an InvokePattern and a DefaultAction that press nothing. Tk "
         "buttons are owner-drawn, so the proxy's synthesised BM_CLICK goes into "
-        "the void. Clients must click."
+        "the void. This is the MSAA proxy's behaviour: under enable() the widget "
+        "answers UIA itself and genuinely presses; here it does not."
+    )
+    LEFT_TO_THE_PROXY = (
+        "the application asked for this widget to be left to the MSAA proxy, so "
+        "every pattern a client finds on it advertises and does nothing; the "
+        "annotations above are all it has."
     )
     MENUS_ARE_NATIVE = (
         "a menu. Tk builds menubars and popup menus out of native Windows "
@@ -132,6 +138,7 @@ class WidgetDescription:
     # nothing to walk to.
     tabs: tuple[str, ...] = ()
     is_window: bool = False
+    patterns: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -142,6 +149,8 @@ class Description:
     root: str
     widgets: tuple[WidgetDescription, ...]
     orphans: tuple[str, ...]
+    provider_trouble: tuple[str, ...] = ()
+    providers_stood_down_because: str | None = None
 
     def __str__(self) -> str:
         return _report(self)
@@ -159,12 +168,37 @@ def describe(root: TkWidget, installation: Installation) -> Description:
             for widget in _the_root_and_everything_under_it(root)
         )
     )
+    widgets = tuple(
+        _with_what_the_provider_answers(widget, installation.providers.ledger)
+        for widget in widgets
+    )
     return Description(
         installation.strategy,
         str(root),
         widgets,
         _annotations_this_walk_never_reached(annotator.ledger, widgets),
+        installation.trouble.so_far(),
+        installation.providers_stood_down_because,
     )
+
+
+def _with_what_the_provider_answers(
+    widget: WidgetDescription, answers: object
+) -> WidgetDescription:
+    """Fold what the provider layer says about a path into its row."""
+    patterns = tuple(answers.patterns_on(widget.path))
+    gaps = widget.gaps
+    if any(getattr(pattern, "name", "") == "INVOKE" for pattern in patterns):
+        # The widget genuinely presses now; the proxy's dead Invoke is history.
+        gaps = tuple(gap for gap in gaps if gap is not Gap.CANNOT_BE_PRESSED)
+    if any(getattr(pattern, "name", "") == "VALUE" for pattern in patterns):
+        # The value is pulled live, so the confident-empty answer is gone too.
+        gaps = tuple(gap for gap in gaps if gap is not Gap.NO_VALUE)
+    if answers.is_left_to_the_proxy(widget.path):
+        gaps = (*gaps, Gap.LEFT_TO_THE_PROXY)
+    if patterns == widget.patterns and gaps == widget.gaps:
+        return widget
+    return replace(widget, patterns=patterns, gaps=gaps)
 
 
 def _and_whichever_of_them_a_client_cannot_tell_apart(
@@ -270,6 +304,7 @@ def _report(description: Description) -> str:
             *_the_table(description.widgets),
             *_the_reasons(description.widgets),
             *_whatever_this_walk_never_reached(description),
+            *_what_the_provider_machinery_swallowed(description),
             "",
             _THE_CAVEAT_THIS_REPORT_CARRIES,
         ]
@@ -288,7 +323,7 @@ def _the_headline(description: Description) -> Iterator[str]:
 def _how_it_went(description: Description) -> Iterator[str]:
     written_to = sum(1 for widget in description.widgets if widget.role is not None)
     how_many = len(description.widgets)
-    if description.strategy is not Strategy.ANNOTATED:
+    if not description.strategy.annotates:
         # Before a single row: a window where the gate stood down renders as a
         # page of blanks, which reads as a clean bill of health.
         yield textwrap.fill(
@@ -302,6 +337,18 @@ def _how_it_went(description: Description) -> Iterator[str]:
         f"enable() reported {description.strategy.name}. {how_many} widgets under "
         f"{description.root}: {written_to} written to, {how_many - written_to} not."
     )
+    if description.strategy is Strategy.PROVIDED:
+        answering = sum(1 for widget in description.widgets if widget.patterns)
+        yield (
+            f"{answering} of them answer UIA themselves with working patterns; "
+            "the rest are typed and named through the proxy."
+        )
+    if description.providers_stood_down_because is not None:
+        yield textwrap.fill(
+            "No widget answers UIA itself: "
+            f"{description.providers_stood_down_because}.",
+            width=_HOW_WIDE_THE_REASONS_READ,
+        )
 
 
 def _the_reasons(widgets: tuple[WidgetDescription, ...]) -> Iterator[str]:
@@ -314,6 +361,23 @@ def _the_reasons(widgets: tuple[WidgetDescription, ...]) -> Iterator[str]:
         _LEFT_ALONE_ON_PURPOSE,
         {gap: found for gap, found in carrying.items() if gap in ON_PURPOSE},
     )
+
+
+def _what_the_provider_machinery_swallowed(description: Description) -> Iterator[str]:
+    if not description.provider_trouble:
+        return
+    yield ""
+    yield _WHAT_THE_CALLBACKS_SWALLOWED
+    yield ""
+    yield textwrap.fill(
+        "the window procedure and the COM callbacks are forbidden to raise, so "
+        "whatever failed inside them landed here instead of anywhere louder.",
+        width=_HOW_WIDE_THE_REASONS_READ,
+        initial_indent=_UNDER_THE_ROW,
+        subsequent_indent=_UNDER_THE_ROW,
+    )
+    for line in description.provider_trouble:
+        yield f"{_UNDER_THE_REASON}{line}"
 
 
 def _whatever_this_walk_never_reached(description: Description) -> Iterator[str]:
@@ -398,6 +462,12 @@ def _the_cells_of(widget: WidgetDescription) -> tuple[str, ...]:
 
 
 def _whatever_the_row_had_no_room_for(widget: WidgetDescription) -> Iterator[str]:
+    if widget.patterns:
+        working = ", ".join(
+            getattr(pattern, "name", str(pattern)).replace("_", " ").title()
+            for pattern in widget.patterns
+        )
+        yield f"{_UNDER_THE_ROW}answers UIA itself, with working: {working}"
     if widget.kept_in_step:
         following = ", ".join(prop.name.lower() for prop in widget.kept_in_step)
         yield f"{_UNDER_THE_ROW}kept in step with a variable: {following}"
@@ -580,6 +650,7 @@ _WHAT_THIS_IS = "what this application has told Windows it is showing"
 _WHAT_A_CLIENT_WILL_NOT_GET = "WHAT A CLIENT WILL NOT GET, AND WHY"
 _LEFT_ALONE_ON_PURPOSE = "LEFT ALONE ON PURPOSE"
 _ANNOTATED_AND_NOT_UNDER_THIS_ROOT = "ANNOTATED, AND NOT UNDER THIS ROOT"
+_WHAT_THE_CALLBACKS_SWALLOWED = "WHAT THE PROVIDER MACHINERY SWALLOWED"
 
 # Narrower than the table, which sizes itself to the longest Tk path: prose
 # does not read at 200 columns.

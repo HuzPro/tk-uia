@@ -191,6 +191,66 @@ class NoTabs:
         return ()
 
 
+class Notifier(Protocol):
+    """Whoever needs to hear that a written property changed, if anyone does."""
+
+    def changed(self, hwnd: int, prop: PropId, now: str | int) -> None: ...
+
+
+class SaysNothing:
+    """The null Notifier."""
+
+    def changed(self, hwnd: int, prop: PropId, now: str | int) -> None: ...
+
+
+class AnswersForItself(Protocol):
+    """What the provider layer records per path, as the report reads it."""
+
+    def patterns_on(self, path: str) -> tuple[object, ...]: ...
+
+    def is_left_to_the_proxy(self, path: str) -> bool: ...
+
+
+class _NothingAnswersForItself:
+    def patterns_on(self, path: str) -> tuple[object, ...]:
+        return ()
+
+    def is_left_to_the_proxy(self, path: str) -> bool:
+        return False
+
+
+class ProvidedWidgets(Protocol):
+    """Whatever is making widgets answer UIA for themselves, if anything is."""
+
+    ledger: AnswersForItself
+
+    def attach(self, widget: TkWidget) -> None: ...
+
+    def forget(self, path: str) -> None: ...
+
+
+class NoProviders:
+    """The null ProvidedWidgets, for a Tk that needs none."""
+
+    def __init__(self) -> None:
+        self.ledger = _NothingAnswersForItself()
+
+    def attach(self, widget: TkWidget) -> None: ...
+
+    def forget(self, path: str) -> None: ...
+
+
+class TroubleSoFar(Protocol):
+    """Whatever the callback machinery swallowed, as the report reads it."""
+
+    def so_far(self) -> tuple[str, ...]: ...
+
+
+class NoTroubleAtAll:
+    def so_far(self) -> tuple[str, ...]:
+        return ()
+
+
 @dataclass(frozen=True)
 class OwningThread:
     """The thread Tk and the COM apartment both belong to, and the rule about it."""
@@ -236,6 +296,19 @@ def roles_in_force(roles: Mapping[str, Role] | None) -> Mapping[str, Role]:
     return {**ROLE_FOR_TK_CLASS, **(roles or {})}
 
 
+def a_widget_this_package_speaks_for(
+    widget: TkWidget, roles: Mapping[str, Role]
+) -> Role | None:
+    """The role this package would speak for the widget with, or None to leave it be.
+
+    One rule for both layers, so they can never drift over which widgets this
+    package speaks for.
+    """
+    if is_a_window(widget):
+        return None
+    return roles.get(widget.winfo_class())
+
+
 class Ledger:
     """What has been said about each window handle, so it is never said twice.
 
@@ -267,6 +340,17 @@ class Ledger:
         """
         written = self._said.get(hwnd, {}).get(prop)
         return written is not None and written.source is not Wrote.INFERRED
+
+    def chosen(self, hwnd: int, prop: PropId) -> str | int | None:
+        """The value the application chose, or None where it only ever inferred.
+
+        An inferred write is an echo of map time and may be stale; a puller
+        that preferred it would re-serve the very staleness it exists to cure.
+        """
+        written = self._said.get(hwnd, {}).get(prop)
+        if written is None or written.source is Wrote.INFERRED:
+            return None
+        return written.value
 
     def record(self, hwnd: int, prop: PropId, value: str | int, source: Wrote) -> None:
         self._said.setdefault(hwnd, {})[prop] = Written(value, source)
@@ -348,8 +432,10 @@ class Annotator:
         roles: Mapping[str, Role] | None = None,
         owner: OwningThread | None = None,
         variables: VariableCalled | None = None,
+        notifier: Notifier | None = None,
     ) -> None:
         self._store = store
+        self._notifier = notifier if notifier is not None else SaysNothing()
         self.roles = roles_in_force(roles)
         self.ledger = Ledger()
         self._bindings: dict[str, list[_WhatAVariableIsBoundTo]] = {}
@@ -368,9 +454,7 @@ class Annotator:
         # Before anything crosses into the Tcl interpreter, which a foreign
         # thread corrupts quietly.
         self._owner.refuse_any_other_caller()
-        if is_a_window(widget):
-            return
-        role = self.roles.get(widget.winfo_class())
+        role = a_widget_this_package_speaks_for(widget, self.roles)
         if role is None:
             return
         # Inferred rather than said, so `describe` can tell a name read off the
@@ -626,6 +710,8 @@ class Annotator:
             # `<Map>` fires on every unhide, tab change and geometry shuffle,
             # so without this the COM call is paid for again on every repaint.
             self._put(hwnd, prop, value)
+            # The same dedup decides who hears about it: no change, no event.
+            self._notifier.changed(hwnd, prop, value)
         self.ledger.record(hwnd, prop, value, source)
 
     def _put(self, hwnd: int, prop: PropId, value: str | int) -> None:
@@ -718,6 +804,9 @@ class Installation:
     # A factory rather than a default, so the thread is never the import thread.
     owner: OwningThread = field(default_factory=OwningThread.whichever_is_calling)
     tabs: TabbedWidgets = field(default_factory=NoTabs)
+    providers: ProvidedWidgets = field(default_factory=NoProviders)
+    providers_stood_down_because: str | None = None
+    trouble: TroubleSoFar = field(default_factory=NoTroubleAtAll)
 
 
 def install(
@@ -726,31 +815,48 @@ def install(
     roles: Mapping[str, Role] | None = None,
     tabs: TabbedWidgets | None = None,
     variables: VariableCalled | None = None,
+    providers: ProvidedWidgets | None = None,
+    notifier: Notifier | None = None,
+    providers_stood_down_because: str | None = None,
+    trouble: TroubleSoFar | None = None,
 ) -> Installation:
     strategy = strategy_for(root.tk)
     owner = OwningThread.whichever_is_calling()
     if strategy is not Strategy.ANNOTATED:
         return Installation(strategy, InertAnnotator(roles), owner)
     notebooks = tabs if tabs is not None else NoTabs()
-    annotator = Annotator(store, roles, owner, variables)
-    _follow_every_widget_tk_maps_or_destroys(root, annotator, notebooks)
-    _annotate_everything_already_on_screen(root, annotator, notebooks)
-    return Installation(strategy, annotator, owner, notebooks)
+    provided = providers if providers is not None else NoProviders()
+    annotator = Annotator(store, roles, owner, variables, notifier)
+    _follow_every_widget_tk_maps_or_destroys(root, annotator, notebooks, provided)
+    _annotate_everything_already_on_screen(root, annotator, notebooks, provided)
+    reported = Strategy.PROVIDED if providers is not None else Strategy.ANNOTATED
+    return Installation(
+        reported,
+        annotator,
+        owner,
+        notebooks,
+        provided,
+        providers_stood_down_because,
+        trouble if trouble is not None else NoTroubleAtAll(),
+    )
 
 
 def _follow_every_widget_tk_maps_or_destroys(
-    root: TkApplication, annotator: Annotator, notebooks: TabbedWidgets
+    root: TkApplication,
+    annotator: Annotator,
+    notebooks: TabbedWidgets,
+    provided: ProvidedWidgets,
 ) -> None:
     root.bind_all(
         _A_WIDGET_APPEARED,
         lambda event: _annotate_if_there_is_still_a_widget(
-            annotator, notebooks, event.widget
+            annotator, notebooks, provided, event.widget
         ),
         add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
     )
     root.bind_all(
         _A_WIDGET_DIED,
-        lambda event: _let_go_of(annotator, notebooks, event.widget),
+        lambda event: _let_go_of(annotator, notebooks, provided, event.widget),
         add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
     )
     # A notebook's tabs are not widgets and never map, so `<Map>` says nothing
@@ -763,7 +869,10 @@ def _follow_every_widget_tk_maps_or_destroys(
 
 
 def _annotate_everything_already_on_screen(
-    root: TkApplication, annotator: Annotator, notebooks: TabbedWidgets
+    root: TkApplication,
+    annotator: Annotator,
+    notebooks: TabbedWidgets,
+    provided: ProvidedWidgets,
 ) -> None:
     # `<Map>` fires once, on the way up: every widget already showing has had
     # its and will not get another.
@@ -771,6 +880,7 @@ def _annotate_everything_already_on_screen(
         if widget.winfo_ismapped():
             annotator.add(widget)
             notebooks.refresh(widget)
+            provided.attach(widget)
 
 
 def every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
@@ -790,7 +900,10 @@ def _every_widget_under(widget: TkWidget, seen: set[str]) -> Iterator[TkWidget]:
 
 
 def _annotate_if_there_is_still_a_widget(
-    annotator: Annotator, notebooks: TabbedWidgets, widget: TkWidget | str
+    annotator: Annotator,
+    notebooks: TabbedWidgets,
+    provided: ProvidedWidgets,
+    widget: TkWidget | str,
 ) -> None:
     if isinstance(widget, str):
         # Tk passes the path rather than the object when it can no longer
@@ -798,6 +911,7 @@ def _annotate_if_there_is_still_a_widget(
         return
     annotator.add(widget)
     notebooks.refresh(widget)
+    provided.attach(widget)
 
 
 def _refresh_if_there_is_still_a_widget(
@@ -809,12 +923,16 @@ def _refresh_if_there_is_still_a_widget(
 
 
 def _let_go_of(
-    annotator: Annotator, notebooks: TabbedWidgets, widget: TkWidget | str
+    annotator: Annotator,
+    notebooks: TabbedWidgets,
+    provided: ProvidedWidgets,
+    widget: TkWidget | str,
 ) -> None:
     annotator.forget(widget)
     # By path, not by widget: `<Destroy>` is the one event that routinely
     # carries a path whose widget object has already gone.
     notebooks.forget(str(widget))
+    provided.forget(str(widget))
 
 
 def _whatever_the_variable_holds(variable: TkVariable) -> str:

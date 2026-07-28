@@ -1,12 +1,16 @@
 # Roadmap
 
-Direction: this library exists to be deleted. Tk 9.1 implements MSAA natively
-(TIP 733), with the same role mapping and the same `<Map>` registration, so
-every item below either shortens the gap until that lands, or raises confidence
-that what ships today is really being announced to a person rather than merely
-present in a data structure. Breadth of MSAA surface comes second to that, and
-performance does not come into it at all: annotating a window is a handful of
-COM calls, paid once per widget.
+Direction: the one-stop shop for making a Tkinter GUI fully accessible through
+UI Automation, until Tk itself makes this package unnecessary. Tk 9.1 begins
+implementing accessibility natively (TIP 733, MSAA-first), and the gate here
+stands down for any Tk that answers for itself; until an application really
+runs on one, everything a client should get -- names, types, live state, and
+patterns that genuinely act -- is this package's job. Every item below either
+widens what a client can do, or raises confidence that what ships is really
+being announced to a person rather than merely present in a data structure.
+
+1.0 has a definition rather than a vibe: the release where the headline claims
+have been verified against NVDA speech, not only against the UIA tree.
 
 ## Shipped in v0.1
 
@@ -53,7 +57,43 @@ and a package that costs an application nothing to install.
   anywhere. [RELEASING.md](RELEASING.md) has the flow. The first upload claimed
   the name.
 
+## Shipped in 0.7
+
+Widgets answer UI Automation for themselves: a native provider per widget
+window, beside the MSAA annotation. Invoke presses, Value types, Toggle flips,
+SelectionItem selects radios and switches notebook tabs, RangeValue moves a
+scale and reads a progressbar; names, values, state, help and description are
+pulled live; name and value changes raise property-changed events;
+`annotate_only()` keeps the old behaviour and `leave_to_the_proxy()` opts one
+widget out; `describe()` says who answers for what and why not.
+
 ## Next
+
+- **ExpandCollapse for `Menubutton` and `TCombobox`.** Blocked on a measured
+  wiring that really opens the dropdown, not on machinery: the candidates are
+  `ttk::combobox::Post`/`Unpost` and `menu.post`, driven from an idle
+  callback, with focus and grab recovery measured before anything advertises.
+  Until then a combobox carries the ComboBox control type without its
+  customary ExpandCollapse, which is a documented gap.
+- **Selection containers.** A radio group and a notebook answer
+  `SelectionItem` per item today with no `SelectionContainer` behind it;
+  screen readers phrase "x of y" from the container or from
+  PositionInSet/SizeOfSet, and which of those this package should carry is a
+  measurement against NVDA and Narrator, not a guess.
+- **More property-changed events.** Name and Value ship; ToggleState,
+  IsSelected and RangeValue changes belong with `bind_state_variable`, and the
+  Invoked event belongs after a posted press completes.
+- **`ILegacyIAccessibleProvider`**, so `set_acc_action` and `set_acc_state`
+  reach UIA clients on provided widgets the way they reach MSAA ones.
+- **Role-driven pattern acquisition.** `set_acc_role(widget,
+  Role.PUSH_BUTTON)` on a canvas button should be able to bring a working
+  Invoke with it, once there is an honest way to say what pressing means for
+  a widget with no `-command`.
+- **COVERAGE.md regenerated with a patterns column**, so the per-class
+  difference between the proxy's synthesised patterns and the provider's
+  working ones is measured and published rather than described.
+- **A subclass overhead probe**, pinning what routing every widget's messages
+  through the provider layer costs a redraw-heavy window.
 
 - **The cross-repo comparison, as a recipe rather than a tool.** `describe()`
   says what this library believes it wrote; a client-side dump says what a
@@ -97,14 +137,12 @@ and a package that costs an application nothing to install.
   `describe(root)` reports a written state as the raw `STATE=1` integer rather
   than as `STATE_SYSTEM_UNAVAILABLE`: a bit-name table is a second source of
   truth for a property almost nobody sets, and it can wait for the binding.
-- **`IAccPropServer` for dynamic properties.** Everything today is *pushed*: a
-  value is written when the application says so, and `bind_text_variable` and
-  `bind_value_variable` exist precisely because otherwise a status line and an
-  entry go stale between one write and the next. An `IAccPropServer` is
-  *pulled*: the client asks, and the application answers with the current
-  truth. That removes the whole class of "the tree says something the window
-  stopped showing", and it is the right shape for a listbox or a treeview, whose
-  contents are far too large to push on every change.
+- **`IAccPropServer` for dynamic properties.** Largely superseded: for UIA
+  clients the provider *is* the pull model, answering names, values and state
+  from the widget at the moment of the question. What an `IAccPropServer`
+  would still buy is the same liveness for MSAA-only clients reading the
+  annotated proxy, and it remains the right shape for a listbox or a treeview,
+  whose contents are far too large to push on every change.
 
   **0.6.0 narrowed this without changing the model.** A widget that declared its
   own `-textvariable` is followed from `<Map>` onwards with no call at all, so a
@@ -159,13 +197,13 @@ and a package that costs an application nothing to install.
 These are deliberate, not oversights. Each is a decision that was made, and the
 reason it was made.
 
-- **Non-goal: making Tk widgets activatable.** `InvokePattern` on an owner-drawn
-  Tk button returns cleanly and fires nothing, and no amount of annotation
-  changes that: the pattern is synthesised by the MSAA proxy from a posted
-  `BM_CLICK`, and Tk does not listen for one. The fix belongs in Tk, or in Tk
-  9.1's own provider, not here; shipping an API for it would be shipping an API
-  that silently does nothing, which is the failure mode this package exists to
-  refuse. Clients must click. A spec fails the day this stops being true.
+- **Non-goal: activation through the MSAA proxy.** `InvokePattern` on the
+  *proxy's* view of an owner-drawn Tk button returns cleanly and fires
+  nothing: the proxy synthesises it from a posted `BM_CLICK`, and Tk does not
+  listen for one. No amount of annotation changes that, which is why widgets
+  answer UIA themselves instead, and why a widget the application leaves to
+  the proxy is reported as carrying patterns that advertise and do nothing.
+  A spec fails the day the proxy's behaviour changes.
 - **Non-goal: annotating other processes.** `IAccPropServices` annotates the
   calling process's own windows. Reaching across does not raise. It silently
   does nothing, and can corrupt an annotation the other process made properly.
