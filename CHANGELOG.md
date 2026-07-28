@@ -13,12 +13,6 @@ changed.
 
 ## 0.6.2 - 2026-07-28
 
-A fresh-eyes pass drove all of it: somebody who had never seen this package read
-the docs and used the API from them, and every line below is something that
-found. Two calls that took a wrong argument and said something unhelpful about
-it, one report sentence that was untrue of half the widgets printed under it,
-and a set of pages that had drifted from the code beside them.
-
 - **`label_for` refuses a control whose variable is its contents.** An entry
   declares a `-textvariable` exactly as a caption driven by one does, and the
   declared-variable check came first, so `label_for(entry, caption)` with the
@@ -54,8 +48,8 @@ and a set of pages that had drifted from the code beside them.
   read "written, and Tk has since taken it off the screen", which is untrue of a
   widget annotated while it had never been mapped at all: name an entry with
   `label_for` on a notebook tab nobody has opened, describe the window, and the
-  report said Tk had removed something it had never shown. Measured on
-  COOKBOOK's own form described before `mainloop()`: nine widgets `NEVER_MAPPED`
+  report said Tk had removed something it had never shown. On COOKBOOK's own
+  form described before `mainloop()`: nine widgets `NEVER_MAPPED`
   and the two entries `label_for` reached filed under this heading, not one of
   which had been on screen. The sentence now covers both paths without a claim
   about the past. The member name is unchanged, because that is the stable
@@ -108,11 +102,11 @@ that fails on 0.6.0.
 
 - **The widget walk remembers where it has been.** A widget created under one
   parent and managed into another is claimed by both, and the walk counted its
-  subtree twice: measured on Thonny, `describe()` reported 91 widgets in an
+  subtree twice: on Thonny, `describe()` reported 91 widgets in an
   85-widget window and listed six of them twice.
 
-- **Menus are reported as natively accessible, not as a gap.** Measured on IDLE
-  and Thonny: the bare window already shows a `MenuBarControl` with named
+- **Menus are reported as natively accessible, not as a gap.** On IDLE
+  and Thonny the bare window already shows a `MenuBarControl` with named
   items, because Tk builds menus out of native Windows menus. `describe()` used
   to file every `Menu` under `NEVER_MAPPED`, sending the reader to fix
   something that is not broken. New reason, filed under left alone on purpose.
@@ -195,11 +189,9 @@ status line wants `enable(root)` and one line per unlabelled row.
   has no words of its own and in Tk the label that names it is a *sibling*:
   nothing in the toolkit records which widget a caption speaks for, so no
   library can read the relationship back and every entry in a form cost a
-  `set_acc_name` of its own. Measured on a real six-tab settings dialog: 15 of
-  its 110 controls were nameless entries, every one of them captioned by the
-  label beside it. One call now says it, the way Qt's `QLabel.setBuddy` and
-  HTML's `<label for=...>` do. The trailing colon comes off (every caption in
-  that dialog ends with one and none of them is part of a control's name), and
+  `set_acc_name` of its own. One call now says it, the way Qt's
+  `QLabel.setBuddy` and HTML's `<label for=...>` do. The trailing colon comes
+  off (a caption's punctuation is not part of a control's name), and
   where the label declares a `-textvariable`, the widget's name **follows** it
   through the same machinery `enable()` already uses, rather than copying a
   string across once. A label showing nothing at all raises `AnnotationRefused`
@@ -236,15 +228,15 @@ status line wants `enable(root)` and one line per unlabelled row.
   an application said. Measured, that is unusable: `<Map>` re-runs the automatic
   annotation, which names a widget from its own `-text`, so a button qualified
   `Browse... for GUI Executable` was back to `Browse...` after the first tab
-  change, silently, on an event the application never sees, in exactly the
-  dialog this feature was measured on. The convention was asked for, so what it
+  change, silently, on an event the application never sees. The convention was
+  asked for, so what it
   writes is the application's own word; `set_acc_name` still wins either way,
   before the call by being left alone and after it by replacing what was
   written.
 
 - **New: `describe()` names the widgets a client cannot tell apart.** Gap
-  `NAME_NOT_UNIQUE`. Measured on that same dialog: four buttons (two
-  `Browse...`, two `Reset to Default`), every one of them correctly typed,
+  `NAME_NOT_UNIQUE`. A form with two `Browse...` and two `Reset to Default`
+  buttons has four controls correctly typed,
   correctly named, and correctly named *the same thing*. Nothing about any one
   of them is wrong, which is exactly why no per-widget check could ever have
   seen it and why this is the one reason computed after the whole walk: a client
@@ -270,7 +262,7 @@ status line wants `enable(root)` and one line per unlabelled row.
   `NO_VALUE` entirely, while reaching a client as a `SpinnerControl` carrying a
   ValuePattern, which [COVERAGE.md](COVERAGE.md) has measured from another
   process all along. That set is now read off its `patterns` column rather than
-  recalled: `Value` is measured on six widget classes across the two toolkits
+  recalled: `Value` appears on six widget classes across the two toolkits
   and three roles cover them. A `ttk.Progressbar` is the one other cell carrying
   it and is deliberately still not reported, since nothing has yet read back
   what a `ProgressBarControl` answers with when no value was written, and a
@@ -379,7 +371,7 @@ it: it is regenerated by `probes/coverage_matrix.py`, not written by hand.
 A notebook's tabs are now controls a client can see, name and press. Until now
 `enable()` gave you a `TabControl` with nothing inside it: a test could read
 whichever page happened to be open and had no way at all to change which one
-that was, which for a tabbed settings dialog is most of the window.
+that was, which for a tabbed window is most of it.
 
 - **Every `ttk.Notebook` tab is given a window handle of its own.** Tk paints
   the whole tab strip inside the notebook's own window, so there is no handle

@@ -1,8 +1,4 @@
-"""Stand-ins for the two things the annotator talks to: Windows, and Tk.
-
-One needs a desktop and the other a display, and these are why the whole suite
-runs on a machine with neither.
-"""
+"""Stand-ins for the two things the annotator talks to: Windows, and Tk."""
 
 from __future__ import annotations
 
@@ -48,14 +44,8 @@ class RecordingStore:
 class FakeWidget:
     """A Tk widget as the annotator sees it, with no display behind it.
 
-    `cget` refuses an unknown option and `winfo_id` refuses once destroyed,
-    because both are how Tk behaves.
-
-    Every method here refuses a caller from another thread. That is *stricter*
-    than Tk itself, deliberately: real Tk mostly answers and corrupts the
-    interpreter quietly instead, which is a failure a spec could never see. The
-    rule under test is that the annotator turns a foreign caller away before
-    touching Tk at all, and a double that answered would let a late guard pass.
+    Deliberately stricter than Tk on foreign threads: real Tk answers and
+    corrupts quietly, which is a failure a spec could never see.
     """
 
     def __init__(

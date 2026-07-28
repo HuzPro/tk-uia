@@ -2,9 +2,7 @@
 
     python probes/what_your_app_tells_windows.py
 
-The script behind the report in the README. The window holds one of everything
-worth reporting, from a canvas no role table has heard of to a notebook whose
-second tab has never been shown. Nothing is read back from Windows.
+The script behind the report in the README. Nothing is read back from Windows.
 """
 
 from __future__ import annotations

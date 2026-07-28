@@ -1,10 +1,4 @@
-"""Keeps the specs independent of each other, and launches the one real window.
-
-`enable()` records what it installed on the package, and that module state is
-the one thing a spec can leave behind, so it is put back after each. The gui
-fixtures launch the application into a process of its own, because an annotation
-read back inside the process that wrote it proves nothing about the bridge.
-"""
+"""Keeps the specs independent of each other, and launches the one real window."""
 
 from __future__ import annotations
 
@@ -22,10 +16,8 @@ import tk_uia
 
 FIXTURE_APPS = Path(__file__).parent / "fixture_apps"
 
-# A `skipif` marks a test; it cannot stop pytest importing the module carrying
-# it. The gui specs reach `uiautomation` and the Tk fixture app at module scope,
-# and both are Windows-only. So off Windows they are not collected, or the lane
-# whose job is to prove this package needs neither dies during collection.
+# Not `skipif`: the gui modules import Windows-only packages at module scope,
+# so off Windows they must not be collected at all.
 collect_ignore_glob = [] if sys.platform == "win32" else ["test_gui_*.py"]
 
 # Tk paints in well under a second here; the rest is the interpreter starting.
@@ -40,11 +32,8 @@ _SHUTDOWN_GRACE_SECONDS = 10.0
 # Everything else directly under the window is chrome Windows drew.
 _THE_TK_CONTAINER = "TkChild"
 
-# Deliberately `sys.executable`, which inside a virtual environment on Windows
-# is a copy of CPython's venvlauncher: it starts the real interpreter as a
-# *child* and waits for it, so the pid a launch reports owns no window and
-# terminating it leaves the window behind. Hence a tree kill at teardown, and a
-# window found by a title nothing else can be wearing rather than by pid.
+# In a venv this is a launcher whose pid owns no window: hence the tree kill
+# at teardown, and windows found by unique title rather than by pid.
 _INTERPRETER = sys.executable
 
 

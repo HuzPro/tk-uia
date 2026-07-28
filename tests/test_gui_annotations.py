@@ -1,10 +1,4 @@
-"""Behavioral spec for what a Windows accessibility client sees in an annotated Tk.
-
-A recording double would agree just as happily with a COM call that returned
-`S_OK` and did nothing, so the proof has to come from outside: a real Tk window
-in a process of its own, read back through UI Automation from this one. Nothing
-here touches the mouse or the foreground.
-"""
+"""Behavioral spec for what a Windows accessibility client sees in an annotated Tk."""
 
 from __future__ import annotations
 

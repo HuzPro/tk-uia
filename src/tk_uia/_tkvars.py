@@ -1,12 +1,7 @@
-"""Reaching a variable the application owns, by the name its widget declared.
+"""Reach a variable the application owns, by the name its widget declared.
 
-Never a `tkinter.Variable`. `StringVar(master, name=whatever_the_widget_declared)`
-is the obvious implementation and it destroys the application's data:
-`Variable.__del__` unsets the Tcl variable it names, unconditionally, so the
-moment that wrapper is collected the application's own variable is gone.
-Measured: unreadable afterwards, with no exception and nothing in any log, and
-removing the trace first makes no difference. So the three things the protocol
-needs are raw Tcl calls, which read and trace a variable without claiming it.
+Raw Tcl calls, never a `tkinter.Variable` wrapper: `Variable.__del__` unsets
+the Tcl variable it names, silently destroying the application's data.
 """
 
 from __future__ import annotations
@@ -22,10 +17,8 @@ class _AVariableTheApplicationOwns:
 
     def __init__(self, widget: tkinter.Misc, name: str) -> None:
         self._interpreter = widget.tk
-        # Registered against the window rather than the widget: Tk deletes a
-        # widget's Tcl commands as it destroys it, and a trace still on the
-        # variable would then fire at a command that is no longer there, once
-        # per write for the life of the process.
+        # Against the window, not the widget: Tk deletes a widget's Tcl
+        # commands with it, leaving any trace firing at a command that is gone.
         self._where_a_callback_becomes_a_command = widget.winfo_toplevel()
         self._name = name
 

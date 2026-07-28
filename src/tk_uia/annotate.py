@@ -26,26 +26,21 @@ _ALONGSIDE_WHAT_IS_ALREADY_BOUND = "+"
 
 _A_WRITE = "write"
 
-# `-text` for almost everything, and `-label` for the classic `tk.Scale`, the
-# one widget in either toolkit with no `-text` option at all. Nothing has both;
-# if anything ever does, `-text` is the one to believe.
+# `-text` for almost everything; `-label` only for the classic `tk.Scale`,
+# which has no `-text` option. Nothing has both.
 _WHERE_A_WIDGET_KEEPS_ITS_WORDS = ("text", "label")
 
-# Where a widget keeps the *name* of the variable driving it, which is all it
-# keeps: measured, `cget` answers `'PY_VAR0'` where one is declared and `''`
-# where the option exists and nobody filled it in. A `Listbox`'s
-# `-listvariable` and a `Scale`'s `-variable` are deliberately not this.
+# `cget` answers the variable's *name* (`'PY_VAR0'`), or `''` when unset.
+# A `Listbox`'s `-listvariable` and a `Scale`'s `-variable` are deliberately
+# not this.
 _WHERE_A_WIDGET_KEEPS_THE_VARIABLE_IT_SHOWS = "textvariable"
 
 _NO_VARIABLE_AT_ALL = ""
 
-# Measured across a real six-tab settings dialog: every caption in it ends with
-# a colon, and none of them is part of the name of the control it captions.
+# A caption's trailing colon is not part of the name it gives.
 _HOW_A_CAPTION_IS_PUNCTUATED = ":"
 
 # The roles whose variable is what the widget *holds* rather than what it *is*.
-# A `-textvariable` on a control a client asks the contents of is those
-# contents; on anything else it is the widget's whole name.
 _ROLES_WHOSE_VARIABLE_IS_WHAT_THEY_HOLD = frozenset(
     {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON}
 )
@@ -210,9 +205,8 @@ class OwningThread:
         caller = threading.get_ident()
         if caller == self.ident:
             return
-        # Both layers below here are thread-affine, and both fail quietly: the
-        # Tcl interpreter is corrupted rather than raising, and an annotation
-        # made in the wrong COM apartment lands where no client will look.
+        # Both layers below are thread-affine and fail quietly: Tcl corrupts,
+        # and a wrong-apartment annotation lands where no client will look.
         raise AnnotationRefused(
             f"thread {caller} reached for widgets owned by thread {self.ident}; "
             "Tk and the COM apartment both belong to the thread that called "
@@ -499,9 +493,8 @@ class Annotator:
 
     def set_automation_id(self, widget: TkWidget, automation_id: int) -> None:
         _every_call_here_takes_a_widget(widget, _THE_WIDGET_PARAMETER)
-        # Before the store is asked anything: the id goes to Win32 through
-        # ctypes, where a string arrives as an argument error several frames
-        # below anything the application wrote.
+        # Checked first: a string reaches ctypes as an argument error several
+        # frames below anything the application wrote.
         _an_automation_id_is_a_number(automation_id)
         self._owner.refuse_any_other_caller()
         hwnd = self._handle_of(widget)
@@ -576,9 +569,8 @@ class Annotator:
     def _announce_unless_the_widget_has_gone(
         self, widget: TkWidget, variable: TkVariable, prop: PropId
     ) -> None:
-        # Second line behind `forget`, which is what actually takes the trace
-        # off. A widget can still go by a route that never reaches it, and the
-        # write below would land inside Tcl's own callback, unwrappable.
+        # Second line behind `forget`: a widget can go by a route that never
+        # reaches it, and this write would then land inside Tcl's own callback.
         if not widget.winfo_exists():
             return
         self._announce(widget, variable, prop)
@@ -658,9 +650,8 @@ class Annotator:
     def _refuse_a_window_that_already_names_itself(self, widget: TkWidget) -> None:
         if not is_a_window(widget):
             return
-        # `winfo_id()` on a toplevel answers with the container child Tk puts
-        # every widget under, not with the window, so the property would land
-        # on an inner pane and leave the window itself unnamed.
+        # `winfo_id()` on a toplevel answers Tk's inner container, not the
+        # window, so the property would land on a pane and name nothing.
         raise AnnotationRefused(
             f"{widget} is a window, and a window already has an accessible name "
             "from `wm title`, which is what resolves it for every query that "
@@ -784,8 +775,7 @@ def _annotate_everything_already_on_screen(
 
 def every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
     # A widget created under one parent and managed into another is claimed by
-    # both, so a walk with no memory counts its whole subtree twice. Measured on
-    # a real IDE: a report claiming 91 widgets in an 85-widget window.
+    # both; a walk with no memory counts its subtree twice.
     yield from _every_widget_under(widget, seen=set())
 
 

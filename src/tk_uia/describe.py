@@ -497,8 +497,6 @@ def _what_was_written_about(
     )
     if not found.widget.winfo_ismapped():
         # Instead of every per-property reason, which has the opposite fix.
-        # Measured against a real tabbed dialog: 23 widgets after one tab
-        # change, every annotation intact and every one of them unreadable.
         return replace(written, gaps=(Gap.UNMAPPED_SINCE_ANNOTATED,))
     if found.widget.winfo_id() != hwnd:
         # Instead of every other reason, each of which is true of a window
@@ -606,17 +604,14 @@ _THE_PROPERTIES_THE_TABLE_HAS_A_COLUMN_FOR = frozenset(
 _ROLES_NOBODY_ANNOUNCES = frozenset({Role.GROUPING, Role.SCROLL_BAR})
 
 # The roles the MSAA-to-UIA bridge hands a ValuePattern to, which answers `''`
-# until an application says otherwise. Read off COVERAGE.md's `patterns` column,
-# every cell of which was read back from another process. `ttk.Progressbar` is
-# here because it fails the same way: its ValuePattern answers `''` with nothing
-# written, and still `''` after the widget's own `-value` moved.
+# until the application says otherwise (COVERAGE.md, `patterns` column).
+# `ttk.Progressbar`'s stays `''` even after its own `-value` moves.
 _ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF = frozenset(
     {Role.TEXT, Role.COMBO_BOX, Role.SPIN_BUTTON, Role.PROGRESS_BAR}
 )
 
-# The roles whose whole point is what is inside them. Annotation works on window
-# handles and Tk gives one per widget, so rows, items and tabs would need MSAA's
-# child-id model instead.
+# Rows and items have no window handle of their own; they would need MSAA's
+# child-id model, which annotation on handles cannot reach.
 _ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN = frozenset({Role.LIST, Role.OUTLINE})
 
 

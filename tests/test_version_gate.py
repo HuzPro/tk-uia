@@ -1,8 +1,4 @@
-"""Behavioral spec for deciding whether this package should do anything at all.
-
-Tk 9.1 answers `WM_GETOBJECT` itself (TIP 733), and once it does, the oleacc
-proxy this package annotates through is no longer in the picture.
-"""
+"""Behavioral spec for deciding whether this package should do anything at all."""
 
 from __future__ import annotations
 

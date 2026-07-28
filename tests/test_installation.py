@@ -1,8 +1,4 @@
-"""Behavioral spec for putting the annotator in the path of a running Tk.
-
-`<Map>` fires once per widget, on the way up, so a window already showing when
-`enable()` is called never fires it again and without the sweep stays anonymous.
-"""
+"""Behavioral spec for putting the annotator in the path of a running Tk."""
 
 from __future__ import annotations
 

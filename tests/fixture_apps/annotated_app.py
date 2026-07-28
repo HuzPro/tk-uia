@@ -1,11 +1,4 @@
-"""A Tk application that annotates itself, for the gui specs to read back.
-
-Classic `tk` throughout, never `ttk`: measured against every ttk widget type,
-each one is an anonymous `PaneControl` and `ttk.Button` has no InvokePattern at
-all. It titles itself from `argv`, so a window left behind by a crashed run can
-never be mistaken for this one, and takes a directory to watch, because the one
-thing a client cannot do to a Tk window is press its buttons.
-"""
+"""A Tk application that annotates itself, for the gui specs to read back."""
 
 from __future__ import annotations
 

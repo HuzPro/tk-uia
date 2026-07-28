@@ -58,16 +58,13 @@ def _windowing_system_of(interpreter: TkInterpreter) -> str:
 
 def _version_of(interpreter: TkInterpreter) -> tuple[int, ...]:
     patchlevel = str(interpreter.call("info", "patchlevel"))
-    # Major and minor only, and by digit runs rather than by splitting on dots:
-    # a beta answers "9.1b1", and the gate has to hold for the betas because
-    # that is what Tk 9.1 is right now.
+    # Digit runs, not dot-splitting: a beta answers "9.1b1" and must still gate.
     return tuple(int(number) for number in re.findall(r"\d+", patchlevel)[:2])
 
 
 def _offers_its_own_accessibility(interpreter: TkInterpreter) -> bool:
-    # Through Tcl's own `catch` rather than letting the error cross into Python,
-    # which would mean naming whatever tkinter raises, and this module cannot
-    # import tkinter to name it.
+    # Through Tcl's own `catch`: this module cannot import tkinter to name
+    # whatever it would raise.
     interpreter.call(
         "catch", _A_SUBCOMMAND_TK_WILL_NEVER_HAVE, _WHERE_TK_LEAVES_ITS_COMPLAINT
     )

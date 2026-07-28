@@ -1,8 +1,4 @@
-"""Running a call on a thread that does not own the widgets, and catching what it says.
-
-The refusal has to arrive as an exception on the calling thread rather than as a
-traceback printed by a worker nobody is watching.
-"""
+"""Running a call on a thread that does not own the widgets, and catching what it says."""
 
 from __future__ import annotations
 

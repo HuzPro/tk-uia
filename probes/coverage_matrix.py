@@ -2,11 +2,9 @@
 
     python probes/coverage_matrix.py
 
-Launches the two widget zoos beside it, reads each window through UI Automation
-as bare Tk and again after `enable()`, and writes COVERAGE.md. The two views are
-joined by rectangle, not by name: a widget whose class has no role is never
-annotated, so it has no name to match on, and those are the rows this exists to
-find.
+Launches the two widget zoos, reads each window through UI Automation bare and
+again after `enable()`, and writes COVERAGE.md. Views are joined by rectangle,
+not by name.
 """
 
 from __future__ import annotations

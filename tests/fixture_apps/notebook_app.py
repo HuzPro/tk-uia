@@ -1,8 +1,4 @@
-"""A Tk application whose whole point is a notebook, for the tab specs to read.
-
-The window titles itself from `argv` so that a window left behind by a crashed
-run cannot be mistaken for this one.
-"""
+"""A Tk application whose whole point is a notebook, for the tab specs to read."""
 
 from __future__ import annotations
 

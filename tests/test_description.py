@@ -1,8 +1,4 @@
-"""Behavioral spec for what an application is told it has told Windows.
-
-The description reads the annotation ledger and walks the widget tree, so it is
-specified against the same doubles the annotator's own specs use.
-"""
+"""Behavioral spec for what an application is told it has told Windows."""
 
 from __future__ import annotations
 
@@ -427,7 +423,7 @@ def test_a_menu_is_reported_as_natively_accessible_rather_than_as_a_hole() -> No
     # When the application asks what it has told Windows
     description = describe(root, Installation(Strategy.ANNOTATED, annotator))
 
-    # Then it is left alone: measured on IDLE, the bare window shows a MenuBarControl
+    # Then it is left alone: a bare Tk window already shows a MenuBarControl
     said = _what_the_description_says_about(description, str(menu))
     assert said.gaps == (Gap.MENUS_ARE_NATIVE,), f"a menu is reported as {said.gaps}"
     assert Gap.MENUS_ARE_NATIVE in ON_PURPOSE, (
@@ -558,7 +554,7 @@ def test_a_name_the_application_chose_itself_is_never_called_stale_when_the_widg
 def test_two_widgets_a_client_cannot_tell_apart_are_both_reported_as_ambiguous() -> (
     None
 ):
-    # Given the shape measured on a real settings dialog: two `Browse...` buttons
+    # Given a form with two `Browse...` buttons
     store = RecordingStore()
     annotator = Annotator(store)
     for_the_executable = FakeWidget("Button", _A_BUTTON_HANDLE, text="Browse...")

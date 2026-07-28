@@ -1,16 +1,9 @@
 """The `oleacc` calls an annotation is actually made of.
 
-Two details here return `S_OK` and do nothing at all when they are wrong, so
-neither is guessed at:
-
-* every `PROPID_ACC_*` GUID is transcribed from `oleacc.h` in the Windows SDK
-  (10.0.22621.0), not recalled. `PROPID_ACC_HELP` in particular is not the value
-  intuition suggests;
-* `MSAAPROPID` is `typedef GUID`, so `idProp` is passed **by value**. Passing a
-  pointer compiles, runs, returns `S_OK`, and annotates nothing.
-
-`ctypes.HRESULT` and `ctypes.WINFUNCTYPE` do not exist off Windows, so every
-prototype is built on first use rather than at import.
+Two silent-`S_OK` traps: every `PROPID_ACC_*` GUID is transcribed from
+`oleacc.h`, never recalled, and `MSAAPROPID` is passed **by value**; a pointer
+compiles, returns `S_OK`, and annotates nothing. Prototypes are built on first
+use because `ctypes.HRESULT` and `ctypes.WINFUNCTYPE` do not exist off Windows.
 """
 
 from __future__ import annotations
@@ -30,9 +23,8 @@ _CLSCTX_INPROC_SERVER = 1
 _OBJID_CLIENT = 0xFFFFFFFC
 _CHILDID_SELF = 0
 
-# IAccPropServices, after IUnknown's three: SetPropValue 3, SetPropServer 4,
-# ClearProps 5, then these. Verified by calling them, because a wrong slot with
-# these signatures is an access violation rather than a quiet no-op.
+# IAccPropServices vtable, after IUnknown's three: SetPropValue 3,
+# SetPropServer 4, ClearProps 5, then these. A wrong slot is an access violation.
 _SLOT_SET_HWND_PROP = 6
 _SLOT_SET_HWND_PROP_STR = 7
 _SLOT_CLEAR_HWND_PROPS = 9
@@ -46,13 +38,9 @@ _SPI_GETSCREENREADER = 0x0046
 
 _WINDOWS = "win32"
 
-# A plain number rather than `ctypes.HRESULT`, which looks like the honest
-# choice and is the wrong one: ctypes raises an `OSError` of its own on any
-# negative HRESULT *before* the caller sees the value, so `_checked` never runs
-# and the application gets a bare "[WinError -2147024891] Access is denied" with
-# no way to tell which of eleven annotation calls refused. Read as a number, the
-# code reaches `_checked`, which also catches the positive non-`S_OK` answers
-# `ctypes.HRESULT` lets through.
+# A plain number, not `ctypes.HRESULT`: ctypes raises its own bare OSError on
+# a negative HRESULT before `_checked` can name the refusing call, and lets
+# positive non-`S_OK` answers through.
 _HOWEVER_COM_ANSWERED = ctypes.c_long
 
 
@@ -197,9 +185,8 @@ def screen_reader_running() -> bool:
 def _acc_prop_services() -> ctypes.c_void_p:
     ole32 = ctypes.windll.ole32
     started = ole32.CoInitializeEx(None, _COINIT_APARTMENTTHREADED)
-    # S_FALSE means this thread was already in an apartment and
-    # RPC_E_CHANGED_MODE means it is in a different one. Both are somebody
-    # else's apartment to close, which is why CoUninitialize is never called.
+    # S_FALSE/RPC_E_CHANGED_MODE: already in an apartment, somebody else's to
+    # close, so CoUninitialize is never called.
     if started not in (_S_OK, _S_FALSE) and (started & 0xFFFFFFFF) != (
         _RPC_E_CHANGED_MODE
     ):

@@ -1,9 +1,4 @@
-"""Behavioral spec for the role a Tk widget class is announced as.
-
-Tk tells Windows nothing about what a widget *is*: measured against a live
-window, the MSAA proxy reports `tk.Label` as an image and `tk.Entry` as a bare
-pane.
-"""
+"""Behavioral spec for the role a Tk widget class is announced as."""
 
 from __future__ import annotations
 
@@ -109,7 +104,7 @@ def test_a_label_and_an_entry_are_split_by_the_two_roles_that_mean_read_and_writ
 def test_each_role_carries_the_number_that_was_measured_to_produce_its_control_type(
     role: Role, number: int, control_type: str
 ) -> None:
-    # Then the number is the measured one: a wrong one answers S_OK and changes nothing
+    # Then the number is the right one: a wrong one answers S_OK and changes nothing
     assert role.value == number, (
         f"{role.name} carries {role.value}; {number} is the number measured to "
         f"reach a client as {control_type}"

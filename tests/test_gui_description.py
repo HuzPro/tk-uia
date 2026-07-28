@@ -1,9 +1,4 @@
-"""Behavioral spec for the description, against a real Tk and a real client.
-
-The description says what tk-uia *believes* it wrote, and every failure mode
-this package has returns `S_OK` and does nothing. So these read it out of a live
-application and check the claim against what a client can actually see.
-"""
+"""Behavioral spec for the description, against a real Tk and a real client."""
 
 from __future__ import annotations
 

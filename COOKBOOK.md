@@ -273,7 +273,7 @@ guide](https://github.com/HuzPro/tk-uia/blob/main/docs/GUIDE.md#closing-the-gap-
 `<Map>` is the event that annotates a widget, and Tk fires it when the widget
 goes on screen. Call `describe(root)` between building the window and running
 `mainloop()` and you get a report of a window that has not happened yet.
-Measured on this same form, nine of its twelve widgets come back `NEVER_MAPPED`
+On this same form, nine of its twelve widgets come back `NEVER_MAPPED`
 and the two entries `label_for` reached come back `UNMAPPED_SINCE_ANNOTATED`.
 The `root.update()` above is what makes the report describe the window you are
 looking at. In a running application, `root.after(0, ...)` or a debug key

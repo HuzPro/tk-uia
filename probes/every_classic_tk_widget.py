@@ -2,9 +2,8 @@
 
     python probes/every_classic_tk_widget.py "classic tk zoo" .
 
-`coverage_matrix.py` launches this and reads the window through UI Automation
-before and after `enable()`. A `Menu` is posted rather than laid out and a
-`Toplevel` is a window of its own, so neither ever maps.
+A `Menu` is posted rather than laid out and a `Toplevel` is a window of its
+own, so neither ever maps.
 """
 
 from __future__ import annotations

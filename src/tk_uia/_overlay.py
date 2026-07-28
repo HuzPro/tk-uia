@@ -1,11 +1,8 @@
 """The window handles a notebook's tabs borrow, made with four Win32 calls.
 
-Both window styles are load-bearing. `WS_EX_TRANSPARENT` keeps the window out of
-hit-testing, so the click a client aims at a tab reaches the notebook underneath
-and Tk selects it. `SS_OWNERDRAW` makes the static ask its parent to paint it by
-way of `WM_DRAWITEM`; Tk has never heard of this window and ignores the message,
-so nothing is painted and the tab strip shows through. A plain static would
-paint its background over the tab it is standing in for.
+Both styles are load-bearing: `WS_EX_TRANSPARENT` lets clicks fall through to
+the notebook, `SS_OWNERDRAW` leaves painting to a parent that never paints,
+so the tab strip shows through.
 """
 
 from __future__ import annotations

@@ -140,9 +140,9 @@ and a package that costs an application nothing to install.
   mechanism" was a conclusion nobody had tried to falsify.
 
 - **`infer_names_from_layout` should prefer the nearest caption by position.**
-  It picks a row's subject by child order today, which matched every row of the
-  settings dialog it was measured on and misfired on a paginator built
-  right-to-left: ttkbootstrap's `Page [entry] of [1]` row named the entry `of`.
+  It picks a row's subject by child order today, which misfires on a paginator
+  built right-to-left: ttkbootstrap's `Page [entry] of [1]` row named the entry
+  `of`.
   The rectangles are available (`winfo_x`/`winfo_y`); nearest-to-the-left, then
   nearest-above, is a strictly better rule. Until then the return value is the
   audit: the function reports every name it chose.

@@ -69,19 +69,15 @@ class OverlayWindows(Protocol):
 
 def tabs_on(strip: TabStrip) -> tuple[Tab, ...]:
     """Every tab on the strip, by asking what is under each point."""
-    # Tk lays a strip out on idle: measured, `notebook.add(...)` followed
-    # straight away by a scan finds the strip exactly as it was, with the new
-    # tab simply not there.
+    # Tk lays a strip out on idle; an immediate scan finds it stale.
     strip.settle()
     width, height = strip.size()
     somewhere = _anywhere_at_all_on_the_strip(strip, width, height)
     if somewhere is None:
         return ()
     found_at_x, _ = somewhere
-    # Across the middle of the strip, never the edge of it. Measured on Tk
-    # 8.6.15: ttk draws the *selected* tab standing two pixels proud at the top
-    # and bottom, so the first row that answers belongs to that tab alone, and
-    # scanning there finds one tab and reports the notebook done.
+    # Across the middle of the strip, never the edge: ttk draws the selected
+    # tab a little proud, so the first answering row belongs to it alone.
     across = _how_far_each_tab_runs_across(
         strip, width, _the_middle_of(_how_far_it_runs_down(strip, found_at_x, height))
     )
@@ -106,12 +102,7 @@ def _the_middle_of(band: tuple[int, int]) -> int:
 def _the_band_the_whole_strip_covers(
     strip: TabStrip, across: Mapping[int, Sequence[int]], height: int
 ) -> tuple[int, int]:
-    """The extent every tab is given, which is the one they cover between them.
-
-    Per-tab extents would be more precise and worse: the selected tab is the
-    taller one, so two of them would move on every click. The union is stable
-    under selection and always has the tab under its middle.
-    """
+    """The union extent every tab is given, stable under selection changes."""
     bands = [
         _how_far_it_runs_down(strip, columns[len(columns) // 2], height)
         for columns in across.values()
@@ -221,9 +212,8 @@ class TabHandles:
 
     def _surrender(self, handled: Sequence[_AHandledTab]) -> None:
         for one in handled:
-            # Cleared before the window goes, never after: Windows hands the
-            # same handle out again, and an annotation left on a recycled one
-            # mislabels an unrelated window.
+            # Cleared before destroy: Windows recycles handles, and a leftover
+            # annotation would mislabel an unrelated window.
             self._store.clear(one.hwnd)
             self._windows.destroy(one.hwnd)
 

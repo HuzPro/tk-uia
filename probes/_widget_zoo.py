@@ -1,11 +1,7 @@
 """Scaffolding the two widget-zoo apps share: layout, facts, and the handshake.
 
-Two things here are load-bearing. The window is never given a fixed geometry: a
-`geometry()` call makes the Tk packer silently drop whatever will not fit, and
-`<Map>` never fires for those widgets. And the process is made DPI-aware before
-Tk starts, because UI Automation reports rectangles in physical pixels where a
-Tk that is not DPI-aware reports logical ones, and correlation here is by
-rectangle.
+No fixed geometry (the packer silently drops what does not fit) and DPI-aware
+before Tk starts (correlation is by rectangle, in physical pixels).
 """
 
 from __future__ import annotations

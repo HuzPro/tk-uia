@@ -1,9 +1,4 @@
-"""Behavioral spec for the widget classes whose role was chosen by measurement.
-
-A role the MSAA-to-UIA bridge does not recognise is accepted, returns `S_OK`,
-and leaves the widget as the anonymous `PaneControl` it already was. `DIAGRAM`,
-`CLIENT` and `PANE` were all tried for the canvas and all three did that.
-"""
+"""Behavioral spec for the widget classes whose role the bridge must recognise."""
 
 from __future__ import annotations
 

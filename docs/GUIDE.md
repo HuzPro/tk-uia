@@ -131,9 +131,8 @@ announced as an unnamed list, because it looks like it worked.
 `enable()` names a widget from its own words. An entry has none. In Tk its
 caption is a **sibling label**, and nothing in the toolkit records which widget
 that label speaks for, so no library can read the relationship back. This is the
-largest gap left in a real window. Measured on a six-tab settings dialog, **15
-of its 110 controls were nameless entries**, every one of them captioned by the
-label beside it.
+largest gap left in a real window: in a typical form, most entries are nameless
+and every one of them is captioned by the label beside it.
 
 ```python
 caption = tk.Label(row, text="Host:")
@@ -395,9 +394,9 @@ indistinguishable: a screen-reader user hears the same announcement for controls
 that do different things, and a locator asking for "the Browse... button" gets
 whichever one the tree hands back first.
 
-Measured on the same six-tab settings dialog: **four buttons in that state**,
-two `Browse...` and two `Reset to Default`, every one of them correctly typed
-and correctly named. The fix is to qualify the caption, with
+A form with two `Browse...` and two `Reset to Default` buttons has four
+controls in that state, every one correctly typed and correctly named.
+The fix is to qualify the caption, with
 `set_acc_name(button, "Browse... for GUI Executable")` or
 `infer_names_from_layout(root)`, which does that for a whole window.
 `describe(root)` reports whatever is left as `NAME_NOT_UNIQUE`, counted **per

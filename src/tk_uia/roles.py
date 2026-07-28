@@ -21,9 +21,8 @@ class Role(Enum):
     SEPARATOR = 21
     LIST = 33
     OUTLINE = 35
-    # Deliberately absent from ROLE_FOR_TK_CLASS below: a tab is not a widget
-    # and has no `winfo_class()` to look up. It is written by `tabs.py` onto a
-    # window handle made for it, which is the only reason one exists at all.
+    # Absent from ROLE_FOR_TK_CLASS: a tab is not a widget; `tabs.py` writes
+    # this onto a window handle made for it.
     PAGE_TAB = 37
     GRAPHIC = 40
     STATIC_TEXT = 41
@@ -36,18 +35,15 @@ class Role(Enum):
     SLIDER = 51
     SPIN_BUTTON = 52
     PAGE_TAB_LIST = 60
-    # `oleacc.h` calls this SPLITBUTTON. BUTTONMENU (0x39) is the temptingly
-    # named alternative and measures as a `MenuItemControl`, announcing a menu
-    # *item* for a button that is in no menu. This one reads as
-    # `SplitButtonControl`, which is what a Menubutton is.
+    # SPLITBUTTON in `oleacc.h`; reaches a client as `SplitButtonControl`.
+    # BUTTONMENU (0x39) reaches it as a menu *item* instead.
     MENU_BUTTON = 62
 
 
 ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
     {
-        # Listed side by side rather than derived from one another:
-        # `ttk.Treeview` answers "Treeview", not "TTreeview", so the leading T
-        # is a convention and not a rule.
+        # Listed, not derived: `ttk.Treeview` answers "Treeview", so the
+        # leading T is a convention and not a rule.
         "Button": Role.PUSH_BUTTON,
         "TButton": Role.PUSH_BUTTON,
         "Label": Role.STATIC_TEXT,
@@ -84,10 +80,8 @@ ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
         "TPanedwindow": Role.GROUPING,
         "TSeparator": Role.SEPARATOR,
         "TSizegrip": Role.GRIP,
-        # A menu is never mapped, so nothing here is ever written to one, which
-        # is the point of the entry. Without it `describe()` blames the missing
-        # role, reading as "add one and this will work"; with it the report says
-        # NEVER_MAPPED, which is the truth and is not fixable.
+        # A menu never maps, so this is never written; the entry exists so
+        # `describe()` reports NEVER_MAPPED instead of a missing role.
         "Menu": Role.MENU_POPUP,
     }
 )

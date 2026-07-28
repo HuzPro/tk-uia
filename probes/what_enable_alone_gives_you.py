@@ -2,11 +2,7 @@
 
     python probes/what_enable_alone_gives_you.py
 
-The script behind the README's caveats: the entry whose ValuePattern is empty
-until somebody binds it, the accessible name that goes stale after
-`config(text=...)`, and the checkbutton whose checked state is never conveyed.
-The window runs in a process of its own, because an annotation read inside the
-process that wrote it proves nothing about the bridge.
+The script behind the README's caveats, read back from a separate process.
 """
 
 from __future__ import annotations

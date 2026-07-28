@@ -1,8 +1,4 @@
-"""Behavioral spec for what a widget tells Windows about itself once annotated.
-
-Runs against a recording store and fake widgets: no display, no Tk build, no
-Windows. What is left underneath is three vtable slots into `oleacc`.
-"""
+"""Behavioral spec for what a widget tells Windows about itself once annotated."""
 
 from __future__ import annotations
 

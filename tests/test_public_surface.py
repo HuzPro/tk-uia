@@ -1,7 +1,4 @@
-"""Behavioral spec for the module an application actually imports.
-
-The surface deliberately reads like TIP 733, Tk 9.1's own accessibility API.
-"""
+"""Behavioral spec for the module an application actually imports."""
 
 from __future__ import annotations
 

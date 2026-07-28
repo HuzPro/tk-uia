@@ -1,10 +1,4 @@
-"""Fixture app: a notebook built from a re-imported `tkinter.ttk`.
-
-IDLE's `idlelib/run.py` deletes seven tkinter submodules from `sys.modules`, so
-any later `import tkinter.ttk` re-executes the module and makes a second,
-distinct `Notebook` class. A gate that asks Python's type system instead of Tk
-fails that silently: the notebook keeps its role and loses its tabs.
-"""
+"""Fixture app: a notebook built from a re-imported `tkinter.ttk`, as some hosts do."""
 
 from __future__ import annotations
 

@@ -1,9 +1,4 @@
-"""Fixture app: one of every widget class whose role was chosen by measurement.
-
-`test_gui_new_roles.py` reads this back from another process and checks each one
-arrives as the control type the role was *measured* to produce. Each widget is
-named explicitly, because most of these have no words of their own.
-"""
+"""Fixture app: one of every widget class the newer role entries cover."""
 
 from __future__ import annotations
 

@@ -1,10 +1,4 @@
-"""Behavioral spec for a notebook's tabs, read back by a real client.
-
-The package *makes* these handles rather than borrowing ones Tk made, so "the
-handle exists" and "a client can see a tab there" are further apart here than
-anywhere else. One of these presses a tab, which is the only spec in the suite
-that touches the mouse.
-"""
+"""Behavioral spec for a notebook's tabs, read back by a real client."""
 
 from __future__ import annotations
 
@@ -114,7 +108,7 @@ def test_a_tab_added_after_startup_appears_without_the_application_saying_so(
     # When the application adds another and re-announces the notebook
     notebook_app.ask_for(ADD_A_TAB)
 
-    # Then it is there. Measured on Tk 8.6.15: adding a tab fires no Tk event at all
+    # Then it is there: adding a tab fires no Tk event at all
     assert until(lambda: ADDED_LATER in tabs_a_client_can_see(notebook_app.window)), (
         f"a client still sees {tabs_a_client_can_see(notebook_app.window)} after "
         "a tab was added"

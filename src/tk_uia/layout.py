@@ -1,11 +1,6 @@
-"""The row-and-label convention a form follows, applied because it was asked for.
+"""Name wordless controls from a form's row-and-label layout, on request.
 
-`tk_uia.infer_names_from_layout(root)` walks the widget tree naming controls
-that have no words of their own: an entry after the caption beside it, a
-"Browse..." button after the row it acts on. Nothing in Tk says a label captions
-the entry to its right, so this is a guess, which is why `enable()` does not
-make it. Measured on a real six-tab settings dialog: 83 of 110 controls
-addressable, taken to 110.
+A guess by convention, not a fact from Tk, which is why `enable()` never makes it.
 """
 
 from __future__ import annotations
@@ -24,9 +19,8 @@ from tk_uia.annotate import (
     words_the_widget_shows,
 )
 
-# A window is a row too: a status bar, or a row of buttons along the bottom, is
-# packed straight onto the toplevel and sits inside no frame at all. Measured, a
-# walk that visited only frames missed the control reporting what went wrong.
+# A window is a row too: a status bar or button row packs straight onto the
+# toplevel, inside no frame at all.
 ROWS_A_FORM_IS_LAID_OUT_IN = frozenset({"Frame", "TFrame", "Labelframe", "TLabelframe"})
 
 # The classes a caption speaks for: the controls a client asks the contents of,
@@ -37,15 +31,13 @@ WIDGETS_A_CAPTION_SPEAKS_FOR = frozenset(
 
 WIDGETS_THAT_CAPTION_A_ROW = frozenset({"Label", "TLabel"})
 
-# Checkbuttons are here because a row's "Reset to Default" is as often one as it
-# is a button. Radiobuttons are not: their caption is the option they select,
-# which already says what it acts on.
+# No Radiobutton: its caption is the option it selects, which already says
+# what it acts on.
 WIDGETS_THAT_ACT_ON_A_ROW = frozenset(
     {"Button", "TButton", "Checkbutton", "TCheckbutton"}
 )
 
 # Captions that say what a control does and nothing about what it does it to.
-# The dialog this was measured on had six.
 CAPTIONS_THAT_SAY_NOTHING_ON_THEIR_OWN = frozenset(
     {"Browse...", "Browse", "Reset to Default", "...", "?"}
 )
@@ -125,15 +117,13 @@ def _what_this_row_is_about(children: Sequence[TkWidget]) -> _WhatARowIsAbout | 
         if child.winfo_class() in WIDGETS_THAT_CAPTION_A_ROW and not _shows_a_variable(
             child
         ):
-            # A label driven by a variable is showing what the row *holds*, not
-            # saying what it is. Measured: a subject taken from one produced a
-            # button announced as "Reset to Default for C:\Example\stopped.ico".
+            # A label driven by a variable shows what the row *holds*, not what
+            # it is, so it cannot be the subject.
             about = _whatever_words_caption_a_row(child)
             if about is not None:
                 return about
     for child in children:
-        # A row captioned by its own action button, which is how the icon rows
-        # of a real settings dialog are built: no separate label at all.
+        # A row with no label at all can be captioned by its own action button.
         if child.winfo_class() in WIDGETS_THAT_ACT_ON_A_ROW:
             about = _whatever_words_caption_a_row(child)
             if about is not None:

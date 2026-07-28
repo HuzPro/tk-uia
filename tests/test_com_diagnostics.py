@@ -1,9 +1,4 @@
-"""Behavioral spec for what an application is told when a COM call refuses.
-
-When `oleacc` answers with a failure, which of the eleven calls it was has to
-survive into the message: every one of them looks identical from the outside,
-and the symptom is a widget that quietly never announced itself.
-"""
+"""Behavioral spec for what an application is told when a COM call refuses."""
 
 from __future__ import annotations
 

@@ -2,9 +2,8 @@
 
     python probes/every_ttk_widget.py "ttk zoo" .
 
-The themed half of what `coverage_matrix.py` measures. `ttk.LabeledScale` and
-`ttk.OptionMenu` are composites, so what a client sees is the container, and the
-survey reports the container's class.
+`ttk.LabeledScale` and `ttk.OptionMenu` are composites; the survey reports the
+container's class.
 """
 
 from __future__ import annotations
