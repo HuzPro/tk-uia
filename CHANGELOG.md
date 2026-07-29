@@ -13,7 +13,15 @@ items, nested under their branches, and carrying patterns that act.
   asks, so an insert, delete or rename is answered as the widget stands now.
 - **`SelectionItem` selects a row for real**, and the application hears the
   same `<<ListboxSelect>>` or `<<TreeviewSelect>>` a user's own choice would
-  have fired. `SelectionContainer` names the widget the row belongs to.
+  have fired. `SelectionContainer` names the widget the row belongs to. Where
+  `selectmode` takes more than one, `AddToSelection` and
+  `RemoveFromSelection` genuinely join and leave; on a single-select
+  container they are refused.
+- **Selection changes are raised as UIA events**, whoever caused them: a
+  selection landing on one new row raises `ElementSelected`, rows joining or
+  leaving a wider selection raise `ElementAddedToSelection` and
+  `ElementRemovedFromSelection`, and an unchanged selection raises nothing,
+  so a screen reader never hears the same choice twice.
 - **`ScrollItem` brings an offscreen row into view.** A row scrolled or
   folded out of sight answers `IsOffscreen` and an empty rectangle honestly
   until then.

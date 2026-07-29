@@ -477,11 +477,14 @@ selects a row through SelectionItem, and the application hears the same
 `<<ListboxSelect>>` or `<<TreeviewSelect>>` a user's choice would have fired;
 ScrollItem brings an offscreen row into view; ExpandCollapse opens a branch.
 Every answer is pulled at the moment a client asks, so inserting, deleting or
-renaming needs no call here. Under `annotate_only()` none of this is served,
-and `describe()` reports the container `ITEMS_NOT_IN_THE_TREE`. One selection
-at a time through UIA, even where `selectmode` allows more; `AddToSelection`
-is a measured refusal, and lifting it is on the
-[ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md).
+renaming needs no call here. Where `selectmode` takes more than one,
+`AddToSelection` and `RemoveFromSelection` genuinely join and leave; on a
+single-select container they are refused. Every selection change, whoever
+caused it, is raised as the UIA event a client expects (`ElementSelected`,
+or `ElementAddedToSelection`/`ElementRemovedFromSelection` on a wider
+selection), and an unchanged selection is never re-announced. Under
+`annotate_only()` none of this is served, and `describe()` reports the
+container `ITEMS_NOT_IN_THE_TREE`.
 
 **A `ttk.Notebook`'s tabs work differently, since 0.4.0.** Each one is given a
 real child window of its own, positioned over the tab and annotated `PAGE_TAB`,

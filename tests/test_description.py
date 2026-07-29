@@ -1206,6 +1206,8 @@ def test_a_listbox_whose_rows_answer_for_themselves_is_not_reported_hollow() -> 
         def rectangle(self, index: int) -> tuple[int, int, int, int] | None:
             return None
 
+        def announce_selection_to(self, say) -> None: ...
+
     def wiring(widget):
         return WidgetWiring(
             words=lambda: None,

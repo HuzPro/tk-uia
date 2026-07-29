@@ -80,8 +80,10 @@ real form end to end.
   gating.
 - Listbox rows and Treeview items are real elements: named, nested under
   their branches, selected for real (the application hears its own
-  `<<ListboxSelect>>`/`<<TreeviewSelect>>`), scrolled into view through
-  `ScrollItem`, and a tree branch opens through `ExpandCollapse`.
+  `<<ListboxSelect>>`/`<<TreeviewSelect>>`), joined to and removed from a
+  selection where `selectmode` takes more than one, scrolled into view
+  through `ScrollItem`, and a tree branch opens through `ExpandCollapse`.
+  Selection changes are raised as UIA events, whoever caused them.
 - Notebook tabs become real tab controls a client can switch without a click.
 - `annotate_only(root)` keeps the previous annotation-only behaviour, and
   `leave_to_the_proxy(widget)` opts a single widget out.
@@ -91,9 +93,9 @@ real form end to end.
 
 - In-process only. You can make your own application accessible, not someone
   else's.
-- A row takes one selection at a time through UIA: `Select` replaces the
-  selection, and `AddToSelection` is refused even where the widget's own
-  `selectmode` allows more.
+- On a single-select container (`selectmode` `browse` or `single`),
+  `AddToSelection` and `RemoveFromSelection` are refused; `Select` is the one
+  selection there is.
 - A combobox has no ExpandCollapse yet, so a client cannot open its dropdown;
   choosing goes through `ValuePattern.SetValue`, which on a readonly combobox
   takes exactly the values a user could pick and fires the same

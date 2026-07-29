@@ -291,9 +291,11 @@ the widget at the moment a client asks, so inserting, deleting or renaming
 needs no further call. A `ttk.Treeview` works the same way, with each
 branch's items beneath it and ExpandCollapse to open a branch.
 
-Two honest edges: a row takes one selection at a time through UIA even where
-`selectmode` allows more, and a row scrolled out of view answers an empty
-rectangle and `IsOffscreen` until something scrolls it in.
+Where `selectmode` takes more than one, rows also join and leave the
+selection through AddToSelection and RemoveFromSelection, and every
+selection change is raised as a UIA event. One honest edge: a row scrolled
+out of view answers an empty rectangle and `IsOffscreen` until something
+scrolls it in.
 
 ## What a screen reader user gets
 

@@ -5,7 +5,12 @@ from __future__ import annotations
 
 from tests.doubles import FakeWidget, HeldPoster, RecordingPlatform
 from tk_uia.annotate import Ledger
-from tk_uia.provide import Providers, WidgetWiring
+from tk_uia.provide import (
+    Providers,
+    SelectionChange,
+    WidgetWiring,
+    the_selection_changes_between,
+)
 
 _A_BUTTON_HANDLE = 0x000807D1
 _A_LISTBOX_HANDLE = 0x000807D2
@@ -53,6 +58,18 @@ class ARunOfRows:
     def open(self, key: str) -> None: ...
 
     def close(self, key: str) -> None: ...
+
+    def takes_more_than_one(self) -> bool:
+        return True
+
+    def add_to_selection(self, key: str) -> None:
+        self.selected.add(key)
+
+    def remove_from_selection(self, key: str) -> None:
+        self.selected.discard(key)
+
+    def announce_selection_to(self, say) -> None:
+        self.say = say
 
 
 class ATreeOfRows(ARunOfRows):
@@ -280,3 +297,93 @@ def test_scrolling_a_row_into_view_answers_first_and_is_skipped_once_stale() -> 
     assert rows.shown == [], "the scroll ran inside the client's call"
     poster.run_everything_posted()
     assert rows.shown == ["1"], f"the scrolls that ran: {rows.shown}"
+
+
+def test_joining_and_leaving_a_selection_take_the_posted_road_and_skip_the_stale() -> (
+    None
+):
+    # Given a multi-select listbox with one row already selected
+    rows = ARunOfRows("Alpha", "Beta", "Gamma")
+    rows.selected = {"0"}
+    poster = HeldPoster()
+    listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
+    items = _attached(listbox, RecordingPlatform(), items=rows, post=poster).items
+
+    # When a client adds a living row, adds a stale one, and removes the first
+    items.add_to_selection("2")
+    items.add_to_selection("9")
+    items.remove_from_selection("0")
+
+    # Then every call answered first, and only the living rows' moves ran
+    assert rows.selected == {"0"}, "a selection move ran inside the client's call"
+    poster.run_everything_posted()
+    assert rows.selected == {"2"}, f"the selection ended as {rows.selected}"
+
+
+def test_whether_more_than_one_row_may_be_selected_is_the_widgets_own_answer() -> None:
+    # Given a container whose wiring takes more than one
+    listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
+    items = _attached(listbox, RecordingPlatform(), items=ARunOfRows("Alpha")).items
+
+    # When a client asks
+    # Then the answer is the wiring's, read at ask time
+    assert items.takes_more_than_one() is True, (
+        "the widget's own selectmode never reached the answers a client gets"
+    )
+
+
+def test_attaching_a_container_routes_its_selection_changes_to_the_platform() -> None:
+    # Given a listbox whose wiring can say when its selection changed
+    rows = ARunOfRows("Alpha", "Beta")
+    platform = RecordingPlatform()
+    listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
+    _attached(listbox, platform, items=rows)
+
+    # When the widget's own selection event fires, however it was caused
+    rows.say(("1",))
+
+    # Then the platform hears which rows are selected now, against the handle
+    assert platform.selection_heard == [(_A_LISTBOX_HANDLE, ("1",))], (
+        f"the platform heard {platform.selection_heard}"
+    )
+
+
+def test_a_selection_moving_to_one_new_row_is_announced_as_selected() -> None:
+    # Given a selection that lands on a single new row, however it got there
+    # When the change is weighed
+    # Then it is one SELECTED announcement, which is what a screen reader
+    # phrases as the row simply being chosen
+    assert the_selection_changes_between((), ("1",)) == (
+        (SelectionChange.SELECTED, "1"),
+    ), "a first selection was not announced as selected"
+    assert the_selection_changes_between(("0",), ("1",)) == (
+        (SelectionChange.SELECTED, "1"),
+    ), "a replaced selection was not announced as the new row selected"
+    assert the_selection_changes_between(("0", "1"), ("2",)) == (
+        (SelectionChange.SELECTED, "2"),
+    ), "a selection collapsing onto a new row was not announced as selected"
+
+
+def test_a_selection_growing_or_shrinking_names_each_row_that_moved() -> None:
+    # Given a multi-selection gaining one row and then losing another
+    # When each change is weighed
+    # Then the rows that moved are named, and the ones that stayed are not
+    assert the_selection_changes_between(("0",), ("0", "2")) == (
+        (SelectionChange.ADDED, "2"),
+    ), "growing a selection did not name the row that joined it"
+    assert the_selection_changes_between(("0", "2"), ("2",)) == (
+        (SelectionChange.REMOVED, "0"),
+    ), "shrinking a selection did not name the row that left it"
+
+
+def test_an_unchanged_selection_announces_nothing_at_all() -> None:
+    # Given the same selection reported twice, as a click on a selected row does
+    # When the change is weighed
+    # Then there is nothing to say, and saying it anyway is what makes a
+    # screen reader repeat itself
+    assert the_selection_changes_between(("1",), ("1",)) == (), (
+        "an unchanged selection was announced again"
+    )
+    assert the_selection_changes_between((), ()) == (), (
+        "an empty selection staying empty was announced"
+    )

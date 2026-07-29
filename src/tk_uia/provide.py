@@ -151,6 +151,14 @@ class ItemsWiring(Protocol):
 
     def close(self, key: str) -> None: ...
 
+    def takes_more_than_one(self) -> bool: ...
+
+    def add_to_selection(self, key: str) -> None: ...
+
+    def remove_from_selection(self, key: str) -> None: ...
+
+    def announce_selection_to(self, say: Callable[[tuple[str, ...]], None]) -> None: ...
+
 
 Poster = Callable[[Callable[[], None]], None]
 """How an action reaches the Tk thread without holding the callback that asked."""
@@ -245,6 +253,15 @@ class ItemsAnswers:
     def select(self, key: str) -> None:
         self._posted_on_the_row(key, self._wiring.select)
 
+    def add_to_selection(self, key: str) -> None:
+        self._posted_on_the_row(key, self._wiring.add_to_selection)
+
+    def remove_from_selection(self, key: str) -> None:
+        self._posted_on_the_row(key, self._wiring.remove_from_selection)
+
+    def takes_more_than_one(self) -> bool:
+        return self._widget_still_there() and self._wiring.takes_more_than_one()
+
     def show(self, key: str) -> None:
         self._posted_on_the_row(key, self._wiring.show)
 
@@ -316,6 +333,32 @@ def _an_edge_of(keys: tuple[str, ...], edge: int) -> str | None:
     return keys[edge] if keys else None
 
 
+class SelectionChange(Enum):
+    """What one row's part in a selection change is, as UIA phrases it."""
+
+    SELECTED = "selected"
+    ADDED = "added"
+    REMOVED = "removed"
+
+
+def the_selection_changes_between(
+    before: tuple[str, ...], now: tuple[str, ...]
+) -> tuple[tuple[SelectionChange, str], ...]:
+    """Weigh a selection change into the announcements UIA expects.
+
+    A selection landing on one new row is SELECTED alone, however many rows
+    it displaced; anything else names each row that joined or left. The same
+    selection twice is nothing, or a screen reader repeats itself.
+    """
+    if now == before:
+        return ()
+    if len(now) == 1 and now[0] not in before:
+        return ((SelectionChange.SELECTED, now[0]),)
+    joined = tuple((SelectionChange.ADDED, key) for key in now if key not in before)
+    left = tuple((SelectionChange.REMOVED, key) for key in before if key not in now)
+    return joined + left
+
+
 def _nobody_said_a_value() -> str | None:
     return None
 
@@ -346,6 +389,8 @@ class ProviderPlatform(Protocol):
     def unhost(self, hwnd: int) -> None: ...
 
     def announce_change(self, hwnd: int, uia_property: int, now: object) -> None: ...
+
+    def announce_selection(self, hwnd: int, now: tuple[str, ...]) -> None: ...
 
 
 def answers_nothing_once_the_widget_is_gone(
@@ -482,8 +527,15 @@ class Providers:
             # so the abandoned one must stop answering before the new one starts.
             self._platform.unhost(standing)
             self.ledger.gone_from(path)
-        blueprint = self._blueprint(hwnd, role, self._wiring_for(widget))
+        wiring = self._wiring_for(widget)
+        blueprint = self._blueprint(hwnd, role, wiring)
         self._platform.host(hwnd, blueprint)
+        if wiring.items is not None:
+            # The widget's own selection event, whoever caused it, is what a
+            # client hears the change through.
+            wiring.items.announce_selection_to(
+                lambda now: self._platform.announce_selection(hwnd, now)
+            )
         self.ledger.hosted(
             path, hwnd, tuple(blueprint.patterns), rows=blueprint.items is not None
         )

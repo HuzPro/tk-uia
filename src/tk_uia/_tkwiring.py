@@ -183,6 +183,32 @@ class _TheRowsOfAListbox:
 
     def close(self, key: str) -> None: ...
 
+    def takes_more_than_one(self) -> bool:
+        return bool(
+            _guarded(
+                lambda: (
+                    str(self._widget.cget("selectmode")) in ("multiple", "extended")
+                ),
+                nothing=False,
+            )()
+        )
+
+    def add_to_selection(self, key: str) -> None:
+        self._widget.selection_set(int(key))
+        self._widget.event_generate("<<ListboxSelect>>")
+
+    def remove_from_selection(self, key: str) -> None:
+        self._widget.selection_clear(int(key))
+        self._widget.event_generate("<<ListboxSelect>>")
+
+    def announce_selection_to(self, say: Callable[[tuple[str, ...]], None]) -> None:
+        widget = self._widget
+        selected_now = _guarded(
+            lambda: tuple(str(index) for index in widget.curselection()),
+            nothing=(),
+        )
+        widget.bind("<<ListboxSelect>>", lambda _event: say(selected_now()), add="+")
+
 
 class _TheItemsOfATreeview:
     """A treeview's items, by the item ids the widget itself assigns.
@@ -237,6 +263,27 @@ class _TheItemsOfATreeview:
 
     def close(self, key: str) -> None:
         self._widget.item(key, open=False)
+
+    def takes_more_than_one(self) -> bool:
+        return bool(
+            _guarded(
+                lambda: str(self._widget.cget("selectmode")) == "extended",
+                nothing=False,
+            )()
+        )
+
+    def add_to_selection(self, key: str) -> None:
+        self._widget.selection_add(key)
+
+    def remove_from_selection(self, key: str) -> None:
+        self._widget.selection_remove(key)
+
+    def announce_selection_to(self, say: Callable[[tuple[str, ...]], None]) -> None:
+        widget = self._widget
+        selected_now = _guarded(
+            lambda: tuple(str(key) for key in widget.selection()), nothing=()
+        )
+        widget.bind("<<TreeviewSelect>>", lambda _event: say(selected_now()), add="+")
 
 
 def _painted_at(

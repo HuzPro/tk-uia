@@ -13,7 +13,12 @@ import struct
 from typing import TYPE_CHECKING, Any
 
 from tk_uia._subclass import WindowSubclasses
-from tk_uia.provide import Pattern, ValueAnswers
+from tk_uia.provide import (
+    Pattern,
+    SelectionChange,
+    ValueAnswers,
+    the_selection_changes_between,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -41,6 +46,12 @@ _UIA_TreeItemControlTypeId = 50024
 _ExpandCollapseState_Collapsed = 0
 _ExpandCollapseState_Expanded = 1
 _ExpandCollapseState_LeafNode = 3
+
+_THE_EVENT_FOR_EACH_SELECTION_CHANGE = {
+    SelectionChange.ADDED: 20010,  # UIA_SelectionItem_ElementAddedToSelectionEventId
+    SelectionChange.REMOVED: 20011,  # ...ElementRemovedFromSelectionEventId
+    SelectionChange.SELECTED: 20012,  # ...ElementSelectedEventId
+}
 
 _UIA_ControlTypePropertyId = 30003
 _UIA_NamePropertyId = 30005
@@ -132,7 +143,9 @@ class _Hosted:
         self.blueprint = blueprint
         self.refcount = 0
         self.shells: dict[str, _Shell] = {}
-        self.rows: dict[int, _HostedRow] = {}
+        self.rows: dict[str, _HostedRow] = {}
+        # The selection as last announced, so only real changes raise events.
+        self.selection_now: tuple[str, ...] = ()
 
 
 class _HostedRow:
@@ -207,6 +220,24 @@ class ComProviderPlatform:
             )
         finally:
             _oleaut32().VariantClear(ctypes.byref(new))
+
+    def announce_selection(self, hwnd: int, now: tuple[str, ...]) -> None:
+        hosted = _BY_HWND.get(hwnd)
+        if hosted is None:
+            return
+        changes = the_selection_changes_between(hosted.selection_now, now)
+        hosted.selection_now = now
+        if not changes:
+            return
+        com = _the_com_layer()
+        if not com.core.UiaClientsAreListening():
+            return
+        for change, key in changes:
+            row = _the_row(hosted, key)
+            com.core.UiaRaiseAutomationEvent(
+                ctypes.addressof(row.shells["simple"]),
+                _THE_EVENT_FOR_EACH_SELECTION_CHANGE[change],
+            )
 
     def _answer(self, hwnd: int, wparam: int, lparam: int) -> int | None:
         asked_for = ctypes.c_long(lparam & 0xFFFFFFFF).value
@@ -436,8 +467,8 @@ class _ComLayer:
         selection = (
             *unknown,
             self._slot(hresult, this)(self._row_select),
-            self._slot(hresult, this)(self._add_to_selection),
-            self._slot(hresult, this)(self._remove_from_selection),
+            self._slot(hresult, this)(self._row_add_to_selection),
+            self._slot(hresult, this)(self._row_remove_from_selection),
             self._slot(hresult, this, out)(self._row_is_selected),
             self._slot(hresult, this, out)(self._row_selection_container),
         )
@@ -910,6 +941,33 @@ class _ComLayer:
         except Exception:  # noqa: BLE001 - a COM callback must never raise
             return _E_FAIL
 
+    def _row_add_to_selection(self, this: int) -> int:
+        return self._selection_move(
+            this, lambda items, key: items.add_to_selection(key)
+        )
+
+    def _row_remove_from_selection(self, this: int) -> int:
+        return self._selection_move(
+            this, lambda items, key: items.remove_from_selection(key)
+        )
+
+    def _selection_move(self, this: int, move: Any) -> int:
+        try:
+            row = _row_for(this)
+            items = row.container.blueprint.items
+            if (
+                items is None
+                or not items.still_there(row.key)
+                # The widget's own selectmode decides; on a one-at-a-time
+                # container these are the documented refusal.
+                or not items.takes_more_than_one()
+            ):
+                return _UIA_E_INVALIDOPERATION
+            move(items, row.key)
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
     def _row_is_selected(self, this: int, out: int) -> int:
         try:
             row = _row_for(this)
@@ -1045,6 +1103,8 @@ def _load_uiautomationcore() -> Any:
     core.UiaDisconnectProvider.restype = ctypes.c_long
     core.UiaDisconnectProvider.argtypes = [ctypes.c_void_p]
     core.UiaClientsAreListening.restype = wintypes.BOOL
+    core.UiaRaiseAutomationEvent.restype = ctypes.c_long
+    core.UiaRaiseAutomationEvent.argtypes = [ctypes.c_void_p, ctypes.c_int]
     core.UiaRaiseAutomationPropertyChangedEvent.restype = ctypes.c_long
     core.UiaRaiseAutomationPropertyChangedEvent.argtypes = [
         ctypes.c_void_p,

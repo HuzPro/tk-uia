@@ -350,6 +350,7 @@ class RecordingPlatform:
         self.hosted: dict[int, object] = {}
         self.unhosted: list[int] = []
         self.announced: list[tuple[int, int, object]] = []
+        self.selection_heard: list[tuple[int, tuple[str, ...]]] = []
 
     def host(self, hwnd: int, blueprint: object) -> None:
         self.hosted[hwnd] = blueprint
@@ -360,6 +361,9 @@ class RecordingPlatform:
 
     def announce_change(self, hwnd: int, uia_property: int, now: object) -> None:
         self.announced.append((hwnd, uia_property, now))
+
+    def announce_selection(self, hwnd: int, now: tuple[str, ...]) -> None:
+        self.selection_heard.append((hwnd, now))
 
 
 class HeldPoster:

@@ -120,6 +120,77 @@ def test_the_rows_a_client_walks_follow_the_applications_own_edits(
     )
 
 
+def test_rows_join_and_leave_a_selection_where_the_widget_takes_more_than_one(
+    provided_app: RunningApp,
+) -> None:
+    # Given an extended-selectmode listbox with one row already selected
+    import uiautomation as auto
+
+    first = _the_row_named(provided_app, RESULT_ROWS[0])
+    second = _the_row_named(provided_app, RESULT_ROWS[1])
+    first.GetPattern(auto.PatternId.SelectionItemPattern).Select()
+    _eventually(
+        lambda: first.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
+        True,
+        "the opening Select never landed",
+    )
+
+    # When a client adds a second row, which is all assistive technology has
+    second.GetPattern(auto.PatternId.SelectionItemPattern).AddToSelection()
+
+    # Then both rows are selected, and the application heard both
+    _eventually(
+        lambda: second.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
+        True,
+        "AddToSelection returned cleanly and the row never joined",
+    )
+    assert first.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is True, (
+        "adding a second row silently dropped the first, which is Select, not Add"
+    )
+    _eventually(
+        _what_the_list_heard(provided_app.window),
+        picked(RESULT_ROWS[0], RESULT_ROWS[1]),
+        "the join landed without the application hearing <<ListboxSelect>>",
+    )
+
+    # And when the client takes the first row back out
+    first.GetPattern(auto.PatternId.SelectionItemPattern).RemoveFromSelection()
+
+    # Then only the second remains
+    _eventually(
+        lambda: first.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
+        False,
+        "RemoveFromSelection returned cleanly and the row never left",
+    )
+    assert second.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is True, (
+        "removing one row took the other with it"
+    )
+
+
+def test_a_tree_takes_a_second_row_into_its_selection(
+    provided_app: RunningApp,
+) -> None:
+    # Given a tree whose extended selectmode takes more than one
+    import uiautomation as auto
+
+    first = _the_tree_item_of(provided_app, TREE_BRANCH)
+    second = _the_tree_item_of(provided_app, TREE_SECOND_BRANCH)
+    first.GetPattern(auto.PatternId.SelectionItemPattern).Select()
+
+    # When a client adds the second branch
+    second.GetPattern(auto.PatternId.SelectionItemPattern).AddToSelection()
+
+    # Then both are selected
+    _eventually(
+        lambda: second.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
+        True,
+        "AddToSelection returned cleanly and the branch never joined",
+    )
+    assert first.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is True, (
+        "adding the second branch dropped the first"
+    )
+
+
 def test_a_treeviews_items_are_a_walkable_tree_of_branches_and_rows(
     provided_app: RunningApp,
 ) -> None:

@@ -85,18 +85,20 @@ widget out; `describe()` says who answers for what and why not.
   were conclusions nobody had tried to falsify after 0.7 landed. The provider
   layer already carries windowless children; the machinery was navigation,
   not annotation. What genuinely remains from that entry is a `Menu`'s items,
-  which Windows serves natively (`MENUS_ARE_NATIVE`), and the multi-select
-  gap below.
+  which Windows serves natively (`MENUS_ARE_NATIVE`).
+
+- **A selection that moves is a selection that announces.** Where
+  `selectmode` takes more than one, `AddToSelection` and
+  `RemoveFromSelection` genuinely join and leave, and refuse on a
+  single-select container. Every selection change, whoever caused it, is
+  raised through the widget's own `<<ListboxSelect>>`/`<<TreeviewSelect>>`
+  as the UIA event a client expects: `ElementSelected` for a selection
+  landing on one new row, `ElementAddedToSelection` and
+  `ElementRemovedFromSelection` for rows joining and leaving a wider one,
+  and nothing at all for a selection that did not change.
 
 ## Next
 
-- **`AddToSelection` where the widget itself takes more than one.** A row
-  answers `Select` alone today: on an `extended` or `multiple` listbox and a
-  multi-select treeview, adding and removing from a selection are refusals a
-  client can measure. The wiring is `selection_set`/`selection_add`; the work
-  is deciding how `CanSelectMultiple` is answered without an
-  `ISelectionProvider` on the container, which belongs with the selection
-  containers entry below.
 - **ExpandCollapse for `Menubutton` and `TCombobox`.** Blocked on a measured
   wiring that really opens the dropdown, not on machinery: the candidates are
   `ttk::combobox::Post`/`Unpost` and `menu.post`, driven from an idle
@@ -104,13 +106,15 @@ widget out; `describe()` says who answers for what and why not.
   Until then a combobox carries the ComboBox control type without its
   customary ExpandCollapse, which is a documented gap.
 - **Selection containers.** A radio group and a notebook answer
-  `SelectionItem` per item today with no `SelectionContainer` behind it;
-  screen readers phrase "x of y" from the container or from
-  PositionInSet/SizeOfSet, and which of those this package should carry is a
-  measurement against NVDA and Narrator, not a guess.
-- **More property-changed events.** Name and Value ship; ToggleState,
-  IsSelected and RangeValue changes belong with `bind_state_variable`, and the
-  Invoked event belongs after a posted press completes.
+  `SelectionItem` per item today with no `SelectionContainer` behind it
+  (rows got theirs with the fragment work); screen readers phrase "x of y"
+  from the container or from PositionInSet/SizeOfSet, and which of those this
+  package should carry is a measurement against NVDA and Narrator, not a
+  guess. `CanSelectMultiple` through an `ISelectionProvider` on the
+  container belongs here too.
+- **More property-changed events.** Name, Value and row selection ship;
+  ToggleState and RangeValue changes belong with `bind_state_variable`, and
+  the Invoked event belongs after a posted press completes.
 - **`ILegacyIAccessibleProvider`**, so `set_acc_action` and `set_acc_state`
   reach UIA clients on provided widgets the way they reach MSAA ones.
 - **A per-tab name override, when somebody demonstrates the want.** A tab's

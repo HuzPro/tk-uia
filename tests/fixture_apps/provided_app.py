@@ -59,14 +59,14 @@ def chose(colour: str) -> str:
     return f"the app heard {colour}"
 
 
-def picked(row: str) -> str:
+def picked(*rows: str) -> str:
     """How the app reports the `<<ListboxSelect>>` it saw, where a spec can read it."""
-    return f"the list heard {row}"
+    return f"the list heard {' + '.join(rows)}"
 
 
-def picked_in_tree(row: str) -> str:
+def picked_in_tree(*rows: str) -> str:
     """How the app reports the `<<TreeviewSelect>>` it saw, where a spec can read it."""
-    return f"the tree heard {row}"
+    return f"the tree heard {' + '.join(rows)}"
 
 
 _NEVER = 0
@@ -143,7 +143,7 @@ def main(title: str, commands: Path) -> None:
         notebook.add(page, text=page_name)
     notebook.pack(pady=4)
 
-    results = tk.Listbox(root, height=3)
+    results = tk.Listbox(root, height=3, selectmode="extended")
     for row in RESULT_ROWS:
         results.insert("end", row)
     results.pack(pady=4)
