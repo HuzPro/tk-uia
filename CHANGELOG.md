@@ -17,11 +17,13 @@ items, nested under their branches, and carrying patterns that act.
   `selectmode` takes more than one, `AddToSelection` and
   `RemoveFromSelection` genuinely join and leave; on a single-select
   container they are refused.
-- **Selection changes are raised as UIA events**, whoever caused them: a
-  selection landing on one new row raises `ElementSelected`, rows joining or
-  leaving a wider selection raise `ElementAddedToSelection` and
-  `ElementRemovedFromSelection`, and an unchanged selection raises nothing,
-  so a screen reader never hears the same choice twice.
+- **Selection changes are raised as UIA events**, riding the widget's own
+  `<<ListboxSelect>>`/`<<TreeviewSelect>>`: a selection landing on one new
+  row raises `ElementSelected`, rows joining or leaving a wider selection
+  raise `ElementAddedToSelection` and `ElementRemovedFromSelection`, and an
+  unchanged selection raises nothing, so a screen reader never hears the
+  same choice twice. A listbox selection the application sets without firing
+  `<<ListboxSelect>>` announces nothing, because Tk itself says nothing.
 - **`ScrollItem` brings an offscreen row into view.** A row scrolled or
   folded out of sight answers `IsOffscreen` and an empty rectangle honestly
   until then.
@@ -301,12 +303,12 @@ status line wants `enable(root)` and one line per unlabelled row.
   that captions it; every **entry** in the row takes that subject as its name,
   through the same association `label_for` records; and every **button** whose
   caption says nothing on its own (`Browse...`, `Reset to Default`, `?`) is
-  qualified with it, as `Browse... for GUI Executable`, because two identical
+  qualified with it, as `Browse... for Export Folder`, because two identical
   captions in one window are indistinguishable to a screen reader user and to a
-  locator alike. Measured: applying this took that dialog from 83 of 110
-  controls addressable to **110 of 110**. The variable rule is a measurement
+  locator alike. Measured: applying this took a real dialog from most of its
+  controls addressable to **all of them**. The variable rule is a measurement
   too: a subject taken from a variable-driven label produced a button announced
-  as `Reset to Default for C:\Example\stopped.ico`. It is a separate call
+  as `Reset to Default for C:\Example\draft.txt`. It is a separate call
   because everything else this package writes is read off the widget being
   annotated, and this is read off the widgets *around* it: a layout is not a
   statement, so inferring from one is a guess. The library never guesses on its
@@ -319,7 +321,7 @@ status line wants `enable(root)` and one line per unlabelled row.
   obvious implementation writes these names as *inferred*, ranked below anything
   an application said. Measured, that is unusable: `<Map>` re-runs the automatic
   annotation, which names a widget from its own `-text`, so a button qualified
-  `Browse... for GUI Executable` was back to `Browse...` after the first tab
+  `Browse... for Export Folder` was back to `Browse...` after the first tab
   change, silently, on an event the application never sees. The convention was
   asked for, so what it
   writes is the application's own word; `set_acc_name` still wins either way,

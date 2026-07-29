@@ -175,15 +175,16 @@ its own row however the widgets were created. A Server/Port/Username form
 gridded inside one frame names each entry after its own caption. The return
 value is still the audit: read what it chose before trusting it. Every **button** whose caption says
 nothing on its own (`Browse...`, `Reset to Default`, `?`) is qualified with it,
-as `Browse... for GUI Executable`. Two buttons called "Browse..." in one window
+as `Browse... for Export Folder`. Two buttons called "Browse..." in one window
 are indistinguishable to a screen reader user choosing between them and to a
-locator trying to pick one, and that dialog had six. Applying this took the same
-dialog from 83 of 110 controls addressable to **110 of 110**.
+locator trying to pick one, and a busy settings dialog holds more than two.
+Applying this took a real one from most of its controls addressable to **all
+of them**.
 
 Two of those rules are refusals. A label driven by a variable is showing what
 the row *holds* rather than saying what it is, so it is never a subject.
 Measured: taking one produced a button announced as `Reset to Default for
-C:\Example\stopped.ico`, a name that changes whenever the value does. And a name
+C:\Example\draft.txt`, a name that changes whenever the value does. And a name
 your application chose is never replaced, whether you said it before this call
 or after it.
 
@@ -446,7 +447,7 @@ whichever one the tree hands back first.
 A form with two `Browse...` and two `Reset to Default` buttons has four
 controls in that state, every one correctly typed and correctly named.
 The fix is to qualify the caption, with
-`set_acc_name(button, "Browse... for GUI Executable")` or
+`set_acc_name(button, "Browse... for Export Folder")` or
 `infer_names_from_layout(root)`, which does that for a whole window.
 `describe(root)` reports whatever is left as `NAME_NOT_UNIQUE`, counted **per
 window**, since a dialog's `Confirm` and the main window's `Confirm` are two
@@ -479,10 +480,15 @@ ScrollItem brings an offscreen row into view; ExpandCollapse opens a branch.
 Every answer is pulled at the moment a client asks, so inserting, deleting or
 renaming needs no call here. Where `selectmode` takes more than one,
 `AddToSelection` and `RemoveFromSelection` genuinely join and leave; on a
-single-select container they are refused. Every selection change, whoever
-caused it, is raised as the UIA event a client expects (`ElementSelected`,
-or `ElementAddedToSelection`/`ElementRemovedFromSelection` on a wider
-selection), and an unchanged selection is never re-announced. Under
+single-select container they are refused. A selection change is raised as
+the UIA event a client expects (`ElementSelected`, or
+`ElementAddedToSelection`/`ElementRemovedFromSelection` on a wider
+selection), and an unchanged selection is never re-announced. The
+announcement rides the widget's own `<<ListboxSelect>>` or
+`<<TreeviewSelect>>`: a user's gesture, a client's pattern call, and any
+treeview change fire it; a listbox selection the application sets without
+generating that event announces nothing, because Tk itself says nothing.
+Under
 `annotate_only()` none of this is served, and `describe()` reports the
 container `ITEMS_NOT_IN_THE_TREE`.
 
@@ -629,7 +635,7 @@ WHAT A CLIENT WILL NOT GET, AND WHY
     shares its role and its accessible name with another widget in the
     same window, so a client asking for it reaches one of them at random
     and a screen reader announces both of them the same way. Qualify the
-    caption -- 'Browse... for GUI Executable' -- with set_acc_name, or let
+    caption -- 'Browse... for Export Folder' -- with set_acc_name, or let
     infer_names_from_layout(root) qualify the generic ones for a whole
     window at once.
       .!label  (Label)

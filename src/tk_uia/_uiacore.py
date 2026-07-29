@@ -601,9 +601,12 @@ class _ComLayer:
             return _E_FAIL
 
     def _host_provider(self, this: int, out: int) -> int:
-        # Written straight into the out parameter: the reference UIA hands
-        # back is the caller's, with no counting done here.
-        return self.core.UiaHostProviderFromHwnd(_hosted_for(this).hwnd, out)
+        try:
+            # Written straight into the out parameter: the reference UIA hands
+            # back is the caller's, with no counting done here.
+            return self.core.UiaHostProviderFromHwnd(_hosted_for(this).hwnd, out)
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
 
     # -- IInvokeProvider --
 
@@ -628,9 +631,14 @@ class _ComLayer:
 
     def _set_value(self, this: int, text: str | None) -> int:
         try:
-            if _hosted_for(this).blueprint.patterns.get(Pattern.VALUE) is None:
+            answers = _hosted_for(this).blueprint.patterns.get(Pattern.VALUE)
+            if answers is None:
                 # A said value is the application's word about itself; nobody
                 # writes the application's words for it.
+                return _UIA_E_INVALIDOPERATION
+            # Refused here as well as by the client API: Tk swallows an edit
+            # on a read-only widget, and a swallowed edit must not answer S_OK.
+            if answers.is_read_only():
                 return _UIA_E_INVALIDOPERATION
         except Exception:  # noqa: BLE001 - a COM callback must never raise
             return _E_FAIL
@@ -674,8 +682,8 @@ class _ComLayer:
     def _set_range_value(self, this: int, value: float) -> int:
         try:
             answers = _hosted_for(this).blueprint.patterns.get(Pattern.RANGE_VALUE)
-            if answers is None or answers.write is None:
-                # The documented refusal for a range nobody may set.
+            if answers is None or answers.write is None or answers.is_read_only():
+                # The documented refusal for a range nobody may set now.
                 return _UIA_E_INVALIDOPERATION
             answers.write(value)
             return _S_OK

@@ -73,7 +73,7 @@ class Gap(Enum):
         "shares its role and its accessible name with another widget in the "
         "same window, so a client asking for it reaches one of them at random "
         "and a screen reader announces both of them the same way. Qualify the "
-        "caption -- 'Browse... for GUI Executable' -- with set_acc_name, or let "
+        "caption -- 'Browse... for Export Folder' -- with set_acc_name, or let "
         "infer_names_from_layout(root) qualify the generic ones for a whole "
         "window at once."
     )

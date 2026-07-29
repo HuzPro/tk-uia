@@ -348,6 +348,25 @@ def test_attaching_a_container_routes_its_selection_changes_to_the_platform() ->
     )
 
 
+def test_a_row_vanishing_mid_walk_answers_no_sibling_rather_than_raising() -> None:
+    # Given a wiring whose row is deleted between the liveness check and the
+    # sibling pull, as the Tk thread can do under a client's walk
+    class RowsThatVanishMidWalk(ARunOfRows):
+        def exists(self, key: str) -> bool:
+            return True
+
+    listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
+    items = _attached(
+        listbox, RecordingPlatform(), items=RowsThatVanishMidWalk("Alpha")
+    ).items
+
+    # When the walk asks after the vanished row's neighbours
+    # Then the answer is nothing, in both directions, never a raise into a
+    # callback forbidden to raise
+    assert items.after("5") is None, "a vanished row still offered a next sibling"
+    assert items.before("5") is None, "a vanished row still offered a previous one"
+
+
 def test_a_selection_moving_to_one_new_row_is_announced_as_selected() -> None:
     # Given a selection that lands on a single new row, however it got there
     # When the change is weighed

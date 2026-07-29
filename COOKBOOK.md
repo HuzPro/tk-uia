@@ -198,7 +198,7 @@ WHAT A CLIENT WILL NOT GET, AND WHY
     shares its role and its accessible name with another widget in the
     same window, so a client asking for it reaches one of them at random
     and a screen reader announces both of them the same way. Qualify the
-    caption -- 'Browse... for GUI Executable' -- with set_acc_name, or let
+    caption -- 'Browse... for Export Folder' -- with set_acc_name, or let
     infer_names_from_layout(root) qualify the generic ones for a whole
     window at once.
       .!frame.!button  (Button)
@@ -292,10 +292,10 @@ needs no further call. A `ttk.Treeview` works the same way, with each
 branch's items beneath it and ExpandCollapse to open a branch.
 
 Where `selectmode` takes more than one, rows also join and leave the
-selection through AddToSelection and RemoveFromSelection, and every
-selection change is raised as a UIA event. One honest edge: a row scrolled
-out of view answers an empty rectangle and `IsOffscreen` until something
-scrolls it in.
+selection through AddToSelection and RemoveFromSelection, and a selection
+change is raised as a UIA event whenever the widget's own select event
+fires. One honest edge: a row scrolled out of view answers an empty
+rectangle and `IsOffscreen` until something scrolls it in.
 
 ## What a screen reader user gets
 
@@ -313,10 +313,9 @@ Things worth knowing at this point:
   the mouse; only a widget the application `leave_to_the_proxy()`s keeps the
   old advertise-and-do-nothing proxy behaviour. [How, and the rules behind
   it](https://github.com/HuzPro/tk-uia/blob/main/docs/GUIDE.md#activation-what-presses-and-what-only-advertises).
-- What is *inside* a list is not in the tree. A `Listbox` is a findable
-  `ListControl` and its rows are not there at all. The same goes for `Treeview`
-  items. A `ttk.Notebook`'s tabs are the exception and are reachable. [Caveats
-  worth
+- What is *inside* a list is in the tree too. A `Listbox`'s rows, a
+  `Treeview`'s items and a `ttk.Notebook`'s tabs are all reachable elements;
+  a `Menu`'s entries are Windows' own. [Caveats worth
   knowing](https://github.com/HuzPro/tk-uia/blob/main/docs/GUIDE.md#caveats-worth-knowing).
 - No screen reader has been in the room. Everything this project claims is read
   back through UI Automation, which is the API a screen reader consumes. "NVDA

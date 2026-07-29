@@ -44,7 +44,7 @@ CAPTIONS_THAT_SAY_NOTHING_ON_THEIR_OWN = frozenset(
 
 _NO_WORDS_AT_ALL = ""
 
-# Reads as "Browse... for GUI Executable".
+# Reads as "Browse... for Export Folder".
 _WHAT_A_GENERIC_CAPTION_ACTS_ON = "{caption} for {subject}"
 
 

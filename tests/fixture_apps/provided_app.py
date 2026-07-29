@@ -17,6 +17,8 @@ PROXY_BUTTON = "Proxy Button"
 NOTIFY = "Notify"
 HIGH = "High"
 TITLE_ENTRY = "Title"
+LOCKED_TITLE = "Reference number"
+LOCKED_DRAFT = "TK-0042"
 VOLUME = "Volume"
 CONFIRMATION = "Confirmation"
 PRESSES = "plain tally"
@@ -79,7 +81,7 @@ def presses(kind: str, count: int) -> str:
 def main(title: str, commands: Path) -> None:
     root = tk.Tk()
     root.title(title)
-    root.geometry("420x780")
+    root.geometry("420x820")
 
     tk.Label(root, text="Task list").pack(pady=6)
 
@@ -110,6 +112,11 @@ def main(title: str, commands: Path) -> None:
     draft = tk.StringVar(value="")
     title_entry = tk.Entry(root, width=30, textvariable=draft)
     title_entry.pack(pady=4)
+
+    locked_entry = tk.Entry(root, width=30)
+    locked_entry.insert(0, LOCKED_DRAFT)
+    locked_entry.config(state="readonly")
+    locked_entry.pack(pady=4)
 
     notify = tk.IntVar(master=root, value=0)
     tk.Checkbutton(root, text=NOTIFY, variable=notify).pack(pady=4)
@@ -184,6 +191,7 @@ def main(title: str, commands: Path) -> None:
     _watching_for_commands(root, results, commands)
 
     tk_uia.set_acc_name(title_entry, TITLE_ENTRY)
+    tk_uia.set_acc_name(locked_entry, LOCKED_TITLE)
     tk_uia.set_acc_name(results, SEARCH_RESULTS)
     tk_uia.set_acc_name(tree, TASK_TREE)
     tk_uia.set_acc_value(results, THE_SELECTED_ROW)

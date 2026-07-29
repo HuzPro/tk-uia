@@ -1184,6 +1184,46 @@ def test_the_report_says_which_patterns_each_widget_answers_for_itself() -> None
     )
 
 
+def test_a_button_with_nothing_to_run_is_not_reported_as_pressing() -> None:
+    # Given a button with no command, whose provider will refuse the pattern
+    from tests.doubles import HeldPoster, RecordingPlatform
+    from tk_uia.provide import Providers, WidgetWiring
+
+    class AnUnwiredInvoke:
+        def press(self) -> None: ...
+
+        def offered(self) -> bool:
+            return False
+
+    def wiring(widget):
+        return WidgetWiring(
+            words=lambda: None,
+            is_enabled=lambda: True,
+            post=HeldPoster(),
+            still_there=widget.winfo_exists,
+            invoke=AnUnwiredInvoke() if widget.winfo_class() == "Button" else None,
+        )
+
+    button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
+    root = FakeRoot(FakeInterpreter("8.6.15", "win32", native=False), children=[button])
+    providers = Providers(RecordingPlatform(), wiring)
+    installation = install(root, RecordingStore(), providers=providers)
+
+    # When the application asks what it has told Windows
+    description = describe(root, installation)
+
+    # Then the report neither claims a press a client cannot obtain, nor
+    # drops the warning that says so
+    assert "with working: Invoke" not in str(description), (
+        f"a button the provider refuses Invoke for was reported as pressing:\n"
+        f"{description}"
+    )
+    said = _what_the_description_says_about(description, str(button))
+    assert Gap.CANNOT_BE_PRESSED in said.gaps, (
+        f"the warning was dropped anyway; the gaps read {said.gaps}"
+    )
+
+
 def test_a_listbox_whose_rows_answer_for_themselves_is_not_reported_hollow() -> None:
     # Given a listbox whose provider answers rows of its own
     from tests.doubles import HeldPoster, RecordingPlatform

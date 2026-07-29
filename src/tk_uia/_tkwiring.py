@@ -151,7 +151,10 @@ class _TheRowsOfAListbox:
         return None
 
     def exists(self, key: str) -> bool:
-        return key in self.roots()
+        # By arithmetic, never by building the whole run: a client walking a
+        # large listbox asks this before every single answer.
+        count = _guarded(lambda: int(self._widget.size()), nothing=0)()
+        return key.isdigit() and int(key) < count
 
     def words(self, key: str) -> str | None:
         return _guarded(lambda: str(self._widget.get(int(key))))()

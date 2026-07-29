@@ -313,7 +313,12 @@ class ItemsAnswers:
         if not self.still_there(key):
             return None
         siblings = self._the_row_and_its_neighbours(key)
-        position = siblings.index(key) + step
+        try:
+            position = siblings.index(key) + step
+        except ValueError:
+            # Deleted between the liveness check and this pull; a row that is
+            # gone answers nothing, here as everywhere.
+            return None
         if 0 <= position < len(siblings):
             return siblings[position]
         return None
@@ -331,6 +336,17 @@ class ItemsAnswers:
 
 def _an_edge_of(keys: tuple[str, ...], edge: int) -> str | None:
     return keys[edge] if keys else None
+
+
+def _the_patterns_a_client_can_obtain(blueprint: Blueprint) -> tuple[Pattern, ...]:
+    # An Invoke the platform would refuse (no command at attach time) must
+    # not be recorded as on offer; the record is attach-time truth, like the
+    # rest of the ledger.
+    return tuple(
+        pattern
+        for pattern, answers in blueprint.patterns.items()
+        if pattern is not Pattern.INVOKE or answers.offered()
+    )
 
 
 class SelectionChange(Enum):
@@ -537,7 +553,10 @@ class Providers:
                 lambda now: self._platform.announce_selection(hwnd, now)
             )
         self.ledger.hosted(
-            path, hwnd, tuple(blueprint.patterns), rows=blueprint.items is not None
+            path,
+            hwnd,
+            _the_patterns_a_client_can_obtain(blueprint),
+            rows=blueprint.items is not None,
         )
 
     def forget(self, path: str) -> None:

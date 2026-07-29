@@ -83,7 +83,8 @@ real form end to end.
   `<<ListboxSelect>>`/`<<TreeviewSelect>>`), joined to and removed from a
   selection where `selectmode` takes more than one, scrolled into view
   through `ScrollItem`, and a tree branch opens through `ExpandCollapse`.
-  Selection changes are raised as UIA events, whoever caused them.
+  Selection changes are raised as UIA events whenever the widget's own
+  select event fires: a user's choice, a client's, and any treeview change.
 - Notebook tabs become real tab controls a client can switch without a click.
 - `annotate_only(root)` keeps the previous annotation-only behaviour, and
   `leave_to_the_proxy(widget)` opts a single widget out.

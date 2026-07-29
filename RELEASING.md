@@ -80,14 +80,14 @@ has never seen this repository:
 ```powershell
 py -m venv $env:TEMP\tk-uia-smoke
 $env:TEMP\tk-uia-smoke\Scripts\python.exe -m pip install dist\tk_uia-0.6.3-py3-none-any.whl
-$env:TEMP\tk-uia-smoke\Scripts\python.exe -c "import tkinter as tk, tk_uia; r = tk.Tk(); r.withdraw(); s = tk_uia.enable(r); assert s is tk_uia.Strategy.ANNOTATED, s; print(tk_uia.__version__, s)"
+$env:TEMP\tk-uia-smoke\Scripts\python.exe -c "import tkinter as tk, tk_uia; r = tk.Tk(); r.withdraw(); s = tk_uia.enable(r); assert s is tk_uia.Strategy.PROVIDED, s; print(tk_uia.__version__, s)"
 Remove-Item -Recurse -Force $env:TEMP\tk-uia-smoke
 ```
 
-The assertion is the point: `enable()` returning `NATIVE` or `UNSUPPORTED`
-where `ANNOTATED` was expected is exactly the silent no-op this package exists
-to refuse, and an install that imports cleanly and annotates nothing would pass
-any weaker check.
+The assertion is the point: `enable()` reporting `NATIVE`, `UNSUPPORTED` or a
+downgrade where `PROVIDED` was expected is exactly the silent no-op this
+package exists to refuse, and an install that imports cleanly and writes
+nothing would pass any weaker check.
 
 ## One-time setup, before the first tag ever pushed
 

@@ -102,7 +102,7 @@ def test_widgets_packed_straight_onto_a_window_are_a_row_like_any_frame() -> Non
 def test_a_caption_showing_a_variable_is_not_what_a_row_is_about() -> None:
     # Given a row that shows a value and captions it, with a button that acts on it
     store = RecordingStore()
-    what_is_configured = FakeVariable(r"C:\Example\stopped.ico")
+    what_is_configured = FakeVariable(r"C:\Example\draft.txt")
     annotator = Annotator(
         store,
         variables=VariablesByName(
@@ -192,7 +192,7 @@ def test_a_button_whose_caption_says_nothing_on_its_own_is_qualified_with_its_ro
     annotator = Annotator(store)
     root = a_window_of(
         a_row_of(
-            FakeWidget("Label", _A_CAPTION, text="GUI Executable:"),
+            FakeWidget("Label", _A_CAPTION, text="Export Folder:"),
             FakeWidget("Entry", _AN_ENTRY),
             FakeWidget("Button", _A_BUTTON, text="Browse..."),
         )
@@ -203,7 +203,7 @@ def test_a_button_whose_caption_says_nothing_on_its_own_is_qualified_with_its_ro
     the_convention_applied_to(root, annotator)
 
     # Then the button is qualified by the row it is in
-    assert store.properties(_A_BUTTON)[PropId.NAME] == "Browse... for GUI Executable", (
+    assert store.properties(_A_BUTTON)[PropId.NAME] == "Browse... for Export Folder", (
         f"the generic button was left as {store.properties(_A_BUTTON)}"
     )
 
@@ -291,7 +291,7 @@ def test_a_name_the_application_chose_is_never_replaced_by_the_convention() -> N
     entry = FakeWidget("Entry", _AN_ENTRY)
     button = FakeWidget("Button", _A_BUTTON, text="Browse...")
     root = a_window_of(
-        a_row_of(FakeWidget("Label", _A_CAPTION, text="GUI Executable:"), entry, button)
+        a_row_of(FakeWidget("Label", _A_CAPTION, text="Export Folder:"), entry, button)
     )
     already_annotated(root, annotator)
     annotator.set_name(entry, "Path to the application under test")
@@ -316,7 +316,7 @@ def test_a_qualified_button_keeps_its_qualification_when_tk_maps_it_again() -> N
     annotator = Annotator(store)
     button = FakeWidget("Button", _A_BUTTON, text="Browse...")
     root = a_window_of(
-        a_row_of(FakeWidget("Label", _A_CAPTION, text="GUI Executable:"), button)
+        a_row_of(FakeWidget("Label", _A_CAPTION, text="Export Folder:"), button)
     )
     already_annotated(root, annotator)
     the_convention_applied_to(root, annotator)
@@ -325,7 +325,7 @@ def test_a_qualified_button_keeps_its_qualification_when_tk_maps_it_again() -> N
     annotator.add(button)
 
     # Then the qualification stands, though `<Map>` re-annotates from the `-text`
-    assert store.properties(_A_BUTTON)[PropId.NAME] == "Browse... for GUI Executable", (
+    assert store.properties(_A_BUTTON)[PropId.NAME] == "Browse... for Export Folder", (
         f"the caption won the name back on the next <Map>: {store.properties(_A_BUTTON)}"
     )
 
@@ -338,9 +338,7 @@ def test_the_convention_reports_every_widget_it_named_and_what_it_called_it() ->
     button = FakeWidget("Button", _A_BUTTON, text="Browse...")
     another_entry = FakeWidget("Entry", _A_SECOND_ENTRY)
     root = a_window_of(
-        a_row_of(
-            FakeWidget("Label", _A_CAPTION, text="GUI Executable:"), entry, button
-        ),
+        a_row_of(FakeWidget("Label", _A_CAPTION, text="Export Folder:"), entry, button),
         a_row_of(
             FakeWidget("Label", _A_SECOND_CAPTION, text="Host:"),
             another_entry,
@@ -354,8 +352,8 @@ def test_the_convention_reports_every_widget_it_named_and_what_it_called_it() ->
 
     # Then it says what it decided, read back out of what was actually written
     assert named == (
-        NamedByTheLayout(str(entry), "GUI Executable"),
-        NamedByTheLayout(str(button), "Browse... for GUI Executable"),
+        NamedByTheLayout(str(entry), "Export Folder"),
+        NamedByTheLayout(str(button), "Browse... for Export Folder"),
         NamedByTheLayout(str(another_entry), "Host"),
     ), f"the convention reported {named}"
 

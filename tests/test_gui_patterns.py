@@ -17,6 +17,8 @@ from tests.fixture_apps.provided_app import (
     CONFIRMATION,
     GREEN,
     HIGH,
+    LOCKED_DRAFT,
+    LOCKED_TITLE,
     NEW_TASK,
     NOTHING_YET,
     NOTIFY,
@@ -152,6 +154,26 @@ def test_an_entry_round_trips_text_through_the_value_pattern(
         entry.GetPattern(auto.PatternId.ValuePattern).Value
         == "write the quarterly report"
     ), "SetValue returned cleanly and the widget never took the text"
+
+
+def test_a_readonly_entry_refuses_a_write_rather_than_answering_success(
+    provided_app: RunningApp,
+) -> None:
+    # Given a readonly entry: enabled, so UIA core lets the call through,
+    # and declaring itself read-only
+    import uiautomation as auto
+
+    entry = auto.EditControl(searchFromControl=provided_app.window, Name=LOCKED_TITLE)
+    pattern = entry.GetPattern(auto.PatternId.ValuePattern)
+    assert pattern.IsReadOnly is True, "a readonly entry claimed to be writable"
+
+    # When a client writes anyway
+    # Then the write is refused, never swallowed by Tk and answered as success
+    with pytest.raises(Exception):  # noqa: B017 - the COMError type lives client-side
+        pattern.SetValue("overwritten")
+    assert entry.GetPattern(auto.PatternId.ValuePattern).Value == LOCKED_DRAFT, (
+        "the refusal still changed the value"
+    )
 
 
 def test_a_checkbutton_toggles_its_variable_through_the_toggle_pattern(
