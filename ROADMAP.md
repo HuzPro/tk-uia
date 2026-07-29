@@ -125,11 +125,38 @@ widget out; `describe()` says who answers for what and why not.
   Role.PUSH_BUTTON)` on a canvas button should be able to bring a working
   Invoke with it, once there is an honest way to say what pressing means for
   a widget with no `-command`.
-- **COVERAGE.md regenerated with a patterns column**, so the per-class
-  difference between the proxy's synthesised patterns and the provider's
-  working ones is measured and published rather than described.
-- **A subclass overhead probe**, pinning what routing every widget's messages
-  through the provider layer costs a redraw-heavy window.
+- **A tab overlay must resolve its tab by index, not by list position.** The
+  overlays answer for the tabs the strip scan found, and the scan skips a tab
+  the application `hide()`s, so position and true index drift apart: a
+  client's select can land on -- and un-hide -- the hidden tab. Until the
+  handle records the index it stands over, `hide()` and the overlays do not
+  mix, and nothing says so.
+- **Row identities against a churning tree.** A row's COM identity is kept
+  until its container unhosts, which is the right anti-use-after-free rule
+  for stable keys and an unbounded pin for a treeview refreshed with fresh
+  iids for hours. A `still_there`-based sweep on refresh would cap it without
+  giving the property up. The same registry has two smaller edges: minting a
+  row is a check-then-insert two threads can race, and a hosting whose
+  subclass fails is registered with nothing to ever unregister it.
+- **The refuse-before-Tcl promise, kept on every entry point.** Four calls
+  (`set_acc_name`, `set_acc_value`, both `bind_*`) release or register a
+  variable trace before the owning-thread guard fires, and a refused
+  `bind_text_variable` leaves its trace registered. Related honesty debt:
+  public `forget()` leaves a notebook's tab overlays standing, and a widget
+  whose `-textvariable` was later unset keeps its last followed value ranked
+  as chosen, outranking the live words forever.
+- **32-bit Python passes VARIANTs with the 64-bit layout.** `sizeof(VARIANT)`
+  is 16 on x86 and both by-value VARIANT calls hard-code 24, so on a 32-bit
+  build every property-changed announcement and numeric annotation corrupts
+  its payload. Size the struct by platform, or state plainly that 64-bit is
+  required.
+- **The provider event surface owes its specs.** Shipped and verified only at
+  the seam below COM: `IsOffscreen`, the raise half of selection events (the
+  baseline diff, the three event ids), the property-changed chain past its
+  first hop, the single-select `AddToSelection` refusal, `Collapse`, and
+  backwards row navigation. The fixture apps should also adopt the probes'
+  loud is-everything-mapped check, which the geometry-tuning bugs this list
+  came from would have failed early.
 
 - **The cross-repo comparison, as a recipe rather than a tool.** `describe()`
   says what this library believes it wrote; a client-side dump says what a

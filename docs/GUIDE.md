@@ -845,7 +845,7 @@ reproducible by running `probes/what_enable_alone_gives_you.py`.
 | Annotated `Checkbutton` `ToggleState` | `1`, then `0` when the application set its variable to 0: correct, and live, with no call to this package |
 | Write trace left on a `StringVar` after its bound widget is destroyed | **0** (`trace_info()` read inside the app) |
 | `enable()` runtime dependencies | **0**, permanently |
-| gui suite (30 specs, a real window each) | ~84 s |
+| window-launching specs (marked gui or not), a real window each | ~50 s |
 
 The `ProviderDescription` line is the useful one for anybody writing a UIA
 client. A Tk window is served by the MSAA proxy but reports `FrameworkId`
@@ -918,8 +918,10 @@ py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 uv pip install -e ".[dev]"        # or: pip install -e ".[dev]"
 
-pytest -m "not gui" -q            # instant; no windows, runs on any platform
-pytest -m gui -q                  # launches a real Tk window, once per spec
+pytest -m "not gui" -q            # off Windows: instant, no windows. On
+                                  # Windows it also runs the tree-only window
+                                  # specs, which launch a real Tk app each.
+pytest -m gui -q                  # the specs needing input or the foreground
 pytest -q                         # everything
 
 ruff check src tests probes
@@ -966,7 +968,9 @@ CI runs `ruff` on Ubuntu and `pytest -m "not gui"` on
 {Ubuntu, Windows} × {3.10, 3.13}. The **Ubuntu lane is the meaningful one**: it
 proves this package imports and runs where there is no Tk and no Windows, which
 matters because it is installed at runtime inside somebody else's application.
-The gui suite is local-only. It needs an interactive desktop.
+The Windows lane also runs the tree-only window specs against real Tk fixture
+apps; only the `gui`-marked specs, which need synthetic input or the
+foreground, are local-only.
 
 ### Probes
 

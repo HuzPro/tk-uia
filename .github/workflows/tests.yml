@@ -18,9 +18,9 @@ jobs:
       - run: ruff check src tests probes
       - run: ruff format --check src tests probes
 
-  # The `gui` suite launches a real Tk window and reads it back through UI
-  # Automation, so it needs an interactive Windows desktop and is local-only
-  # (see ROADMAP). What runs here is everything else, on both platforms.
+  # The `gui`-marked specs need synthetic input or the foreground, so they
+  # are local-only. The unmarked window specs read a real Tk window through
+  # the tree alone and do run in this lane on Windows.
   #
   # The Ubuntu lane is the meaningful one: this package is installed at runtime
   # inside somebody else's application, and it claims to cost that application

@@ -72,9 +72,13 @@ def an_application_that_only_calls_enable(title: str, commands: Path) -> None:
     greyed.pack(pady=10)
     root.update()
 
-    strategy = tk_uia.enable(root)
+    # The annotation-only view is the one this probe measures, and since 0.7
+    # annotate_only() is the call that gives exactly that.
+    strategy = tk_uia.annotate_only(root)
     if strategy is not tk_uia.Strategy.ANNOTATED:
-        raise SystemExit(f"enable() reported {strategy}: nothing here is annotated")
+        raise SystemExit(
+            f"annotate_only() reported {strategy}: nothing here is annotated"
+        )
 
     handlers = {
         # The widget changes its words the ordinary way, saying nothing here.
