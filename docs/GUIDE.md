@@ -417,8 +417,9 @@ a `Combobox` or a `Spinbox`, the three the bridge hands a ValuePattern to, it is
 the **value**. Everywhere else the widget shows the variable *instead of* a
 caption, so it is the **name**. Sixteen widget classes across both toolkits
 carry the option. `tk.Text` carries none. A `Listbox`'s `-listvariable` and a
-`Scale`'s `-variable` are deliberately not this: the rows of one are not in the
-tree, and the other's role offers no pattern to write to.
+`Scale`'s `-variable` are deliberately not this: one's rows are served to
+clients as elements of their own and need no mirror, and the other's number
+is already pulled live through its RangeValue pattern.
 
 **Your word always wins, and permanently.** `set_acc_name`, `set_acc_value`,
 `label_for`, `bind_text_variable` and `bind_value_variable` each *release* the
@@ -467,15 +468,22 @@ with no call to this package at all. Measured: `1`, then `0` after the
 application set the variable to 0. That comes from the MSAA proxy, not from
 here.
 
-### Notebook tabs are reachable; other compound-widget items are not
+### Rows, items and tabs are all reachable
 
-A `Listbox` is annotated as a `LIST` and its *rows* are not in the tree at all.
-The same goes for `Treeview` items. Tk gives one HWND per widget and annotation
-works on HWNDs, so exposing those means MSAA's `IAccessible` child-id model, a
-different piece of machinery. It is on the
-[ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md), not here yet.
+A `Listbox`'s rows and a `Treeview`'s items are elements of their own, served
+by the container's provider with no window handle behind any of them: named,
+typed as list or tree items, and nested under their branches. A client
+selects a row through SelectionItem, and the application hears the same
+`<<ListboxSelect>>` or `<<TreeviewSelect>>` a user's choice would have fired;
+ScrollItem brings an offscreen row into view; ExpandCollapse opens a branch.
+Every answer is pulled at the moment a client asks, so inserting, deleting or
+renaming needs no call here. Under `annotate_only()` none of this is served,
+and `describe()` reports the container `ITEMS_NOT_IN_THE_TREE`. One selection
+at a time through UIA, even where `selectmode` allows more; `AddToSelection`
+is a measured refusal, and lifting it is on the
+[ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md).
 
-**A `ttk.Notebook`'s tabs are the exception, since 0.4.0.** Each one is given a
+**A `ttk.Notebook`'s tabs work differently, since 0.4.0.** Each one is given a
 real child window of its own, positioned over the tab and annotated `PAGE_TAB`,
 so a client sees a `TabControl` with named `TabItemControl`s under it. A click
 at a tab's centre selects it, because that window is `WS_EX_TRANSPARENT` and

@@ -21,14 +21,33 @@ if TYPE_CHECKING:
     from tk_uia.provide import Blueprint
 
 UiaRootObjectId = -25
+_UiaAppendRuntimeId = 3
 
 _ProviderOptions_ServerSideProvider = 0x2
+
+_NavigateDirection_Parent = 0
+_NavigateDirection_NextSibling = 1
+_NavigateDirection_PreviousSibling = 2
+_NavigateDirection_FirstChild = 3
+_NavigateDirection_LastChild = 4
+
+_UIA_ExpandCollapsePatternId = 10005
+_UIA_ScrollItemPatternId = 10017
+
+_UIA_ListItemControlTypeId = 50007
+_UIA_TreeControlTypeId = 50023
+_UIA_TreeItemControlTypeId = 50024
+
+_ExpandCollapseState_Collapsed = 0
+_ExpandCollapseState_Expanded = 1
+_ExpandCollapseState_LeafNode = 3
 
 _UIA_ControlTypePropertyId = 30003
 _UIA_NamePropertyId = 30005
 _UIA_IsKeyboardFocusablePropertyId = 30009
 _UIA_IsEnabledPropertyId = 30010
 _UIA_HelpTextPropertyId = 30013
+_UIA_IsOffscreenPropertyId = 30022
 _UIA_FullDescriptionPropertyId = 30159
 
 _S_OK = 0
@@ -43,11 +62,19 @@ _VT_BOOL = 11
 
 _IID_IUnknown = "{00000000-0000-0000-C000-000000000046}"
 _IID_IRawElementProviderSimple = "{D6DD68D1-86FD-4332-8666-9ABEDEA2D24C}"
+_IID_IRawElementProviderFragment = "{F7063DA8-8359-439C-9297-BBC5299A7D87}"
+_IID_IRawElementProviderFragmentRoot = "{620CE2A5-AB8F-40A9-86CB-DE3C75599B58}"
 _IID_IInvokeProvider = "{54FCB24B-E18E-47A2-B4D3-ECCBE77599A2}"
 _IID_IValueProvider = "{C7935180-6FB3-4201-B174-7DF73ADBF64A}"
 _IID_IRangeValueProvider = "{36DC7AEF-33E6-4691-AFE1-2BE7274B3D33}"
 _IID_ISelectionItemProvider = "{2ACAD808-B2D4-452D-A407-91FF1AD167B2}"
 _IID_IToggleProvider = "{56D00BD0-C4F4-433C-A836-1A52A57E0892}"
+_IID_IScrollItemProvider = "{2360C714-4BF1-4B26-BA65-9B21316127EB}"
+_IID_IExpandCollapseProvider = "{D847D3A5-CAB0-4A98-8C32-ECB45C59AD24}"
+
+# The two interfaces only a container with rows answers; a plain widget's
+# structure is its window's, and offering these would claim otherwise.
+_THE_KINDS_ONLY_A_CONTAINER_ANSWERS = ("fragment", "fragment_root")
 
 _THE_SHELL_FOR_EACH_PATTERN = {
     Pattern.INVOKE: "invoke",
@@ -82,6 +109,15 @@ class _Variant(ctypes.Structure):
         )
 
 
+class _UiaRect(ctypes.Structure):
+    _fields_ = (
+        ("left", ctypes.c_double),
+        ("top", ctypes.c_double),
+        ("width", ctypes.c_double),
+        ("height", ctypes.c_double),
+    )
+
+
 class _Shell(ctypes.Structure):
     """A COM object: its address is the interface pointer, its one field the vtable."""
 
@@ -96,10 +132,30 @@ class _Hosted:
         self.blueprint = blueprint
         self.refcount = 0
         self.shells: dict[str, _Shell] = {}
+        self.rows: dict[int, _HostedRow] = {}
+
+
+class _HostedRow:
+    """One row's COM identity: an element of its container's, with no window.
+
+    Asked again for the same key, the container answers the same identity, so
+    a client's runtime ids stay stable while the row does. `number` is the
+    int a runtime id needs, minted once per key and never reused.
+    """
+
+    def __init__(self, container: _Hosted, key: str, number: int) -> None:
+        self.container = container
+        self.key = key
+        self.number = number
+        # The same lifetime pin as the container's: the registry owns the
+        # memory until the container goes.
+        self.refcount = 1
+        self.shells: dict[str, _Shell] = {}
 
 
 _BY_ADDRESS: dict[int, _Hosted] = {}
 _BY_HWND: dict[int, _Hosted] = {}
+_ROW_BY_ADDRESS: dict[int, _HostedRow] = {}
 
 
 class ComProviderPlatform:
@@ -172,6 +228,11 @@ class ComProviderPlatform:
             return
         core = _the_com_layer().core
         core.UiaReturnRawElementProvider(hwnd, 0, 0, None)
+        for row in hosted.rows.values():
+            core.UiaDisconnectProvider(ctypes.addressof(row.shells["simple"]))
+            for shell in row.shells.values():
+                _ROW_BY_ADDRESS.pop(ctypes.addressof(shell), None)
+        hosted.rows.clear()
         core.UiaDisconnectProvider(ctypes.addressof(hosted.shells["simple"]))
         hosted.refcount -= 1
         for shell in hosted.shells.values():
@@ -182,12 +243,61 @@ def _hosted_for(this: int) -> _Hosted:
     return _BY_ADDRESS[int(this)]
 
 
+def _row_for(this: int) -> _HostedRow:
+    return _ROW_BY_ADDRESS[int(this)]
+
+
+def _the_row(container: _Hosted, key: str) -> _HostedRow:
+    row = container.rows.get(key)
+    if row is None:
+        # Rows are never removed until the container goes, so the count is a
+        # number no other key has worn.
+        row = _HostedRow(container, key, number=len(container.rows) + 1)
+        for kind, vtable in _the_com_layer().row_vtables.items():
+            shell = _Shell(ctypes.cast(ctypes.pointer(vtable), ctypes.c_void_p))
+            row.shells[kind] = shell
+            _ROW_BY_ADDRESS[ctypes.addressof(shell)] = row
+        container.rows[key] = row
+    return row
+
+
 def _the_value_said_for(hosted: _Hosted) -> str | None:
     return hosted.blueprint.value_the_application_said()
 
 
 def _write_pointer(out: int, address: int | None) -> None:
     ctypes.cast(out, ctypes.POINTER(ctypes.c_void_p))[0] = address
+
+
+def _hand_out_a_row(container: _Hosted, key: str, out: int) -> None:
+    row = _the_row(container, key)
+    _write_pointer(out, ctypes.addressof(row.shells["fragment"]))
+    row.refcount += 1
+
+
+def _hand_out_another_row(row: _HostedRow, key: str | None, out: int) -> None:
+    if key is not None:
+        _hand_out_a_row(row.container, key, out)
+
+
+def _the_type_of_a_row_inside(container: _Hosted) -> int:
+    # A tree's rows are tree items; every other container's are list items.
+    if container.blueprint.control_type() == _UIA_TreeControlTypeId:
+        return _UIA_TreeItemControlTypeId
+    return _UIA_ListItemControlTypeId
+
+
+def _a_runtime_id_appending(number: int) -> int:
+    """A two-int SAFEARRAY: append-to-the-window's-id, then the row's number."""
+    oleaut = _oleaut32()
+    array = oleaut.SafeArrayCreateVector(_VT_I4, 0, 2)
+    for position, value in enumerate((_UiaAppendRuntimeId, number)):
+        oleaut.SafeArrayPutElement(
+            array,
+            ctypes.byref(ctypes.c_long(position)),
+            ctypes.byref(ctypes.c_int(value)),
+        )
+    return array
 
 
 class _ComLayer:
@@ -198,14 +308,25 @@ class _ComLayer:
         self.iids = {
             _guid_bytes(_IID_IUnknown): "simple",  # identity: one pointer, always
             _guid_bytes(_IID_IRawElementProviderSimple): "simple",
+            _guid_bytes(_IID_IRawElementProviderFragment): "fragment",
+            _guid_bytes(_IID_IRawElementProviderFragmentRoot): "fragment_root",
             _guid_bytes(_IID_IInvokeProvider): "invoke",
             _guid_bytes(_IID_IToggleProvider): "toggle",
             _guid_bytes(_IID_IValueProvider): "value",
             _guid_bytes(_IID_IRangeValueProvider): "range",
             _guid_bytes(_IID_ISelectionItemProvider): "selection",
         }
+        self.row_iids = {
+            _guid_bytes(_IID_IUnknown): "simple",
+            _guid_bytes(_IID_IRawElementProviderSimple): "simple",
+            _guid_bytes(_IID_IRawElementProviderFragment): "fragment",
+            _guid_bytes(_IID_ISelectionItemProvider): "selection",
+            _guid_bytes(_IID_IScrollItemProvider): "scroll",
+            _guid_bytes(_IID_IExpandCollapseProvider): "expand",
+        }
         self.kept_alive: list[Any] = []
         self.vtables = self._the_vtables()
+        self.row_vtables = self._the_row_vtables()
 
     def _the_vtables(self) -> dict[str, Any]:
         hresult = ctypes.c_long
@@ -256,6 +377,25 @@ class _ComLayer:
             self._slot(hresult, this, out)(self._is_selected),
             self._slot(hresult, this, out)(self._selection_container),
         )
+        # Vtable order from UIAutomationCore.h: Navigate, GetRuntimeId,
+        # get_BoundingRectangle, GetEmbeddedFragmentRoots, SetFocus,
+        # get_FragmentRoot.
+        fragment = (
+            *unknown,
+            self._slot(hresult, this, ctypes.c_int, out)(self._navigate),
+            self._slot(hresult, this, out)(self._runtime_id),
+            self._slot(hresult, this, out)(self._bounding_rectangle),
+            self._slot(hresult, this, out)(self._embedded_fragment_roots),
+            self._slot(hresult, this)(self._set_focus),
+            self._slot(hresult, this, out)(self._fragment_root),
+        )
+        fragment_root = (
+            *unknown,
+            self._slot(hresult, this, ctypes.c_double, ctypes.c_double, out)(
+                self._element_from_point
+            ),
+            self._slot(hresult, this, out)(self._focused_element),
+        )
         return {
             "simple": _a_vtable(simple),
             "invoke": _a_vtable(invoke),
@@ -263,6 +403,62 @@ class _ComLayer:
             "value": _a_vtable(value),
             "range": _a_vtable(range_value),
             "selection": _a_vtable(selection),
+            "fragment": _a_vtable(fragment),
+            "fragment_root": _a_vtable(fragment_root),
+        }
+
+    def _the_row_vtables(self) -> dict[str, Any]:
+        hresult = ctypes.c_long
+        this = ctypes.c_void_p
+        out = ctypes.c_void_p
+
+        unknown = (
+            self._slot(hresult, this, out, out)(self._row_query_interface),
+            self._slot(ctypes.c_ulong, this)(self._row_add_reference),
+            self._slot(ctypes.c_ulong, this)(self._row_release),
+        )
+        simple = (
+            *unknown,
+            self._slot(hresult, this, out)(self._provider_options),
+            self._slot(hresult, this, ctypes.c_int, out)(self._row_pattern_provider),
+            self._slot(hresult, this, ctypes.c_int, out)(self._row_property_value),
+            self._slot(hresult, this, out)(self._row_host_provider),
+        )
+        fragment = (
+            *unknown,
+            self._slot(hresult, this, ctypes.c_int, out)(self._row_navigate),
+            self._slot(hresult, this, out)(self._row_runtime_id),
+            self._slot(hresult, this, out)(self._row_bounding_rectangle),
+            self._slot(hresult, this, out)(self._embedded_fragment_roots),
+            self._slot(hresult, this)(self._set_focus),
+            self._slot(hresult, this, out)(self._row_fragment_root),
+        )
+        selection = (
+            *unknown,
+            self._slot(hresult, this)(self._row_select),
+            self._slot(hresult, this)(self._add_to_selection),
+            self._slot(hresult, this)(self._remove_from_selection),
+            self._slot(hresult, this, out)(self._row_is_selected),
+            self._slot(hresult, this, out)(self._row_selection_container),
+        )
+        scroll = (
+            *unknown,
+            self._slot(hresult, this)(self._row_scroll_into_view),
+        )
+        # Vtable order from UIAutomationCore.h: Expand, Collapse,
+        # get_ExpandCollapseState.
+        expand = (
+            *unknown,
+            self._slot(hresult, this)(self._row_expand),
+            self._slot(hresult, this)(self._row_collapse),
+            self._slot(hresult, this, out)(self._row_expand_state),
+        )
+        return {
+            "simple": _a_vtable(simple),
+            "fragment": _a_vtable(fragment),
+            "selection": _a_vtable(selection),
+            "scroll": _a_vtable(scroll),
+            "expand": _a_vtable(expand),
         }
 
     def _slot(self, restype: Any, *argtypes: Any) -> Any:
@@ -283,7 +479,10 @@ class _ComLayer:
             hosted = _hosted_for(this)
             asked = bytes(ctypes.cast(riid, ctypes.POINTER(ctypes.c_ubyte * 16))[0])
             kind = self.iids.get(asked)
-            if kind is None:
+            if kind is None or (
+                kind in _THE_KINDS_ONLY_A_CONTAINER_ANSWERS
+                and hosted.blueprint.items is None
+            ):
                 _write_pointer(out, None)
                 return _E_NOINTERFACE
             _write_pointer(out, ctypes.addressof(hosted.shells[kind]))
@@ -505,6 +704,278 @@ class _ComLayer:
         _write_pointer(out, None)
         return _S_OK
 
+    # -- IRawElementProviderFragment, on a container with rows --
+
+    def _navigate(self, this: int, direction: int, out: int) -> int:
+        try:
+            hosted = _hosted_for(this)
+            _write_pointer(out, None)
+            items = hosted.blueprint.items
+            if items is None:
+                return _S_OK
+            if direction == _NavigateDirection_FirstChild:
+                key = items.first()
+            elif direction == _NavigateDirection_LastChild:
+                key = items.last()
+            else:
+                # Parent and siblings are the window tree's to answer.
+                return _S_OK
+            if key is not None:
+                _hand_out_a_row(hosted, key, out)
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _runtime_id(self, this: int, out: int) -> int:
+        # Nothing: a fragment root has a window, and the window names it.
+        _write_pointer(out, None)
+        return _S_OK
+
+    def _bounding_rectangle(self, this: int, out: int) -> int:
+        ctypes.cast(out, ctypes.POINTER(_UiaRect))[0] = _UiaRect(0.0, 0.0, 0.0, 0.0)
+        return _S_OK
+
+    def _embedded_fragment_roots(self, this: int, out: int) -> int:
+        _write_pointer(out, None)
+        return _S_OK
+
+    def _set_focus(self, this: int) -> int:
+        # Focus is the window's; there is nothing separate to move it to.
+        return _S_OK
+
+    def _fragment_root(self, this: int, out: int) -> int:
+        try:
+            hosted = _hosted_for(this)
+            _write_pointer(out, ctypes.addressof(hosted.shells["fragment_root"]))
+            hosted.refcount += 1
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    # -- IRawElementProviderFragmentRoot --
+
+    def _element_from_point(self, this: int, x: float, y: float, out: int) -> int:
+        # Nothing chosen: UIA falls back to the container itself.
+        _write_pointer(out, None)
+        return _S_OK
+
+    def _focused_element(self, this: int, out: int) -> int:
+        _write_pointer(out, None)
+        return _S_OK
+
+    # -- the same interfaces again, answered by a row for itself --
+
+    def _row_query_interface(self, this: int, riid: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            asked = bytes(ctypes.cast(riid, ctypes.POINTER(ctypes.c_ubyte * 16))[0])
+            kind = self.row_iids.get(asked)
+            if kind is None:
+                _write_pointer(out, None)
+                return _E_NOINTERFACE
+            _write_pointer(out, ctypes.addressof(row.shells[kind]))
+            row.refcount += 1
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_add_reference(self, this: int) -> int:
+        row = _ROW_BY_ADDRESS.get(int(this))
+        if row is None:
+            return 0
+        row.refcount += 1
+        return row.refcount
+
+    def _row_release(self, this: int) -> int:
+        row = _ROW_BY_ADDRESS.get(int(this))
+        if row is None:
+            return 0
+        # Never freed at zero, exactly as the container is not.
+        row.refcount = max(row.refcount - 1, 0)
+        return row.refcount
+
+    def _row_pattern_provider(self, this: int, pattern_id: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            _write_pointer(out, None)
+            offered = {
+                Pattern.SELECTION_ITEM.value: "selection",
+                _UIA_ScrollItemPatternId: "scroll",
+            }.get(pattern_id)
+            if pattern_id == _UIA_ExpandCollapsePatternId:
+                # Only a row with branches beneath it promises to open.
+                items = row.container.blueprint.items
+                if items is not None and items.first_child(row.key) is not None:
+                    offered = "expand"
+            if offered is not None:
+                _write_pointer(out, ctypes.addressof(row.shells[offered]))
+                row.refcount += 1
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_property_value(self, this: int, property_id: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
+            items = row.container.blueprint.items
+            if items is None:
+                return _S_OK
+            if property_id == _UIA_NamePropertyId:
+                words = items.words(row.key)
+                if words:
+                    variant.hold_words(words)
+            elif property_id == _UIA_ControlTypePropertyId:
+                variant.hold_number(_the_type_of_a_row_inside(row.container))
+            elif property_id == _UIA_IsEnabledPropertyId:
+                variant.hold_truth(bool(row.container.blueprint.is_enabled()))
+            elif property_id == _UIA_IsOffscreenPropertyId:
+                # A row scrolled out of view has no rectangle, and says so.
+                variant.hold_truth(items.rectangle(row.key) is None)
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_host_provider(self, this: int, out: int) -> int:
+        # No window behind a row; the container's window hosts the tree.
+        _write_pointer(out, None)
+        return _S_OK
+
+    def _row_navigate(self, this: int, direction: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            _write_pointer(out, None)
+            items = row.container.blueprint.items
+            if items is None or not items.still_there(row.key):
+                return _S_OK
+            if direction == _NavigateDirection_Parent:
+                holder = items.parent(row.key)
+                if holder is None:
+                    _write_pointer(
+                        out, ctypes.addressof(row.container.shells["fragment"])
+                    )
+                    row.container.refcount += 1
+                else:
+                    _hand_out_a_row(row.container, holder, out)
+            elif direction == _NavigateDirection_NextSibling:
+                _hand_out_another_row(row, items.after(row.key), out)
+            elif direction == _NavigateDirection_PreviousSibling:
+                _hand_out_another_row(row, items.before(row.key), out)
+            elif direction == _NavigateDirection_FirstChild:
+                _hand_out_another_row(row, items.first_child(row.key), out)
+            elif direction == _NavigateDirection_LastChild:
+                _hand_out_another_row(row, items.last_child(row.key), out)
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_runtime_id(self, this: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            _write_pointer(out, _a_runtime_id_appending(row.number))
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_bounding_rectangle(self, this: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            items = row.container.blueprint.items
+            painted = items.rectangle(row.key) if items is not None else None
+            left, top, width, height = painted if painted is not None else (0, 0, 0, 0)
+            ctypes.cast(out, ctypes.POINTER(_UiaRect))[0] = _UiaRect(
+                float(left), float(top), float(width), float(height)
+            )
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_fragment_root(self, this: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            _write_pointer(out, ctypes.addressof(row.container.shells["fragment_root"]))
+            row.container.refcount += 1
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_select(self, this: int) -> int:
+        try:
+            row = _row_for(this)
+            items = row.container.blueprint.items
+            if items is None or not items.still_there(row.key):
+                return _UIA_E_INVALIDOPERATION
+            items.select(row.key)
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_is_selected(self, this: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            items = row.container.blueprint.items
+            selected = items.is_selected(row.key) if items is not None else False
+            ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = 1 if selected else 0
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_selection_container(self, this: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            _write_pointer(out, ctypes.addressof(row.container.shells["simple"]))
+            row.container.refcount += 1
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_scroll_into_view(self, this: int) -> int:
+        try:
+            row = _row_for(this)
+            items = row.container.blueprint.items
+            if items is None or not items.still_there(row.key):
+                return _UIA_E_INVALIDOPERATION
+            items.show(row.key)
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_expand(self, this: int) -> int:
+        return self._branch_turned(this, lambda items, key: items.open(key))
+
+    def _row_collapse(self, this: int) -> int:
+        return self._branch_turned(this, lambda items, key: items.close(key))
+
+    def _branch_turned(self, this: int, turn: Any) -> int:
+        try:
+            row = _row_for(this)
+            items = row.container.blueprint.items
+            if (
+                items is None
+                or not items.still_there(row.key)
+                or items.first_child(row.key) is None
+            ):
+                return _UIA_E_INVALIDOPERATION
+            turn(items, row.key)
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
+    def _row_expand_state(self, this: int, out: int) -> int:
+        try:
+            row = _row_for(this)
+            items = row.container.blueprint.items
+            if items is None or items.first_child(row.key) is None:
+                state = _ExpandCollapseState_LeafNode
+            elif items.is_open(row.key):
+                state = _ExpandCollapseState_Expanded
+            else:
+                state = _ExpandCollapseState_Collapsed
+            ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = state
+            return _S_OK
+        except Exception:  # noqa: BLE001 - a COM callback must never raise
+            return _E_FAIL
+
     # -- the two shapes every pattern slot reduces to --
 
     def _act(self, this: int, pattern: Pattern, act: Any) -> int:
@@ -592,6 +1063,18 @@ def _oleaut32() -> Any:
         oleaut32.SysAllocString.argtypes = [ctypes.c_wchar_p]
         oleaut32.VariantClear.restype = ctypes.c_long
         oleaut32.VariantClear.argtypes = [ctypes.c_void_p]
+        oleaut32.SafeArrayCreateVector.restype = ctypes.c_void_p
+        oleaut32.SafeArrayCreateVector.argtypes = [
+            ctypes.c_ushort,
+            ctypes.c_long,
+            ctypes.c_ulong,
+        ]
+        oleaut32.SafeArrayPutElement.restype = ctypes.c_long
+        oleaut32.SafeArrayPutElement.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_long),
+            ctypes.c_void_p,
+        ]
         _OLEAUT32 = oleaut32
     return _OLEAUT32
 

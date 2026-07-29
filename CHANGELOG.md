@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+The release where a container's contents become real elements. A listbox's
+rows and a treeview's items are served to UI Automation as elements of their
+own, with no window handle spent on any of them: named, typed as list or tree
+items, nested under their branches, and carrying patterns that act.
+
+- **Rows and items are in the tree.** A client walks into a `tk.Listbox` and
+  finds its rows; into a `ttk.Treeview` and finds its items, with each
+  branch's items beneath it. Everything is pulled at the moment the client
+  asks, so an insert, delete or rename is answered as the widget stands now.
+- **`SelectionItem` selects a row for real**, and the application hears the
+  same `<<ListboxSelect>>` or `<<TreeviewSelect>>` a user's own choice would
+  have fired. `SelectionContainer` names the widget the row belongs to.
+- **`ScrollItem` brings an offscreen row into view.** A row scrolled or
+  folded out of sight answers `IsOffscreen` and an empty rectangle honestly
+  until then.
+- **`ExpandCollapse` opens and closes a treeview branch for real**, and a row
+  with nothing beneath it never advertises it.
+- **`describe()` stops holding a served container hollow.**
+  `ITEMS_NOT_IN_THE_TREE` is no longer reported for a listbox or treeview
+  whose rows answer for themselves; the row says "its rows answer UIA
+  themselves" instead. Annotation-only installations keep the gap, and the
+  reason now says which side of that line a widget is on.
+
 ## 0.7.0 - 2026-07-29
 
 The release where widgets answer UI Automation for themselves. `enable()` now

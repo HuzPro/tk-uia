@@ -130,6 +130,124 @@ class _TheNumberOfAProgressbar:
         return True
 
 
+class _TheRowsOfAListbox:
+    """A listbox's rows: keys are indexes as words, and there are no branches.
+
+    A pattern select fires `<<ListboxSelect>>`, because the user gesture it
+    stands in for would have.
+    """
+
+    def __init__(self, widget: TkWidget) -> None:
+        self._widget = widget
+
+    def roots(self) -> tuple[str, ...]:
+        count = _guarded(lambda: int(self._widget.size()), nothing=0)()
+        return tuple(str(index) for index in range(count))
+
+    def children(self, key: str) -> tuple[str, ...]:
+        return ()
+
+    def parent(self, key: str) -> str | None:
+        return None
+
+    def exists(self, key: str) -> bool:
+        return key in self.roots()
+
+    def words(self, key: str) -> str | None:
+        return _guarded(lambda: str(self._widget.get(int(key))))()
+
+    def select(self, key: str) -> None:
+        widget = self._widget
+        widget.selection_clear(0, "end")
+        widget.selection_set(int(key))
+        widget.activate(int(key))
+        widget.event_generate("<<ListboxSelect>>")
+
+    def is_selected(self, key: str) -> bool:
+        return bool(
+            _guarded(lambda: self._widget.selection_includes(int(key)), nothing=False)()
+        )
+
+    def show(self, key: str) -> None:
+        self._widget.see(int(key))
+
+    def rectangle(self, key: str) -> tuple[int, int, int, int] | None:
+        return _guarded(
+            lambda: _painted_at(self._widget, self._widget.bbox(int(key)))
+        )()
+
+    def is_open(self, key: str) -> bool:
+        return False
+
+    def open(self, key: str) -> None: ...
+
+    def close(self, key: str) -> None: ...
+
+
+class _TheItemsOfATreeview:
+    """A treeview's items, by the item ids the widget itself assigns.
+
+    Tk raises `<<TreeviewSelect>>` on any selection change of its own accord,
+    so a pattern select only has to select and focus.
+    """
+
+    def __init__(self, widget: TkWidget) -> None:
+        self._widget = widget
+
+    def roots(self) -> tuple[str, ...]:
+        return self.children("")
+
+    def children(self, key: str) -> tuple[str, ...]:
+        held = _guarded(lambda: self._widget.get_children(key), nothing=())()
+        return tuple(str(child) for child in held)
+
+    def parent(self, key: str) -> str | None:
+        holder = _guarded(lambda: str(self._widget.parent(key)))()
+        return holder or None
+
+    def exists(self, key: str) -> bool:
+        return bool(_guarded(lambda: self._widget.exists(key), nothing=False)())
+
+    def words(self, key: str) -> str | None:
+        return _guarded(lambda: str(self._widget.item(key, "text")))() or None
+
+    def select(self, key: str) -> None:
+        self._widget.selection_set(key)
+        self._widget.focus(key)
+
+    def is_selected(self, key: str) -> bool:
+        return bool(_guarded(lambda: key in self._widget.selection(), nothing=False)())
+
+    def show(self, key: str) -> None:
+        self._widget.see(key)
+
+    def rectangle(self, key: str) -> tuple[int, int, int, int] | None:
+        # An item scrolled or folded out of view answers an empty bbox.
+        return _guarded(
+            lambda: _painted_at(self._widget, self._widget.bbox(key) or None)
+        )()
+
+    def is_open(self, key: str) -> bool:
+        return bool(
+            _guarded(lambda: str(self._widget.item(key, "open")) in ("1", "True"))()
+        )
+
+    def open(self, key: str) -> None:
+        self._widget.item(key, open=True)
+
+    def close(self, key: str) -> None:
+        self._widget.item(key, open=False)
+
+
+def _painted_at(
+    widget: TkWidget, painted: tuple[int, int, int, int] | None
+) -> tuple[int, int, int, int] | None:
+    if painted is None:
+        return None
+    x, y, width, height = painted
+    return (widget.winfo_rootx() + x, widget.winfo_rooty() + y, width, height)
+
+
 def _a_press(widget: TkWidget) -> dict[str, object]:
     return {"invoke": _APress(widget)}
 
@@ -162,6 +280,14 @@ def _progressbar_number(widget: TkWidget) -> dict[str, object]:
     return {"range_value": _TheNumberOfAProgressbar(widget)}
 
 
+def _listbox_rows(widget: TkWidget) -> dict[str, object]:
+    return {"items": _TheRowsOfAListbox(widget)}
+
+
+def _treeview_items(widget: TkWidget) -> dict[str, object]:
+    return {"items": _TheItemsOfATreeview(widget)}
+
+
 def _nothing_more(widget: TkWidget) -> dict[str, object]:
     return {}
 
@@ -179,6 +305,8 @@ _THE_PATTERNS_OF_EACH_CLASS: dict[str, Callable[[TkWidget], dict[str, object]]] 
     "TSpinbox": _entry_text,
     "TCombobox": _combobox_text,
     "Text": _text_text,
+    "Listbox": _listbox_rows,
+    "Treeview": _treeview_items,
     "Scale": _scale_number,
     "TScale": _scale_number,
     "TProgressbar": _progressbar_number,

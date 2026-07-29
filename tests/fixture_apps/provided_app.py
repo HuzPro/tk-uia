@@ -32,14 +32,41 @@ RED = "Red"
 GREEN = "Green"
 BLUE = "Blue"
 SEARCH_RESULTS = "Search results"
+RESULT_ROWS = (
+    "Rust in production",
+    "Go in anger",
+    "Zig in doubt",
+    "C in charge",
+    "Lisp in waiting",
+)
 THE_SELECTED_ROW = "Rust in production"
 A_COLOUR_NOBODY_OFFERED = "Mauve"
 NOTHING_YET = "-"
+
+REFRESH_THE_RESULTS = "refresh-the-results"
+THE_ROW_A_REFRESH_BRINGS = "Hare in front"
+
+TASK_TREE = "Task tree"
+TREE_BRANCH = "Chores"
+TREE_SECOND_BRANCH = "Errands"
+TREE_LEAVES = ("Sweep the floor", "Dust the shelves")
+
+_HOW_OFTEN_TO_CHECK_FOR_A_COMMAND_MS = 200
 
 
 def chose(colour: str) -> str:
     """How the app reports the selection event it saw, where a spec can read it."""
     return f"the app heard {colour}"
+
+
+def picked(row: str) -> str:
+    """How the app reports the `<<ListboxSelect>>` it saw, where a spec can read it."""
+    return f"the list heard {row}"
+
+
+def picked_in_tree(row: str) -> str:
+    """How the app reports the `<<TreeviewSelect>>` it saw, where a spec can read it."""
+    return f"the tree heard {row}"
 
 
 _NEVER = 0
@@ -52,7 +79,7 @@ def presses(kind: str, count: int) -> str:
 def main(title: str, commands: Path) -> None:
     root = tk.Tk()
     root.title(title)
-    root.geometry("420x560")
+    root.geometry("420x780")
 
     tk.Label(root, text="Task list").pack(pady=6)
 
@@ -117,9 +144,32 @@ def main(title: str, commands: Path) -> None:
     notebook.pack(pady=4)
 
     results = tk.Listbox(root, height=3)
-    for row in ("Rust in production", "Go in anger", "Zig in doubt"):
+    for row in RESULT_ROWS:
         results.insert("end", row)
     results.pack(pady=4)
+    row_heard = tk.StringVar(value=picked(NOTHING_YET))
+    results.bind(
+        "<<ListboxSelect>>",
+        lambda _event: row_heard.set(
+            picked(*(results.get(chosen) for chosen in results.curselection()))
+        ),
+    )
+    tk.Label(root, textvariable=row_heard).pack()
+
+    tree = ttk.Treeview(root, height=4, show="tree")
+    chores = tree.insert("", "end", text=TREE_BRANCH)
+    for leaf in TREE_LEAVES:
+        tree.insert(chores, "end", text=leaf)
+    tree.insert("", "end", text=TREE_SECOND_BRANCH)
+    tree.pack(pady=4)
+    branch_heard = tk.StringVar(value=picked_in_tree(NOTHING_YET))
+    tree.bind(
+        "<<TreeviewSelect>>",
+        lambda _event: branch_heard.set(
+            picked_in_tree(*(tree.item(chosen, "text") for chosen in tree.selection()))
+        ),
+    )
+    tk.Label(root, textvariable=branch_heard).pack()
 
     root.update()
 
@@ -131,8 +181,11 @@ def main(title: str, commands: Path) -> None:
             "pattern specs would be measuring the proxy"
         )
 
+    _watching_for_commands(root, results, commands)
+
     tk_uia.set_acc_name(title_entry, TITLE_ENTRY)
     tk_uia.set_acc_name(results, SEARCH_RESULTS)
+    tk_uia.set_acc_name(tree, TASK_TREE)
     tk_uia.set_acc_value(results, THE_SELECTED_ROW)
     tk_uia.set_acc_help(new_task, THE_HELP)
     tk_uia.set_acc_description(new_task, THE_DESCRIPTION)
@@ -144,6 +197,21 @@ def main(title: str, commands: Path) -> None:
 def _count(tally: tk.StringVar, kind: str) -> None:
     already = int(tally.get().split()[-1])
     tally.set(presses(kind, already + 1))
+
+
+def _watching_for_commands(root: tk.Tk, results: tk.Listbox, commands: Path) -> None:
+    """Do what a spec asks, on Tk's own thread."""
+
+    def look() -> None:
+        request = commands / REFRESH_THE_RESULTS
+        if request.exists():
+            # Removed before acting, so the command runs exactly once.
+            request.unlink()
+            results.delete(0)
+            results.insert("end", THE_ROW_A_REFRESH_BRINGS)
+        root.after(_HOW_OFTEN_TO_CHECK_FOR_A_COMMAND_MS, look)
+
+    root.after(_HOW_OFTEN_TO_CHECK_FOR_A_COMMAND_MS, look)
 
 
 if __name__ == "__main__":

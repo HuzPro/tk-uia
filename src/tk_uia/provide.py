@@ -120,6 +120,38 @@ class SelectionWiring(Protocol):
     def is_selected(self) -> bool: ...
 
 
+class ItemsWiring(Protocol):
+    """How a container's rows are reached and driven, by the container's own keys.
+
+    A flat container's keys are its indexes as words and its branches are
+    empty; a tree's keys are its item ids and its branches open and close.
+    """
+
+    def roots(self) -> tuple[str, ...]: ...
+
+    def children(self, key: str) -> tuple[str, ...]: ...
+
+    def parent(self, key: str) -> str | None: ...
+
+    def exists(self, key: str) -> bool: ...
+
+    def words(self, key: str) -> str | None: ...
+
+    def select(self, key: str) -> None: ...
+
+    def is_selected(self, key: str) -> bool: ...
+
+    def show(self, key: str) -> None: ...
+
+    def rectangle(self, key: str) -> tuple[int, int, int, int] | None: ...
+
+    def is_open(self, key: str) -> bool: ...
+
+    def open(self, key: str) -> None: ...
+
+    def close(self, key: str) -> None: ...
+
+
 Poster = Callable[[Callable[[], None]], None]
 """How an action reaches the Tk thread without holding the callback that asked."""
 
@@ -137,6 +169,7 @@ class WidgetWiring:
     value: ValueWiring | None = None
     range_value: RangeWiring | None = None
     selection: SelectionWiring | None = None
+    items: ItemsWiring | None = None
 
 
 class WiringForClass(Protocol):
@@ -189,6 +222,100 @@ class SelectionAnswers:
 Answers = InvokeAnswers | ToggleAnswers | ValueAnswers | RangeAnswers | SelectionAnswers
 
 
+class ItemsAnswers:
+    """The rows a container answers for, in order, by key.
+
+    Every answer is pulled from the wiring at the moment a client asks, so a
+    row renamed, selected or deleted after attach is answered as it is now.
+    """
+
+    def __init__(
+        self,
+        wiring: ItemsWiring,
+        post: Poster,
+        widget_still_there: Callable[[], bool],
+    ) -> None:
+        self._wiring = wiring
+        self._post = post
+        self._widget_still_there = widget_still_there
+
+    def still_there(self, key: str) -> bool:
+        return self._widget_still_there() and self._wiring.exists(key)
+
+    def select(self, key: str) -> None:
+        self._posted_on_the_row(key, self._wiring.select)
+
+    def show(self, key: str) -> None:
+        self._posted_on_the_row(key, self._wiring.show)
+
+    def open(self, key: str) -> None:
+        self._posted_on_the_row(key, self._wiring.open)
+
+    def close(self, key: str) -> None:
+        self._posted_on_the_row(key, self._wiring.close)
+
+    def _posted_on_the_row(self, key: str, act: Callable[[str], None]) -> None:
+        # The posting rule actions follow everywhere here: answer first, run
+        # on the Tk thread after, and only if the row is still there to run on.
+        self._post(lambda: act(key) if self.still_there(key) else None)
+
+    def rectangle(self, key: str) -> tuple[int, int, int, int] | None:
+        return self._wiring.rectangle(key) if self.still_there(key) else None
+
+    def words(self, key: str) -> str | None:
+        return self._wiring.words(key) if self.still_there(key) else None
+
+    def is_selected(self, key: str) -> bool:
+        return self._wiring.is_selected(key) if self.still_there(key) else False
+
+    def is_open(self, key: str) -> bool:
+        return self._wiring.is_open(key) if self.still_there(key) else False
+
+    def parent(self, key: str) -> str | None:
+        return self._wiring.parent(key) if self.still_there(key) else None
+
+    def first(self) -> str | None:
+        return _an_edge_of(self._the_roots(), 0)
+
+    def last(self) -> str | None:
+        return _an_edge_of(self._the_roots(), -1)
+
+    def first_child(self, key: str) -> str | None:
+        return _an_edge_of(self._the_children_of(key), 0)
+
+    def last_child(self, key: str) -> str | None:
+        return _an_edge_of(self._the_children_of(key), -1)
+
+    def after(self, key: str) -> str | None:
+        return self._a_sibling_of(key, 1)
+
+    def before(self, key: str) -> str | None:
+        return self._a_sibling_of(key, -1)
+
+    def _a_sibling_of(self, key: str, step: int) -> str | None:
+        if not self.still_there(key):
+            return None
+        siblings = self._the_row_and_its_neighbours(key)
+        position = siblings.index(key) + step
+        if 0 <= position < len(siblings):
+            return siblings[position]
+        return None
+
+    def _the_row_and_its_neighbours(self, key: str) -> tuple[str, ...]:
+        holder = self._wiring.parent(key)
+        return self._wiring.roots() if holder is None else self._wiring.children(holder)
+
+    def _the_roots(self) -> tuple[str, ...]:
+        return self._wiring.roots() if self._widget_still_there() else ()
+
+    def _the_children_of(self, key: str) -> tuple[str, ...]:
+        return self._wiring.children(key) if self.still_there(key) else ()
+
+
+def _an_edge_of(keys: tuple[str, ...], edge: int) -> str | None:
+    return keys[edge] if keys else None
+
+
 def _nobody_said_a_value() -> str | None:
     return None
 
@@ -207,6 +334,8 @@ class Blueprint:
     # Where the class has no live value of its own, a value the application
     # said (set_acc_value) is still served to clients, read-only.
     value_the_application_said: Callable[[], str | None] = _nobody_said_a_value
+    # The rows a container answers for, None for a class that has no rows.
+    items: ItemsAnswers | None = None
 
 
 class ProviderPlatform(Protocol):
@@ -260,11 +389,18 @@ class ProviderLedger:
     """Which paths answer for themselves with what, and which asked not to."""
 
     def __init__(self) -> None:
-        self._hosting: dict[str, tuple[int, tuple[Pattern, ...]]] = {}
+        self._hosting: dict[str, tuple[int, tuple[Pattern, ...], bool]] = {}
         self._with_the_proxy: set[str] = set()
 
-    def hosted(self, path: str, hwnd: int, patterns: tuple[Pattern, ...]) -> None:
-        self._hosting[path] = (hwnd, patterns)
+    def hosted(
+        self,
+        path: str,
+        hwnd: int,
+        patterns: tuple[Pattern, ...],
+        *,
+        rows: bool = False,
+    ) -> None:
+        self._hosting[path] = (hwnd, patterns, rows)
 
     def gone_from(self, path: str) -> None:
         self._hosting.pop(path, None)
@@ -276,6 +412,10 @@ class ProviderLedger:
     def patterns_on(self, path: str) -> tuple[Pattern, ...]:
         standing = self._hosting.get(path)
         return standing[1] if standing is not None else ()
+
+    def answers_rows_on(self, path: str) -> bool:
+        standing = self._hosting.get(path)
+        return standing[2] if standing is not None else False
 
     def left_to_the_proxy(self, path: str) -> None:
         self._with_the_proxy.add(path)
@@ -344,7 +484,9 @@ class Providers:
             self.ledger.gone_from(path)
         blueprint = self._blueprint(hwnd, role, self._wiring_for(widget))
         self._platform.host(hwnd, blueprint)
-        self.ledger.hosted(path, hwnd, tuple(blueprint.patterns))
+        self.ledger.hosted(
+            path, hwnd, tuple(blueprint.patterns), rows=blueprint.items is not None
+        )
 
     def forget(self, path: str) -> None:
         # Bookkeeping only: `<Destroy>` means Windows already ordered the
@@ -378,6 +520,11 @@ class Providers:
             is_keyboard_focusable=bool(patterns),
             patterns=patterns,
             value_the_application_said=lambda: self._chosen_text(hwnd, PropId.VALUE),
+            items=(
+                ItemsAnswers(wiring.items, wiring.post, wiring.still_there)
+                if wiring.items is not None
+                else None
+            ),
         )
 
     def _role_in_force(self, hwnd: int, role: Role) -> Role:

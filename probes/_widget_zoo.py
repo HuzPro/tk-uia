@@ -156,10 +156,9 @@ def _annotate(
     say_everything: Callable[[dict[str, tk.Misc]], None],
 ) -> None:
     import tk_uia
-    from tk_uia import Strategy
 
     strategy = tk_uia.enable(root)
-    if strategy is not Strategy.ANNOTATED:
+    if not strategy.annotates:
         raise SystemExit(f"enable() reported {strategy}; there is nothing to survey")
     root.update_idletasks()
     (workdir / THE_REPORT).write_text(str(tk_uia.describe(root)), encoding="utf-8")

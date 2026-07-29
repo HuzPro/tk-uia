@@ -78,6 +78,10 @@ real form end to end.
 - `describe(root)` returns an audit you can `print()`: what a client gets and
   what is missing, with a reason and a fix per widget. Usable as data for CI
   gating.
+- Listbox rows and Treeview items are real elements: named, nested under
+  their branches, selected for real (the application hears its own
+  `<<ListboxSelect>>`/`<<TreeviewSelect>>`), scrolled into view through
+  `ScrollItem`, and a tree branch opens through `ExpandCollapse`.
 - Notebook tabs become real tab controls a client can switch without a click.
 - `annotate_only(root)` keeps the previous annotation-only behaviour, and
   `leave_to_the_proxy(widget)` opts a single widget out.
@@ -87,7 +91,9 @@ real form end to end.
 
 - In-process only. You can make your own application accessible, not someone
   else's.
-- Listbox rows and Treeview items are not exposed. Notebook tabs are.
+- A row takes one selection at a time through UIA: `Select` replaces the
+  selection, and `AddToSelection` is refused even where the widget's own
+  `selectmode` allows more.
 - A combobox has no ExpandCollapse yet, so a client cannot open its dropdown;
   choosing goes through `ValuePattern.SetValue`, which on a readonly combobox
   takes exactly the values a user could pick and fires the same

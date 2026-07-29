@@ -87,11 +87,11 @@ class Gap(Enum):
         "confident wrong answer where bare Tk gave none. bind_value_variable()."
     )
     ITEMS_NOT_IN_THE_TREE = (
-        "its rows or items are not in the accessibility tree at all. MSAA child "
-        "ids are not implemented here, so the widget is findable and its "
-        "contents are not. A notebook is the exception: its tabs are given "
-        "window handles of their own, and this is reported only for one whose "
-        "strip nothing could be found on."
+        "its rows or items are not in the accessibility tree, so the widget "
+        "is findable and its contents are not. A listbox or treeview "
+        "answering UIA for itself serves its rows and is not reported here; "
+        "annotation alone never serves them. A notebook is reported only "
+        "when nothing could be found on its strip."
     )
     CANNOT_BE_PRESSED = (
         "a press through the tree does nothing here. Whatever the MSAA proxy "
@@ -141,6 +141,7 @@ class WidgetDescription:
     tabs: tuple[str, ...] = ()
     is_window: bool = False
     patterns: tuple[object, ...] = ()
+    answers_rows: bool = False
 
 
 @dataclass(frozen=True)
@@ -196,11 +197,15 @@ def _with_what_the_provider_answers(
     if any(getattr(pattern, "name", "") == "VALUE" for pattern in patterns):
         # The value is pulled live, so the confident-empty answer is gone too.
         gaps = tuple(gap for gap in gaps if gap is not Gap.NO_VALUE)
+    rows = answers.answers_rows_on(widget.path)
+    if rows:
+        # The provider answers real rows now, so the widget is not hollow.
+        gaps = tuple(gap for gap in gaps if gap is not Gap.ITEMS_NOT_IN_THE_TREE)
     if answers.is_left_to_the_proxy(widget.path):
         gaps = (*gaps, Gap.LEFT_TO_THE_PROXY)
-    if patterns == widget.patterns and gaps == widget.gaps:
+    if patterns == widget.patterns and gaps == widget.gaps and not rows:
         return widget
-    return replace(widget, patterns=patterns, gaps=gaps)
+    return replace(widget, patterns=patterns, gaps=gaps, answers_rows=rows)
 
 
 def _and_whichever_of_them_a_client_cannot_tell_apart(
@@ -470,6 +475,8 @@ def _whatever_the_row_had_no_room_for(widget: WidgetDescription) -> Iterator[str
             for pattern in widget.patterns
         )
         yield f"{_UNDER_THE_ROW}answers UIA itself, with working: {working}"
+    if widget.answers_rows:
+        yield f"{_UNDER_THE_ROW}its rows answer UIA themselves"
     if widget.kept_in_step:
         following = ", ".join(prop.name.lower() for prop in widget.kept_in_step)
         yield f"{_UNDER_THE_ROW}kept in step with a variable: {following}"

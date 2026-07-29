@@ -1184,6 +1184,59 @@ def test_the_report_says_which_patterns_each_widget_answers_for_itself() -> None
     )
 
 
+def test_a_listbox_whose_rows_answer_for_themselves_is_not_reported_hollow() -> None:
+    # Given a listbox whose provider answers rows of its own
+    from tests.doubles import HeldPoster, RecordingPlatform
+    from tk_uia.provide import Providers, WidgetWiring
+
+    class SomeRows:
+        def count(self) -> int:
+            return 2
+
+        def words(self, index: int) -> str | None:
+            return "a row"
+
+        def select(self, index: int) -> None: ...
+
+        def is_selected(self, index: int) -> bool:
+            return False
+
+        def show(self, index: int) -> None: ...
+
+        def rectangle(self, index: int) -> tuple[int, int, int, int] | None:
+            return None
+
+    def wiring(widget):
+        return WidgetWiring(
+            words=lambda: None,
+            is_enabled=lambda: True,
+            post=HeldPoster(),
+            still_there=widget.winfo_exists,
+            items=SomeRows() if widget.winfo_class() == "Listbox" else None,
+        )
+
+    listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
+    root = FakeRoot(
+        FakeInterpreter("8.6.15", "win32", native=False), children=[listbox]
+    )
+    providers = Providers(RecordingPlatform(), wiring)
+    installation = install(root, RecordingStore(), providers=providers)
+
+    # When the application asks what it has told Windows
+    description = describe(root, installation)
+
+    # Then the listbox is no longer held hollow: its rows are in the tree
+    said = _what_the_description_says_about(description, str(listbox))
+    assert Gap.ITEMS_NOT_IN_THE_TREE not in said.gaps, (
+        f"a listbox answering its own rows is still reported as {said.gaps}"
+    )
+
+    # And the report says so, rather than only no longer complaining
+    assert "its rows answer UIA themselves" in str(description), (
+        f"the report never says the rows are served:\n{description}"
+    )
+
+
 def test_a_provided_headline_counts_the_widgets_answering_for_themselves() -> None:
     # Given an installation where providers were wired in
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")

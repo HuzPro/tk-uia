@@ -219,6 +219,9 @@ class _NothingAnswersForItself:
     def patterns_on(self, path: str) -> tuple[object, ...]:
         return ()
 
+    def answers_rows_on(self, path: str) -> bool:
+        return False
+
     def is_left_to_the_proxy(self, path: str) -> bool:
         return False
 

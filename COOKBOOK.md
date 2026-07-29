@@ -273,33 +273,27 @@ The `root.update()` above is what makes the report describe the window you are
 looking at. In a running application, `root.after(0, ...)` or a debug key
 binding does the same job.
 
-## A list of results, while its rows are not in the tree
+## A list of results
 
-A `tk.Listbox` is findable and its rows are not exposed (the README's
-Limitations say so, and `describe()` reports it per widget as
-`ITEMS_NOT_IN_THE_TREE`). Until they are, the least-bad pattern for the
-common "list of search results" window is to name the list and mirror the
-selected row into its accessible value:
+Name the list; the rows come with it:
 
 ```python
 results = tk.Listbox(root)
 tk_uia.enable(root)
 tk_uia.set_acc_name(results, "Search results")
-
-def say_the_selection(_event):
-    chosen = results.curselection()
-    if chosen:
-        tk_uia.set_acc_value(results, results.get(chosen[0]))
-
-results.bind("<<ListboxSelect>>", say_the_selection, add="+")
 ```
 
-A client then reads the list's current row from its ValuePattern (read-only:
-the value is the application's word about itself, so clients cannot write
-it), and a screen reader following focus hears the list's name. It is a
-mirror of the selection, not access to the rows; browsing the list still
-means arrow keys in the app, and the rows themselves stay on the
-[ROADMAP](https://github.com/HuzPro/tk-uia/blob/main/ROADMAP.md).
+A client walking into `Search results` finds every row as a named list item,
+in the application's order, selects one through its SelectionItem pattern
+(the application hears the same `<<ListboxSelect>>` a user's choice fires),
+and brings an offscreen row into view through ScrollItem. Rows are read from
+the widget at the moment a client asks, so inserting, deleting or renaming
+needs no further call. A `ttk.Treeview` works the same way, with each
+branch's items beneath it and ExpandCollapse to open a branch.
+
+Two honest edges: a row takes one selection at a time through UIA even where
+`selectmode` allows more, and a row scrolled out of view answers an empty
+rectangle and `IsOffscreen` until something scrolls it in.
 
 ## What a screen reader user gets
 

@@ -67,8 +67,36 @@ pulled live; name and value changes raise property-changed events;
 `annotate_only()` keeps the old behaviour and `leave_to_the_proxy()` opts one
 widget out; `describe()` says who answers for what and why not.
 
+## Shipped since 0.7
+
+- **Rows and items, as elements of their own.** A `Listbox`'s rows and a
+  `Treeview`'s items are in the accessibility tree: the container's provider
+  is a UIA fragment root and every row a fragment, so no window handle is
+  spent on any of them and a thousand rows cost nothing until a client walks
+  to one. `SelectionItem` selects for real and the application hears its own
+  `<<ListboxSelect>>` or `<<TreeviewSelect>>`; `ScrollItem` scrolls a row
+  into view; `ExpandCollapse` opens a branch. Every answer is pulled at the
+  moment a client asks, so edits, scrolling and folding are answered as they
+  stand.
+
+  Worth recording, because it repeats the 0.4.0 tab lesson: the entry this
+  replaces said reaching rows means MSAA child ids under one HWND, and that
+  scrolling item counts rule out the tab-overlay trick. Both halves of that
+  were conclusions nobody had tried to falsify after 0.7 landed. The provider
+  layer already carries windowless children; the machinery was navigation,
+  not annotation. What genuinely remains from that entry is a `Menu`'s items,
+  which Windows serves natively (`MENUS_ARE_NATIVE`), and the multi-select
+  gap below.
+
 ## Next
 
+- **`AddToSelection` where the widget itself takes more than one.** A row
+  answers `Select` alone today: on an `extended` or `multiple` listbox and a
+  multi-select treeview, adding and removing from a selection are refusals a
+  client can measure. The wiring is `selection_set`/`selection_add`; the work
+  is deciding how `CanSelectMultiple` is answered without an
+  `ISelectionProvider` on the container, which belongs with the selection
+  containers entry below.
 - **ExpandCollapse for `Menubutton` and `TCombobox`.** Blocked on a measured
   wiring that really opens the dropdown, not on machinery: the candidates are
   `ttk::combobox::Post`/`Unpost` and `menu.post`, driven from an idle
@@ -154,33 +182,7 @@ widget out; `describe()` says who answers for what and why not.
   can forget to keep true, because the push happens on the write that changed
   them.
   What is left for a pull is the widget whose contents live somewhere it never
-  named, and the compound widgets below.
-- **Compound widgets, not just the HWND they live in.** A `Listbox` is annotated
-  as a `LIST` and its *rows* are invisible; the same goes for `Treeview` rows and
-  a `Menu`'s items. This is the last widget-level gap: as of 0.5.0 every widget
-  class both toolkits ship has a role, and `COVERAGE.md` measures the result at
-  17 of 18 classic widgets and 20 of 20 themed ones typed, named and queryable.
-  What is left is what is *inside* them.
-  Exposing them means child ids under one HWND: MSAA's `IAccessible` child
-  model, which is a different piece of machinery from annotating a window
-  handle. This is documented as a caveat in the README, because a user reads the
-  shop window rather than the roadmap, and "your listbox is findable and its
-  contents are not" is something to know before adopting rather than after.
-  `describe(root)` names the affected widgets per path
-  (`ITEMS_NOT_IN_THE_TREE`), which is the same information at the point where an
-  author can act on it.
-
-  **`Notebook` tabs came off this list in 0.4.0, and how is worth recording.**
-  The assumption above, that reaching *any* compound widget's items needs the
-  server, was not measured, and for tabs it was wrong. A tab is not a window,
-  but nothing stops one being given a window: a `WS_EX_TRANSPARENT`,
-  owner-drawn child positioned over the tab is a real HWND, so the annotation
-  machinery already here applies unchanged, it paints nothing, and a click goes
-  through it to Tk. That does not rescue rows and items: they scroll and there
-  can be thousands of them, where a notebook has four, so the entry above
-  stands. The lesson is narrower and worth keeping: "this needs a different
-  mechanism" was a conclusion nobody had tried to falsify.
-
+  named.
 - **`infer_names_from_layout` should prefer the nearest caption by position.**
   It picks a row's subject by child order today, which misfires on a paginator
   built right-to-left: ttkbootstrap's `Page [entry] of [1]` row named the entry
