@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 - 2026-07-29
 
 The release where a container's contents become real elements. A listbox's
 rows and a treeview's items are served to UI Automation as elements of their

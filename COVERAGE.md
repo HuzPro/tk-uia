@@ -20,7 +20,7 @@ reach reads **no query**.
 | widget | `winfo_class` | bare Tk | after `enable()` | + what the app says | patterns | `describe()` says | a test writes |
 |---|---|---|---|---|---|---|---|
 | `tk.Label` | `Label` | `ImageControl` - | `TextControl` 'a Label' | `TextControl` 'a Label' |  | - | `app.text("a Label")` |
-| `tk.Button` | `Button` | `ButtonControl` - | `ButtonControl` 'a Button' | `ButtonControl` 'a Button' |  | - | `app.button("a Button")` |
+| `tk.Button` | `Button` | `ButtonControl` - | `ButtonControl` 'a Button' | `ButtonControl` 'a Button' |  | CANNOT_BE_PRESSED | `app.button("a Button")` |
 | `tk.Entry` | `Entry` | `PaneControl` - | `EditControl` - | `EditControl` 'Task title' | Value | - | `app.textbox("Task title")` |
 | `tk.Text` | `Text` | `PaneControl` - | `EditControl` - | `EditControl` 'Notes' | Value | - | `app.textbox("Notes")` |
 | `tk.Checkbutton` | `Checkbutton` | `ButtonControl` - | `CheckBoxControl` 'a Checkbutton' | `CheckBoxControl` 'a Checkbutton' | Toggle | - | `app.checkbox("a Checkbutton")` |
@@ -55,7 +55,7 @@ reach reads **no query**.
 | widget | `winfo_class` | bare Tk | after `enable()` | + what the app says | patterns | `describe()` says | a test writes |
 |---|---|---|---|---|---|---|---|
 | `ttk.Label` | `TLabel` | `PaneControl` - | `TextControl` 'a Label' | `TextControl` 'a Label' |  | - | `app.text("a Label")` |
-| `ttk.Button` | `TButton` | `PaneControl` - | `ButtonControl` 'a Button' | `ButtonControl` 'a Button' |  | - | `app.button("a Button")` |
+| `ttk.Button` | `TButton` | `PaneControl` - | `ButtonControl` 'a Button' | `ButtonControl` 'a Button' |  | CANNOT_BE_PRESSED | `app.button("a Button")` |
 | `ttk.Entry` | `TEntry` | `PaneControl` - | `EditControl` - | `EditControl` 'Task title' | Value | - | `app.textbox("Task title")` |
 | `ttk.Checkbutton` | `TCheckbutton` | `PaneControl` - | `CheckBoxControl` 'a Checkbutton' | `CheckBoxControl` 'a Checkbutton' | Toggle | - | `app.checkbox("a Checkbutton")` |
 | `ttk.Radiobutton` | `TRadiobutton` | `PaneControl` - | `RadioButtonControl` 'a Radiobutton' | `RadioButtonControl` 'a Radiobutton' | SelectionItem | - | `app.radio("a Radiobutton")` |

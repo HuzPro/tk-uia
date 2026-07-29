@@ -27,12 +27,16 @@ def create_the_task():
     status.set("Created 1 task.")
 
 
+def browse_for_a_path():
+    ...  # a real form opens a file dialog here
+
+
 file_row = tk.Frame(root)
 file_caption = tk.Label(file_row, text="Task file:")
 file_caption.pack(side="left")
 task_file = tk.Entry(file_row, width=24)
 task_file.pack(side="left", padx=4)
-tk.Button(file_row, text="Browse...").pack(side="left")
+tk.Button(file_row, text="Browse...", command=browse_for_a_path).pack(side="left")
 file_row.pack(fill="x", padx=8, pady=4)
 
 folder_row = tk.Frame(root)
@@ -40,7 +44,7 @@ folder_caption = tk.Label(folder_row, text="Output folder:")
 folder_caption.pack(side="left")
 output_folder = tk.Entry(folder_row, width=24)
 output_folder.pack(side="left", padx=4)
-tk.Button(folder_row, text="Browse...").pack(side="left")
+tk.Button(folder_row, text="Browse...", command=browse_for_a_path).pack(side="left")
 folder_row.pack(fill="x", padx=8, pady=4)
 
 tk.Checkbutton(root, text="Overwrite existing files", variable=overwrite).pack(
@@ -166,7 +170,7 @@ print(tk_uia.describe(root))
 With `enable()` and the two `label_for` calls, that prints:
 
 ```
-tk-uia 0.7.0 -- what this application has told Windows it is showing
+tk-uia 0.8.0 -- what this application has told Windows it is showing
 enable() reported PROVIDED. 12 widgets under .: 11 written to, 1 not.
 6 of them answer UIA themselves with working patterns; the rest are typed and named through the proxy.
 

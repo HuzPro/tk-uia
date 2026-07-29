@@ -96,10 +96,10 @@ class Gap(Enum):
     CANNOT_BE_PRESSED = (
         "a press through the tree does nothing here. Whatever the MSAA proxy "
         "offers for it (a DefaultAction, and on a real button class an Invoke) "
-        "is a synthesised BM_CLICK an owner-drawn Tk widget ignores. Widget "
-        "classes with wired patterns answer UIA themselves and genuinely "
-        "press; a role assigned by hand brings no working pattern yet, so a "
-        "client must click this one."
+        "is a synthesised BM_CLICK an owner-drawn Tk widget ignores. A wired "
+        "class with a -command answers UIA itself and genuinely presses; a "
+        "button with no command has nothing to run, and a role assigned by "
+        "hand brings no working pattern yet, so a client must click this one."
     )
     LEFT_TO_THE_PROXY = (
         "the application asked for this widget to be left to the MSAA proxy, so "

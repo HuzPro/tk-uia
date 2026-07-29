@@ -594,8 +594,9 @@ below, against a deliberately mixed window: classic `tk` and `ttk`, a canvas, a
 listbox, a notebook, a frame that is never packed, a second toplevel.
 
 ```
-tk-uia 0.6.2 -- what this application has told Windows it is showing
-enable() reported ANNOTATED. 18 widgets under .: 13 written to, 5 not.
+tk-uia 0.8.0 -- what this application has told Windows it is showing
+enable() reported PROVIDED. 18 widgets under .: 13 written to, 5 not.
+3 of them answer UIA themselves with working patterns; the rest are typed and named through the proxy.
 
 WIDGET              CLASS      ROLE                NAME         VALUE               ID
 ------------------  ---------  ------------------  -----------  ------------------  ----
@@ -604,12 +605,15 @@ WIDGET              CLASS      ROLE                NAME         VALUE           
 .!button            Button     PUSH_BUTTON (43)    'New Task'   -                   4207
     also written: DESCRIPTION='creates a task and clears the form'
 .!entry             Entry      TEXT (42)           -            -                   -
+    answers UIA itself, with working: Value
 .!entry2            Entry      TEXT (42)           'Title'      'Write the report'  -
+    answers UIA itself, with working: Value
     kept in step with a variable: value
 .!label2            Label      STATIC_TEXT (41)    'ready'      -                   -
     kept in step with a variable: name
 .!canvas            Canvas     GRAPHIC (40)        -            -                   -
 .!listbox           Listbox    LIST (33)           -            -                   -
+    its rows answer UIA themselves
 ...
 .!notebook          TNotebook  PAGE_TAB_LIST (60)  -            -                   -
     tabs a client can reach: Open, Done
@@ -641,12 +645,15 @@ WHAT A CLIENT WILL NOT GET, AND WHY
       .!label  (Label)
       .!label3  (Label)
 
-  NO_VALUE  (2)
-    no accessible value. The role gives this widget a ValuePattern it did
-    not have before, and it reads '' until something writes one -- a
-    confident wrong answer where bare Tk gave none. bind_value_variable().
-      .!entry  (Entry)
-      .!combobox  (TCombobox)
+  CANNOT_BE_PRESSED  (2)
+    a press through the tree does nothing here. Whatever the MSAA proxy
+    offers for it (a DefaultAction, and on a real button class an Invoke)
+    is a synthesised BM_CLICK an owner-drawn Tk widget ignores. A wired
+    class with a -command answers UIA itself and genuinely presses; a
+    button with no command has nothing to run, and a role assigned by hand
+    brings no working pattern yet, so a client must click this one.
+      .!button  (Button)
+      .!button2  (TButton)
 ...
 
 LEFT ALONE ON PURPOSE
@@ -712,7 +719,7 @@ has to be parsed back out of it.
 
 | `Description` | |
 |---|---|
-| `strategy` | what `enable()` reported: `ANNOTATED`, `NATIVE` or `UNSUPPORTED` |
+| `strategy` | what `enable()` reported: `PROVIDED`, `ANNOTATED`, `NATIVE` or `UNSUPPORTED` |
 | `root` | the path the walk started from |
 | `widgets` | one `WidgetDescription` each, in walk order, the root first |
 | `orphans` | paths annotated and not found under this root: either this is not the application's real root, or a widget went away by a route that never reached `forget()` |
