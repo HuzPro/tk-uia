@@ -29,7 +29,7 @@ class Win32Overlays:
     """Real child windows over a real notebook's real tabs."""
 
     def create(self, parent: int, left: int, top: int, width: int, height: int) -> int:
-        made = _create_window()(
+        made = _user32().CreateWindowExW(
             _WS_EX_TRANSPARENT,
             _A_PLAIN_STATIC,
             None,
@@ -51,54 +51,48 @@ class Win32Overlays:
         return int(made)
 
     def move(self, hwnd: int, left: int, top: int, width: int, height: int) -> None:
-        _move_window()(ctypes.c_void_p(hwnd), left, top, width, height, _REPAINT_IT)
+        _user32().MoveWindow(
+            ctypes.c_void_p(hwnd), left, top, width, height, _REPAINT_IT
+        )
 
     def destroy(self, hwnd: int) -> None:
-        _destroy_window()(ctypes.c_void_p(hwnd))
-
-
-def _create_window() -> Any:
-    make = _user32().CreateWindowExW
-    make.restype = ctypes.c_void_p
-    make.argtypes = (
-        ctypes.c_uint32,
-        ctypes.c_wchar_p,
-        ctypes.c_wchar_p,
-        ctypes.c_uint32,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_void_p,
-        ctypes.c_void_p,
-        ctypes.c_void_p,
-        ctypes.c_void_p,
-    )
-    return make
-
-
-def _move_window() -> Any:
-    move = _user32().MoveWindow
-    move.restype = ctypes.c_int
-    move.argtypes = (
-        ctypes.c_void_p,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-    )
-    return move
-
-
-def _destroy_window() -> Any:
-    close = _user32().DestroyWindow
-    close.restype = ctypes.c_int
-    close.argtypes = (ctypes.c_void_p,)
-    return close
+        _user32().DestroyWindow(ctypes.c_void_p(hwnd))
 
 
 def _user32() -> Any:
-    # Per call rather than at import: `ctypes.WinDLL` cannot be built off
-    # Windows, and this module still has to import there.
-    return ctypes.WinDLL("user32", use_last_error=True)
+    # Built on first use rather than at import: `ctypes.WinDLL` cannot be built
+    # off Windows, and this module still has to import there.
+    global _USER32
+    if _USER32 is None:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.CreateWindowExW.restype = ctypes.c_void_p
+        user32.CreateWindowExW.argtypes = (
+            ctypes.c_uint32,
+            ctypes.c_wchar_p,
+            ctypes.c_wchar_p,
+            ctypes.c_uint32,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+        )
+        user32.MoveWindow.restype = ctypes.c_int
+        user32.MoveWindow.argtypes = (
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+        )
+        user32.DestroyWindow.restype = ctypes.c_int
+        user32.DestroyWindow.argtypes = (ctypes.c_void_p,)
+        _USER32 = user32
+    return _USER32
+
+
+_USER32: Any = None

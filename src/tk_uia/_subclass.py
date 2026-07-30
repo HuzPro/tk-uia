@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 WM_GETOBJECT = 0x003D
@@ -15,12 +16,19 @@ Responder = Callable[[int, int, int], int | None]
 """Answers a WM_GETOBJECT, or None to let the message fall through."""
 
 
+@dataclass(frozen=True)
+class _WhoAnswersFor:
+    """One window's two callbacks, so neither can be registered without the other."""
+
+    respond: Responder
+    gone: Callable[[int], None]
+
+
 class WindowSubclasses:
     """Puts a responder in each handle's message path, and takes it out again."""
 
     def __init__(self, note_trouble: Callable[[str], None]) -> None:
-        self._respond: dict[int, Responder] = {}
-        self._gone: dict[int, Callable[[int], None]] = {}
+        self._answering: dict[int, _WhoAnswersFor] = {}
         self._note = note_trouble
         # Built on first use (WINFUNCTYPE does not exist off Windows) and then
         # never released: a collected callback is a crash on the next message.
@@ -29,18 +37,15 @@ class WindowSubclasses:
     def put_in_the_path_of(
         self, hwnd: int, respond: Responder, gone: Callable[[int], None]
     ) -> None:
-        self._respond[hwnd] = respond
-        self._gone[hwnd] = gone
+        self._answering[hwnd] = _WhoAnswersFor(respond, gone)
         if not _comctl32().SetWindowSubclass(
             hwnd, self._the_one_proc(), _OUR_SUBCLASS_ID, 0
         ):
-            self._respond.pop(hwnd, None)
-            self._gone.pop(hwnd, None)
+            self._answering.pop(hwnd, None)
             raise ctypes.WinError(ctypes.get_last_error())
 
     def step_out_of(self, hwnd: int) -> None:
-        self._respond.pop(hwnd, None)
-        self._gone.pop(hwnd, None)
+        self._answering.pop(hwnd, None)
         _comctl32().RemoveWindowSubclass(hwnd, self._the_one_proc(), _OUR_SUBCLASS_ID)
 
     def _the_one_proc(self) -> Any:
@@ -51,16 +56,15 @@ class WindowSubclasses:
     def _handle(self, hwnd, msg, wparam, lparam, _subclass_id, _reference):
         try:
             if msg == WM_GETOBJECT:
-                respond = self._respond.get(hwnd)
-                if respond is not None:
-                    answer = respond(hwnd, wparam, lparam)
+                answering = self._answering.get(hwnd)
+                if answering is not None:
+                    answer = answering.respond(hwnd, wparam, lparam)
                     if answer is not None:
                         return answer
             elif msg == WM_DESTROY:
-                self._respond.pop(hwnd, None)
-                gone = self._gone.pop(hwnd, None)
-                if gone is not None:
-                    gone(hwnd)
+                answering = self._answering.pop(hwnd, None)
+                if answering is not None:
+                    answering.gone(hwnd)
                 _comctl32().RemoveWindowSubclass(
                     hwnd, self._the_one_proc(), _OUR_SUBCLASS_ID
                 )

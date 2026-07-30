@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import ctypes
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from tk_uia.annotate import PropId
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _S_OK = 0
 _S_FALSE = 1
@@ -102,6 +105,10 @@ _GUID_FOR_PROP = {
     ),
 }
 
+# Every annotation this package can write, as `ClearHwndProps` wants them. Built
+# once: `clear` runs per widget destroyed, and the set never changes.
+_EVERY_PROP_GUID = (_Guid * len(_GUID_FOR_PROP))(*_GUID_FOR_PROP.values())
+
 
 class AccPropServicesStore:
     """Annotations, written where the MSAA-to-UIA bridge reads them."""
@@ -110,10 +117,11 @@ class AccPropServicesStore:
         # Nothing is reached for here: `enable()` builds one of these before the
         # version gate has run, and on a machine with no MSAA it is never used.
         self._services: ctypes.c_void_p | None = None
+        self._calls: dict[int, Any] = {}
 
     def set_string(self, hwnd: int, prop: PropId, value: str) -> None:
         services = self._reached()
-        call = _method(services, _SLOT_SET_HWND_PROP_STR, _set_hwnd_prop_str())
+        call = self._the_call_in(_SLOT_SET_HWND_PROP_STR, _set_hwnd_prop_str)
         _checked(
             call(
                 services,
@@ -131,7 +139,7 @@ class AccPropServicesStore:
         holder.vt = _VT_I4
         holder.value = value
         services = self._reached()
-        call = _method(services, _SLOT_SET_HWND_PROP, _set_hwnd_prop())
+        call = self._the_call_in(_SLOT_SET_HWND_PROP, _set_hwnd_prop)
         _checked(
             call(
                 services,
@@ -151,18 +159,16 @@ class AccPropServicesStore:
         _set_window_long()(ctypes.c_void_p(hwnd), _GWLP_ID, control_id)
 
     def clear(self, hwnd: int) -> None:
-        props = list(_GUID_FOR_PROP.values())
-        everything = (_Guid * len(props))(*props)
         services = self._reached()
-        call = _method(services, _SLOT_CLEAR_HWND_PROPS, _clear_hwnd_props())
+        call = self._the_call_in(_SLOT_CLEAR_HWND_PROPS, _clear_hwnd_props)
         _checked(
             call(
                 services,
                 ctypes.c_void_p(hwnd),
                 _OBJID_CLIENT,
                 _CHILDID_SELF,
-                everything,
-                len(props),
+                _EVERY_PROP_GUID,
+                len(_EVERY_PROP_GUID),
             ),
             "ClearHwndProps",
         )
@@ -171,6 +177,14 @@ class AccPropServicesStore:
         if self._services is None:
             self._services = _acc_prop_services()
         return self._services
+
+    def _the_call_in(self, slot: int, prototype: Callable[[], Any]) -> Any:
+        """The bound vtable entry, cast once rather than per annotation written."""
+        call = self._calls.get(slot)
+        if call is None:
+            call = _method(self._reached(), slot, prototype())
+            self._calls[slot] = call
+        return call
 
 
 def screen_reader_running() -> bool:
