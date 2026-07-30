@@ -9,7 +9,7 @@ to UI Automation. Importing this reaches for neither `tkinter` nor
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from tk_uia.annotate import (
     AnnotationRefused,
@@ -33,6 +33,10 @@ from tk_uia.tkversion import Strategy
 
 if TYPE_CHECKING:
     import tkinter
+
+    from tk_uia.annotate import Notifier, PropId, ProvidedWidgets
+    from tk_uia.provide import ProviderPlatform
+    from tk_uia.tabs import TabActivation
 
 __version__ = "0.8.0"
 
@@ -154,9 +158,9 @@ def _annotate_only(
 def _install_with(
     root: tkinter.Misc,
     roles: Mapping[str, Role] | None,
-    providers: object | None,
-    notifier: object | None = None,
-    tab_activation: object | None = None,
+    providers: ProvidedWidgets | None,
+    notifier: Notifier | None = None,
+    tab_activation: TabActivation | None = None,
     providers_stood_down_because: str | None = None,
 ) -> Installation:
     from tk_uia._accprop import AccPropServicesStore
@@ -187,7 +191,7 @@ def _install_with(
 class _WhateverTheInstallationChose:
     """The application's chosen properties, read from wherever they end up."""
 
-    def chosen(self, hwnd: int, prop: object) -> str | int | None:
+    def chosen(self, hwnd: int, prop: PropId) -> str | int | None:
         if _installed is None:
             return None
         return _installed.annotator.ledger.chosen(hwnd, prop)
@@ -200,24 +204,18 @@ class _AnnouncesThroughTheProvider:
     own synchronous call fired is a deadlock window.
     """
 
-    _THE_UIA_PROPERTY_FOR: ClassVar[Mapping[str, int]] = {
-        "NAME": 30005,
-        "VALUE": 30045,
-    }
-
-    def __init__(self, root: tkinter.Misc, platform: object) -> None:
+    def __init__(self, root: tkinter.Misc, platform: ProviderPlatform) -> None:
         self._root = root
         self._platform = platform
 
-    def changed(self, hwnd: int, prop: object, now: str | int) -> None:
-        uia_property = self._THE_UIA_PROPERTY_FOR.get(getattr(prop, "name", ""))
-        if uia_property is None:
+    def changed(self, hwnd: int, prop: PropId, now: str | int) -> None:
+        if not self._platform.announces(prop):
             return
         from tkinter import TclError
 
         try:
             self._root.after_idle(
-                lambda: self._platform.announce_change(hwnd, uia_property, now)
+                lambda: self._platform.announce_change(hwnd, prop, now)
             )
         except TclError:
             # The application is tearing down; there is nobody left to tell.

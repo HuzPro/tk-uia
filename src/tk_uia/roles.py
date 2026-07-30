@@ -40,6 +40,12 @@ class Role(Enum):
     MENU_BUTTON = 62
 
 
+# A table because `Role(43)` raises for a number no member carries.
+THE_ROLE_EACH_NUMBER_MEANS: Mapping[int, Role] = MappingProxyType(
+    {role.value: role for role in Role}
+)
+
+
 ROLE_FOR_TK_CLASS: Mapping[str, Role] = MappingProxyType(
     {
         # Listed, not derived: `ttk.Treeview` answers "Treeview", so the

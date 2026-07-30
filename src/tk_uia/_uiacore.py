@@ -13,6 +13,7 @@ import struct
 from typing import TYPE_CHECKING, Any
 
 from tk_uia._subclass import WindowSubclasses
+from tk_uia.annotate import PropId
 from tk_uia.provide import (
     Pattern,
     SelectionChange,
@@ -39,10 +40,6 @@ _NavigateDirection_LastChild = 4
 _UIA_ExpandCollapsePatternId = 10005
 _UIA_ScrollItemPatternId = 10017
 
-_UIA_ListItemControlTypeId = 50007
-_UIA_TreeControlTypeId = 50023
-_UIA_TreeItemControlTypeId = 50024
-
 _ExpandCollapseState_Collapsed = 0
 _ExpandCollapseState_Expanded = 1
 _ExpandCollapseState_LeafNode = 3
@@ -59,7 +56,15 @@ _UIA_IsKeyboardFocusablePropertyId = 30009
 _UIA_IsEnabledPropertyId = 30010
 _UIA_HelpTextPropertyId = 30013
 _UIA_IsOffscreenPropertyId = 30022
+_UIA_ValueValuePropertyId = 30045
 _UIA_FullDescriptionPropertyId = 30159
+
+# The properties a change is worth raising an event for; anything absent here
+# is written to MSAA and read back on demand, never announced.
+_THE_UIA_PROPERTY_FOR_EACH_PROP: Mapping[PropId, int] = {
+    PropId.NAME: _UIA_NamePropertyId,
+    PropId.VALUE: _UIA_ValueValuePropertyId,
+}
 
 _HRESULT = ctypes.c_long
 
@@ -209,7 +214,13 @@ class ComProviderPlatform:
         self._let_go(hwnd)
         self._subclasses.step_out_of(hwnd)
 
-    def announce_change(self, hwnd: int, uia_property: int, now: object) -> None:
+    def announces(self, prop: PropId) -> bool:
+        return prop in _THE_UIA_PROPERTY_FOR_EACH_PROP
+
+    def announce_change(self, hwnd: int, prop: PropId, now: object) -> None:
+        uia_property = _THE_UIA_PROPERTY_FOR_EACH_PROP.get(prop)
+        if uia_property is None:
+            return
         # Resolved at raise time: a widget unhosted since the change was posted
         # has nothing to announce and nobody to announce it as.
         hosted = _BY_HWND.get(hwnd)
@@ -325,13 +336,6 @@ def _hand_out_a_row(container: _Hosted, key: str, out: int) -> None:
 def _hand_out_another_row(row: _HostedRow, key: str | None, out: int) -> None:
     if key is not None:
         _hand_out_a_row(row.container, key, out)
-
-
-def _the_type_of_a_row_inside(container: _Hosted) -> int:
-    # A tree's rows are tree items; every other container's are list items.
-    if container.blueprint.control_type() == _UIA_TreeControlTypeId:
-        return _UIA_TreeItemControlTypeId
-    return _UIA_ListItemControlTypeId
 
 
 def _a_runtime_id_appending(number: int) -> int:
@@ -808,7 +812,7 @@ class _ComLayer:
             if words:
                 variant.hold_words(words)
         elif property_id == _UIA_ControlTypePropertyId:
-            variant.hold_number(_the_type_of_a_row_inside(row.container))
+            variant.hold_number(items.row_control_type())
         elif property_id == _UIA_IsEnabledPropertyId:
             variant.hold_truth(bool(row.container.blueprint.is_enabled()))
         elif property_id == _UIA_IsOffscreenPropertyId:

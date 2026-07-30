@@ -23,7 +23,7 @@ from tk_uia.annotate import (
     a_widget_this_package_speaks_for,
     roles_in_force,
 )
-from tk_uia.roles import Role
+from tk_uia.roles import THE_ROLE_EACH_NUMBER_MEANS, Role
 
 
 class ProviderRefused(AnnotationRefused):
@@ -67,7 +67,11 @@ _UIA_CONTROL_TYPE_FOR_ROLE: Mapping[Role, int] = {
     Role.MENU_BUTTON: 50000,
 }
 
-_THE_ROLE_BEHIND_EACH_NUMBER: Mapping[int, Role] = {role.value: role for role in Role}
+_A_LIST_ITEM = 50007
+_A_TREE_ITEM = 50024
+
+# A tree's rows are tree items; every other container's are list items.
+_UIA_CONTROL_TYPE_FOR_A_ROW_OF: Mapping[Role, int] = {Role.OUTLINE: _A_TREE_ITEM}
 
 
 class InvokeWiring(Protocol):
@@ -242,10 +246,16 @@ class ItemsAnswers:
         wiring: ItemsWiring,
         post: Poster,
         widget_still_there: Callable[[], bool],
+        row_control_type: Callable[[], int],
     ) -> None:
         self._wiring = wiring
         self._post = post
         self._widget_still_there = widget_still_there
+        self._row_control_type = row_control_type
+
+    def row_control_type(self) -> int:
+        """What kind of element a client should see each of these rows as."""
+        return self._row_control_type()
 
     def still_there(self, key: str) -> bool:
         return self._widget_still_there() and self._wiring.exists(key)
@@ -388,13 +398,16 @@ class Blueprint:
     help_text: Callable[[], str | None]
     description: Callable[[], str | None]
     is_enabled: Callable[[], bool]
-    is_keyboard_focusable: bool
     patterns: Mapping[Pattern, Answers]
     # Where the class has no live value of its own, a value the application
     # said (set_acc_value) is still served to clients, read-only.
     value_the_application_said: Callable[[], str | None] = _nobody_said_a_value
     # The rows a container answers for, None for a class that has no rows.
     items: ItemsAnswers | None = None
+
+    @property
+    def is_keyboard_focusable(self) -> bool:
+        return bool(self.patterns)
 
 
 class ProviderPlatform(Protocol):
@@ -404,7 +417,9 @@ class ProviderPlatform(Protocol):
 
     def unhost(self, hwnd: int) -> None: ...
 
-    def announce_change(self, hwnd: int, uia_property: int, now: object) -> None: ...
+    def announces(self, prop: PropId) -> bool: ...
+
+    def announce_change(self, hwnd: int, prop: PropId, now: object) -> None: ...
 
     def announce_selection(self, hwnd: int, now: tuple[str, ...]) -> None: ...
 
@@ -588,11 +603,17 @@ class Providers:
             help_text=lambda: self._chosen_text(hwnd, PropId.HELP),
             description=lambda: self._chosen_text(hwnd, PropId.DESCRIPTION),
             is_enabled=wiring.is_enabled,
-            is_keyboard_focusable=bool(patterns),
             patterns=patterns,
             value_the_application_said=lambda: self._chosen_text(hwnd, PropId.VALUE),
             items=(
-                ItemsAnswers(wiring.items, wiring.post, wiring.still_there)
+                ItemsAnswers(
+                    wiring.items,
+                    wiring.post,
+                    wiring.still_there,
+                    lambda: _UIA_CONTROL_TYPE_FOR_A_ROW_OF.get(
+                        self._role_in_force(hwnd, role), _A_LIST_ITEM
+                    ),
+                )
                 if wiring.items is not None
                 else None
             ),
@@ -600,16 +621,13 @@ class Providers:
 
     def _role_in_force(self, hwnd: int, role: Role) -> Role:
         said = self._said.chosen(hwnd, PropId.ROLE)
-        if isinstance(said, int) and said in _THE_ROLE_BEHIND_EACH_NUMBER:
-            return _THE_ROLE_BEHIND_EACH_NUMBER[said]
+        if isinstance(said, int) and said in THE_ROLE_EACH_NUMBER_MEANS:
+            return THE_ROLE_EACH_NUMBER_MEANS[said]
         return role
 
     def _chosen_text(self, hwnd: int, prop: PropId) -> str | None:
         said = self._said.chosen(hwnd, prop)
         return str(said) if said is not None else None
-
-
-_A_TAB_ITEM = 50019
 
 
 class ProvidedTabs:
@@ -625,12 +643,11 @@ class ProvidedTabs:
         self._platform.host(
             hwnd,
             Blueprint(
-                control_type=lambda: _A_TAB_ITEM,
+                control_type=lambda: _UIA_CONTROL_TYPE_FOR_ROLE[Role.PAGE_TAB],
                 name=wiring.text,
                 help_text=lambda: None,
                 description=lambda: None,
                 is_enabled=lambda: True,
-                is_keyboard_focusable=True,
                 patterns={
                     Pattern.SELECTION_ITEM: SelectionAnswers(
                         select=select, is_selected=wiring.is_selected
@@ -659,20 +676,17 @@ class InertProviders:
 def _the_answers_this_wiring_carries(
     wiring: WidgetWiring,
 ) -> Mapping[Pattern, Answers]:
+    def posted(act: Callable[[], None]) -> Callable[[], None]:
+        return a_press_that_returns_before_it_runs(wiring.post, act, wiring.still_there)
+
     answers: dict[Pattern, Answers] = {}
     if wiring.invoke is not None:
         answers[Pattern.INVOKE] = InvokeAnswers(
-            press=a_press_that_returns_before_it_runs(
-                wiring.post, wiring.invoke.press, wiring.still_there
-            ),
-            offered=wiring.invoke.offered,
+            press=posted(wiring.invoke.press), offered=wiring.invoke.offered
         )
     if wiring.toggle is not None:
         answers[Pattern.TOGGLE] = ToggleAnswers(
-            flip=a_press_that_returns_before_it_runs(
-                wiring.post, wiring.toggle.flip, wiring.still_there
-            ),
-            is_on=wiring.toggle.is_on,
+            flip=posted(wiring.toggle.flip), is_on=wiring.toggle.is_on
         )
     if wiring.value is not None:
         answers[Pattern.VALUE] = ValueAnswers(
@@ -691,9 +705,7 @@ def _the_answers_this_wiring_carries(
         )
     if wiring.selection is not None:
         answers[Pattern.SELECTION_ITEM] = SelectionAnswers(
-            select=a_press_that_returns_before_it_runs(
-                wiring.post, wiring.selection.select, wiring.still_there
-            ),
+            select=posted(wiring.selection.select),
             is_selected=wiring.selection.is_selected,
         )
     return answers

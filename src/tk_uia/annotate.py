@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Protocol
 
-from tk_uia.roles import ROLE_FOR_TK_CLASS, Role
+from tk_uia.roles import ROLE_FOR_TK_CLASS, THE_ROLE_EACH_NUMBER_MEANS, Role
 from tk_uia.tkversion import Strategy, TkInterpreter, strategy_for
 
 _A_WIDGET_APPEARED = "<Map>"
@@ -49,9 +49,6 @@ _WHAT_EVERY_TK_WIDGET_ANSWERS_TO = "winfo_class"
 
 _THE_WIDGET_PARAMETER = "widget"
 _THE_LABEL_PARAMETER = "label"
-
-# A table because `Role(43)` raises for a number no member carries.
-_THE_ROLE_EACH_NUMBER_MEANS: Mapping[int, Role] = {role.value: role for role in Role}
 
 
 def is_a_window(widget: TkWidget) -> bool:
@@ -1011,7 +1008,7 @@ def _a_role_is_named_rather_than_numbered(role: object) -> None:
 
 
 def _whichever_role_that_number_would_have_been(role: object) -> str:
-    meant = _THE_ROLE_EACH_NUMBER_MEANS.get(role) if isinstance(role, int) else None
+    meant = THE_ROLE_EACH_NUMBER_MEANS.get(role) if isinstance(role, int) else None
     if meant is None:
         return (
             "A role decides which patterns the MSAA-to-UIA bridge offers for "
