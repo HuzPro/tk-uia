@@ -21,7 +21,7 @@ from tk_uia.provide import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from tk_uia.provide import Blueprint
 
@@ -61,6 +61,8 @@ _UIA_HelpTextPropertyId = 30013
 _UIA_IsOffscreenPropertyId = 30022
 _UIA_FullDescriptionPropertyId = 30159
 
+_HRESULT = ctypes.c_long
+
 _S_OK = 0
 _E_NOINTERFACE = struct.unpack("i", struct.pack("I", 0x80004002))[0]
 _E_FAIL = struct.unpack("i", struct.pack("I", 0x80004005))[0]
@@ -93,6 +95,16 @@ _THE_SHELL_FOR_EACH_PATTERN = {
     Pattern.VALUE: "value",
     Pattern.RANGE_VALUE: "range",
     Pattern.SELECTION_ITEM: "selection",
+}
+
+# A table because `Pattern(10099)` raises for the many ids a client probes.
+_THE_PATTERN_WITH_EACH_ID: Mapping[int, Pattern] = {
+    pattern.value: pattern for pattern in Pattern
+}
+
+_THE_SHELL_A_ROW_OFFERS_FOR_EACH_PATTERN_ID: Mapping[int, str] = {
+    Pattern.SELECTION_ITEM.value: "selection",
+    _UIA_ScrollItemPatternId: "scroll",
 }
 
 
@@ -300,6 +312,10 @@ def _write_pointer(out: int, address: int | None) -> None:
     ctypes.cast(out, ctypes.POINTER(ctypes.c_void_p))[0] = address
 
 
+def _write_int(out: int, value: int) -> None:
+    ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = value
+
+
 def _hand_out_a_row(container: _Hosted, key: str, out: int) -> None:
     row = _the_row(container, key)
     _write_pointer(out, ctypes.addressof(row.shells["fragment"]))
@@ -360,7 +376,7 @@ class _ComLayer:
         self.row_vtables = self._the_row_vtables()
 
     def _the_vtables(self) -> dict[str, Any]:
-        hresult = ctypes.c_long
+        hresult = _HRESULT
         this = ctypes.c_void_p
         out = ctypes.c_void_p
 
@@ -439,7 +455,7 @@ class _ComLayer:
         }
 
     def _the_row_vtables(self) -> dict[str, Any]:
-        hresult = ctypes.c_long
+        hresult = _HRESULT
         this = ctypes.c_void_p
         out = ctypes.c_void_p
 
@@ -495,30 +511,30 @@ class _ComLayer:
     def _slot(self, restype: Any, *argtypes: Any) -> Any:
         kind = ctypes.WINFUNCTYPE(restype, *argtypes)
         self.kept_alive.append(kind)
+        answers_an_hresult = restype is _HRESULT
 
         def bind(implementation: Any) -> Any:
-            bound = kind(implementation)
+            bound = kind(
+                _never_raising(implementation) if answers_an_hresult else implementation
+            )
             self.kept_alive.append(bound)
             return bound
 
         return bind
 
     def _query_interface(self, this: int, riid: int, out: int) -> int:
-        try:
-            hosted = _hosted_for(this)
-            asked = bytes(ctypes.cast(riid, ctypes.POINTER(ctypes.c_ubyte * 16))[0])
-            kind = self.iids.get(asked)
-            if kind is None or (
-                kind in _THE_KINDS_ONLY_A_CONTAINER_ANSWERS
-                and hosted.blueprint.items is None
-            ):
-                _write_pointer(out, None)
-                return _E_NOINTERFACE
-            _write_pointer(out, ctypes.addressof(hosted.shells[kind]))
-            hosted.refcount += 1
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        hosted = _hosted_for(this)
+        asked = ctypes.string_at(riid, 16)
+        kind = self.iids.get(asked)
+        if kind is None or (
+            kind in _THE_KINDS_ONLY_A_CONTAINER_ANSWERS
+            and hosted.blueprint.items is None
+        ):
+            _write_pointer(out, None)
+            return _E_NOINTERFACE
+        _write_pointer(out, ctypes.addressof(hosted.shells[kind]))
+        hosted.refcount += 1
+        return _S_OK
 
     def _add_reference(self, this: int) -> int:
         hosted = _BY_ADDRESS.get(int(this))
@@ -537,159 +553,126 @@ class _ComLayer:
         return hosted.refcount
 
     def _provider_options(self, this: int, out: int) -> int:
-        ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = (
-            _ProviderOptions_ServerSideProvider
-        )
+        _write_int(out, _ProviderOptions_ServerSideProvider)
         return _S_OK
 
     def _pattern_provider(self, this: int, pattern_id: int, out: int) -> int:
-        try:
-            hosted = _hosted_for(this)
-            _write_pointer(out, None)
-            asked = _the_pattern_with_id(pattern_id)
-            if asked is None:
-                return _S_OK
-            answers = hosted.blueprint.patterns.get(asked)
-            if answers is None:
-                if asked is Pattern.VALUE and _the_value_said_for(hosted) is not None:
-                    _write_pointer(out, ctypes.addressof(hosted.shells["value"]))
-                    hosted.refcount += 1
-                return _S_OK
-            # A button with nothing to run does not advertise a press.
-            if asked is Pattern.INVOKE and not answers.offered():
-                return _S_OK
-            _write_pointer(
-                out, ctypes.addressof(hosted.shells[_THE_SHELL_FOR_EACH_PATTERN[asked]])
-            )
-            hosted.refcount += 1
+        hosted = _hosted_for(this)
+        _write_pointer(out, None)
+        asked = _THE_PATTERN_WITH_EACH_ID.get(pattern_id)
+        if asked is None:
             return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        answers = hosted.blueprint.patterns.get(asked)
+        if answers is None:
+            if asked is Pattern.VALUE and _the_value_said_for(hosted) is not None:
+                _write_pointer(out, ctypes.addressof(hosted.shells["value"]))
+                hosted.refcount += 1
+            return _S_OK
+        # A button with nothing to run does not advertise a press.
+        if asked is Pattern.INVOKE and not answers.offered():
+            return _S_OK
+        _write_pointer(
+            out, ctypes.addressof(hosted.shells[_THE_SHELL_FOR_EACH_PATTERN[asked]])
+        )
+        hosted.refcount += 1
+        return _S_OK
 
     def _property_value(self, this: int, property_id: int, out: int) -> int:
-        try:
-            hosted = _hosted_for(this)
-            variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
-            blueprint = hosted.blueprint
-            if property_id == _UIA_NamePropertyId:
-                name = blueprint.name()
-                if name:
-                    variant.hold_words(name)
-            elif property_id == _UIA_ControlTypePropertyId:
-                variant.hold_number(blueprint.control_type())
-            elif property_id == _UIA_IsEnabledPropertyId:
-                variant.hold_truth(bool(blueprint.is_enabled()))
-            elif property_id == _UIA_IsKeyboardFocusablePropertyId:
-                if blueprint.is_keyboard_focusable:
-                    variant.hold_truth(True)
-            elif property_id == _UIA_HelpTextPropertyId:
-                help_text = blueprint.help_text()
-                if help_text:
-                    variant.hold_words(help_text)
-            elif property_id == _UIA_FullDescriptionPropertyId:
-                description = blueprint.description()
-                if description:
-                    variant.hold_words(description)
-            # Anything else stays VT_EMPTY: the HWND host provider answers the
-            # rectangles, the runtime id, and the rest.
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        hosted = _hosted_for(this)
+        variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
+        blueprint = hosted.blueprint
+        if property_id == _UIA_NamePropertyId:
+            name = blueprint.name()
+            if name:
+                variant.hold_words(name)
+        elif property_id == _UIA_ControlTypePropertyId:
+            variant.hold_number(blueprint.control_type())
+        elif property_id == _UIA_IsEnabledPropertyId:
+            variant.hold_truth(bool(blueprint.is_enabled()))
+        elif property_id == _UIA_IsKeyboardFocusablePropertyId:
+            if blueprint.is_keyboard_focusable:
+                variant.hold_truth(True)
+        elif property_id == _UIA_HelpTextPropertyId:
+            help_text = blueprint.help_text()
+            if help_text:
+                variant.hold_words(help_text)
+        elif property_id == _UIA_FullDescriptionPropertyId:
+            description = blueprint.description()
+            if description:
+                variant.hold_words(description)
+        # Anything else stays VT_EMPTY: the HWND host provider answers the
+        # rectangles, the runtime id, and the rest.
+        return _S_OK
 
     def _host_provider(self, this: int, out: int) -> int:
-        try:
-            # Written straight into the out parameter: the reference UIA hands
-            # back is the caller's, with no counting done here.
-            return self.core.UiaHostProviderFromHwnd(_hosted_for(this).hwnd, out)
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        # Written straight into the out parameter: the reference UIA hands
+        # back is the caller's, with no counting done here.
+        return self.core.UiaHostProviderFromHwnd(_hosted_for(this).hwnd, out)
 
     def _invoke(self, this: int) -> int:
-        return self._act(this, Pattern.INVOKE, lambda answers: answers.press())
+        return self._with_the_answers_for(
+            this, Pattern.INVOKE, lambda answers: answers.press()
+        )
 
     def _toggle(self, this: int) -> int:
-        return self._act(this, Pattern.TOGGLE, lambda answers: answers.flip())
+        return self._with_the_answers_for(
+            this, Pattern.TOGGLE, lambda answers: answers.flip()
+        )
 
     def _toggle_state(self, this: int, out: int) -> int:
-        return self._tell(
-            this,
-            Pattern.TOGGLE,
-            lambda answers: ctypes.memmove(
-                out, ctypes.byref(ctypes.c_int(1 if answers.is_on() else 0)), 4
-            ),
+        return self._tell_a_truth(
+            this, Pattern.TOGGLE, out, lambda answers: answers.is_on()
         )
 
     def _set_value(self, this: int, text: str | None) -> int:
-        try:
-            answers = _hosted_for(this).blueprint.patterns.get(Pattern.VALUE)
-            if answers is None:
-                # A said value is the application's word about itself; nobody
-                # writes the application's words for it.
-                return _UIA_E_INVALIDOPERATION
-            # Refused here as well as by the client API: Tk swallows an edit
-            # on a read-only widget, and a swallowed edit must not answer S_OK.
-            if answers.is_read_only():
-                return _UIA_E_INVALIDOPERATION
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
-        return self._act(this, Pattern.VALUE, lambda answers: answers.write(text or ""))
+        answers = _hosted_for(this).blueprint.patterns.get(Pattern.VALUE)
+        if answers is None:
+            # A said value is the application's word about itself; nobody
+            # writes the application's words for it.
+            return _UIA_E_INVALIDOPERATION
+        # Refused here as well as by the client API: Tk swallows an edit
+        # on a read-only widget, and a swallowed edit must not answer S_OK.
+        if answers.is_read_only():
+            return _UIA_E_INVALIDOPERATION
+        return self._with_the_answers_for(
+            this, Pattern.VALUE, lambda answers: answers.write(text or "")
+        )
 
     def _value(self, this: int, out: int) -> int:
-        try:
-            hosted = _hosted_for(this)
-            if hosted.blueprint.patterns.get(Pattern.VALUE) is None:
-                _write_pointer(
-                    out, _oleaut32().SysAllocString(_the_value_said_for(hosted) or "")
-                )
-                return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        hosted = _hosted_for(this)
+        if hosted.blueprint.patterns.get(Pattern.VALUE) is None:
+            _write_pointer(
+                out, _oleaut32().SysAllocString(_the_value_said_for(hosted) or "")
+            )
+            return _S_OK
 
         def answer(answers: ValueAnswers) -> None:
             _write_pointer(out, _oleaut32().SysAllocString(answers.read()))
 
-        return self._tell(this, Pattern.VALUE, answer)
+        return self._with_the_answers_for(this, Pattern.VALUE, answer)
 
     def _value_read_only(self, this: int, out: int) -> int:
-        try:
-            if _hosted_for(this).blueprint.patterns.get(Pattern.VALUE) is None:
-                ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = 1
-                return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
-        return self._tell(
-            this,
-            Pattern.VALUE,
-            lambda answers: ctypes.memmove(
-                out,
-                ctypes.byref(ctypes.c_int(1 if answers.is_read_only() else 0)),
-                4,
-            ),
+        if _hosted_for(this).blueprint.patterns.get(Pattern.VALUE) is None:
+            _write_int(out, 1)
+            return _S_OK
+        return self._tell_a_truth(
+            this, Pattern.VALUE, out, lambda answers: answers.is_read_only()
         )
 
     def _set_range_value(self, this: int, value: float) -> int:
-        try:
-            answers = _hosted_for(this).blueprint.patterns.get(Pattern.RANGE_VALUE)
-            if answers is None or answers.write is None or answers.is_read_only():
-                # The documented refusal for a range nobody may set now.
-                return _UIA_E_INVALIDOPERATION
-            answers.write(value)
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        answers = _hosted_for(this).blueprint.patterns.get(Pattern.RANGE_VALUE)
+        if answers is None or answers.write is None or answers.is_read_only():
+            # The documented refusal for a range nobody may set now.
+            return _UIA_E_INVALIDOPERATION
+        answers.write(value)
+        return _S_OK
 
     def _range_value(self, this: int, out: int) -> int:
         return self._tell_a_number(this, out, lambda answers: answers.now())
 
     def _range_read_only(self, this: int, out: int) -> int:
-        return self._tell(
-            this,
-            Pattern.RANGE_VALUE,
-            lambda answers: ctypes.memmove(
-                out,
-                ctypes.byref(ctypes.c_int(1 if answers.is_read_only() else 0)),
-                4,
-            ),
+        return self._tell_a_truth(
+            this, Pattern.RANGE_VALUE, out, lambda answers: answers.is_read_only()
         )
 
     def _range_maximum(self, this: int, out: int) -> int:
@@ -705,7 +688,9 @@ class _ComLayer:
         return self._tell_a_number(this, out, lambda answers: answers.step() or 0.0)
 
     def _select(self, this: int) -> int:
-        return self._act(this, Pattern.SELECTION_ITEM, lambda answers: answers.select())
+        return self._with_the_answers_for(
+            this, Pattern.SELECTION_ITEM, lambda answers: answers.select()
+        )
 
     def _add_to_selection(self, this: int) -> int:
         # A radio's group holds exactly one selection; adding is not a thing.
@@ -715,14 +700,8 @@ class _ComLayer:
         return _UIA_E_INVALIDOPERATION
 
     def _is_selected(self, this: int, out: int) -> int:
-        return self._tell(
-            this,
-            Pattern.SELECTION_ITEM,
-            lambda answers: ctypes.memmove(
-                out,
-                ctypes.byref(ctypes.c_int(1 if answers.is_selected() else 0)),
-                4,
-            ),
+        return self._tell_a_truth(
+            this, Pattern.SELECTION_ITEM, out, lambda answers: answers.is_selected()
         )
 
     def _selection_container(self, this: int, out: int) -> int:
@@ -730,24 +709,21 @@ class _ComLayer:
         return _S_OK
 
     def _navigate(self, this: int, direction: int, out: int) -> int:
-        try:
-            hosted = _hosted_for(this)
-            _write_pointer(out, None)
-            items = hosted.blueprint.items
-            if items is None:
-                return _S_OK
-            if direction == _NavigateDirection_FirstChild:
-                key = items.first()
-            elif direction == _NavigateDirection_LastChild:
-                key = items.last()
-            else:
-                # Parent and siblings are the window tree's to answer.
-                return _S_OK
-            if key is not None:
-                _hand_out_a_row(hosted, key, out)
+        hosted = _hosted_for(this)
+        _write_pointer(out, None)
+        items = hosted.blueprint.items
+        if items is None:
             return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        if direction == _NavigateDirection_FirstChild:
+            key = items.first()
+        elif direction == _NavigateDirection_LastChild:
+            key = items.last()
+        else:
+            # Parent and siblings are the window tree's to answer.
+            return _S_OK
+        if key is not None:
+            _hand_out_a_row(hosted, key, out)
+        return _S_OK
 
     def _runtime_id(self, this: int, out: int) -> int:
         # Nothing: a fragment root has a window, and the window names it.
@@ -767,13 +743,10 @@ class _ComLayer:
         return _S_OK
 
     def _fragment_root(self, this: int, out: int) -> int:
-        try:
-            hosted = _hosted_for(this)
-            _write_pointer(out, ctypes.addressof(hosted.shells["fragment_root"]))
-            hosted.refcount += 1
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        hosted = _hosted_for(this)
+        _write_pointer(out, ctypes.addressof(hosted.shells["fragment_root"]))
+        hosted.refcount += 1
+        return _S_OK
 
     def _element_from_point(self, this: int, x: float, y: float, out: int) -> int:
         # Nothing chosen: UIA falls back to the container itself.
@@ -785,18 +758,15 @@ class _ComLayer:
         return _S_OK
 
     def _row_query_interface(self, this: int, riid: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            asked = bytes(ctypes.cast(riid, ctypes.POINTER(ctypes.c_ubyte * 16))[0])
-            kind = self.row_iids.get(asked)
-            if kind is None:
-                _write_pointer(out, None)
-                return _E_NOINTERFACE
-            _write_pointer(out, ctypes.addressof(row.shells[kind]))
-            row.refcount += 1
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        asked = ctypes.string_at(riid, 16)
+        kind = self.row_iids.get(asked)
+        if kind is None:
+            _write_pointer(out, None)
+            return _E_NOINTERFACE
+        _write_pointer(out, ctypes.addressof(row.shells[kind]))
+        row.refcount += 1
+        return _S_OK
 
     def _row_add_reference(self, this: int) -> int:
         row = _ROW_BY_ADDRESS.get(int(this))
@@ -814,46 +784,37 @@ class _ComLayer:
         return row.refcount
 
     def _row_pattern_provider(self, this: int, pattern_id: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            _write_pointer(out, None)
-            offered = {
-                Pattern.SELECTION_ITEM.value: "selection",
-                _UIA_ScrollItemPatternId: "scroll",
-            }.get(pattern_id)
-            if pattern_id == _UIA_ExpandCollapsePatternId:
-                # Only a row with branches beneath it promises to open.
-                items = row.container.blueprint.items
-                if items is not None and items.first_child(row.key) is not None:
-                    offered = "expand"
-            if offered is not None:
-                _write_pointer(out, ctypes.addressof(row.shells[offered]))
-                row.refcount += 1
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        _write_pointer(out, None)
+        offered = _THE_SHELL_A_ROW_OFFERS_FOR_EACH_PATTERN_ID.get(pattern_id)
+        if pattern_id == _UIA_ExpandCollapsePatternId:
+            # Only a row with branches beneath it promises to open.
+            items = row.container.blueprint.items
+            if items is not None and items.first_child(row.key) is not None:
+                offered = "expand"
+        if offered is not None:
+            _write_pointer(out, ctypes.addressof(row.shells[offered]))
+            row.refcount += 1
+        return _S_OK
 
     def _row_property_value(self, this: int, property_id: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
-            items = row.container.blueprint.items
-            if items is None:
-                return _S_OK
-            if property_id == _UIA_NamePropertyId:
-                words = items.words(row.key)
-                if words:
-                    variant.hold_words(words)
-            elif property_id == _UIA_ControlTypePropertyId:
-                variant.hold_number(_the_type_of_a_row_inside(row.container))
-            elif property_id == _UIA_IsEnabledPropertyId:
-                variant.hold_truth(bool(row.container.blueprint.is_enabled()))
-            elif property_id == _UIA_IsOffscreenPropertyId:
-                # A row scrolled out of view has no rectangle, and says so.
-                variant.hold_truth(items.rectangle(row.key) is None)
+        row = _row_for(this)
+        variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
+        items = row.container.blueprint.items
+        if items is None:
             return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        if property_id == _UIA_NamePropertyId:
+            words = items.words(row.key)
+            if words:
+                variant.hold_words(words)
+        elif property_id == _UIA_ControlTypePropertyId:
+            variant.hold_number(_the_type_of_a_row_inside(row.container))
+        elif property_id == _UIA_IsEnabledPropertyId:
+            variant.hold_truth(bool(row.container.blueprint.is_enabled()))
+        elif property_id == _UIA_IsOffscreenPropertyId:
+            # A row scrolled out of view has no rectangle, and says so.
+            variant.hold_truth(items.rectangle(row.key) is None)
+        return _S_OK
 
     def _row_host_provider(self, this: int, out: int) -> int:
         # No window behind a row; the container's window hosts the tree.
@@ -861,73 +822,56 @@ class _ComLayer:
         return _S_OK
 
     def _row_navigate(self, this: int, direction: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            _write_pointer(out, None)
-            items = row.container.blueprint.items
-            if items is None or not items.still_there(row.key):
-                return _S_OK
-            if direction == _NavigateDirection_Parent:
-                holder = items.parent(row.key)
-                if holder is None:
-                    _write_pointer(
-                        out, ctypes.addressof(row.container.shells["fragment"])
-                    )
-                    row.container.refcount += 1
-                else:
-                    _hand_out_a_row(row.container, holder, out)
-            elif direction == _NavigateDirection_NextSibling:
-                _hand_out_another_row(row, items.after(row.key), out)
-            elif direction == _NavigateDirection_PreviousSibling:
-                _hand_out_another_row(row, items.before(row.key), out)
-            elif direction == _NavigateDirection_FirstChild:
-                _hand_out_another_row(row, items.first_child(row.key), out)
-            elif direction == _NavigateDirection_LastChild:
-                _hand_out_another_row(row, items.last_child(row.key), out)
+        row = _row_for(this)
+        _write_pointer(out, None)
+        items = row.container.blueprint.items
+        if items is None or not items.still_there(row.key):
             return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        if direction == _NavigateDirection_Parent:
+            holder = items.parent(row.key)
+            if holder is None:
+                _write_pointer(out, ctypes.addressof(row.container.shells["fragment"]))
+                row.container.refcount += 1
+            else:
+                _hand_out_a_row(row.container, holder, out)
+        elif direction == _NavigateDirection_NextSibling:
+            _hand_out_another_row(row, items.after(row.key), out)
+        elif direction == _NavigateDirection_PreviousSibling:
+            _hand_out_another_row(row, items.before(row.key), out)
+        elif direction == _NavigateDirection_FirstChild:
+            _hand_out_another_row(row, items.first_child(row.key), out)
+        elif direction == _NavigateDirection_LastChild:
+            _hand_out_another_row(row, items.last_child(row.key), out)
+        return _S_OK
 
     def _row_runtime_id(self, this: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            _write_pointer(out, _a_runtime_id_appending(row.number))
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        _write_pointer(out, _a_runtime_id_appending(row.number))
+        return _S_OK
 
     def _row_bounding_rectangle(self, this: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            items = row.container.blueprint.items
-            painted = items.rectangle(row.key) if items is not None else None
-            left, top, width, height = painted if painted is not None else (0, 0, 0, 0)
-            ctypes.cast(out, ctypes.POINTER(_UiaRect))[0] = _UiaRect(
-                float(left), float(top), float(width), float(height)
-            )
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        items = row.container.blueprint.items
+        painted = items.rectangle(row.key) if items is not None else None
+        left, top, width, height = painted if painted is not None else (0, 0, 0, 0)
+        ctypes.cast(out, ctypes.POINTER(_UiaRect))[0] = _UiaRect(
+            float(left), float(top), float(width), float(height)
+        )
+        return _S_OK
 
     def _row_fragment_root(self, this: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            _write_pointer(out, ctypes.addressof(row.container.shells["fragment_root"]))
-            row.container.refcount += 1
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        _write_pointer(out, ctypes.addressof(row.container.shells["fragment_root"]))
+        row.container.refcount += 1
+        return _S_OK
 
     def _row_select(self, this: int) -> int:
-        try:
-            row = _row_for(this)
-            items = row.container.blueprint.items
-            if items is None or not items.still_there(row.key):
-                return _UIA_E_INVALIDOPERATION
-            items.select(row.key)
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        items = row.container.blueprint.items
+        if items is None or not items.still_there(row.key):
+            return _UIA_E_INVALIDOPERATION
+        items.select(row.key)
+        return _S_OK
 
     def _row_add_to_selection(self, this: int) -> int:
         return self._selection_move(
@@ -940,51 +884,39 @@ class _ComLayer:
         )
 
     def _selection_move(self, this: int, move: Any) -> int:
-        try:
-            row = _row_for(this)
-            items = row.container.blueprint.items
-            if (
-                items is None
-                or not items.still_there(row.key)
-                # The widget's own selectmode decides; on a one-at-a-time
-                # container these are the documented refusal.
-                or not items.takes_more_than_one()
-            ):
-                return _UIA_E_INVALIDOPERATION
-            move(items, row.key)
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        items = row.container.blueprint.items
+        if (
+            items is None
+            or not items.still_there(row.key)
+            # The widget's own selectmode decides; on a one-at-a-time
+            # container these are the documented refusal.
+            or not items.takes_more_than_one()
+        ):
+            return _UIA_E_INVALIDOPERATION
+        move(items, row.key)
+        return _S_OK
 
     def _row_is_selected(self, this: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            items = row.container.blueprint.items
-            selected = items.is_selected(row.key) if items is not None else False
-            ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = 1 if selected else 0
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        items = row.container.blueprint.items
+        selected = items.is_selected(row.key) if items is not None else False
+        _write_int(out, 1 if selected else 0)
+        return _S_OK
 
     def _row_selection_container(self, this: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            _write_pointer(out, ctypes.addressof(row.container.shells["simple"]))
-            row.container.refcount += 1
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        _write_pointer(out, ctypes.addressof(row.container.shells["simple"]))
+        row.container.refcount += 1
+        return _S_OK
 
     def _row_scroll_into_view(self, this: int) -> int:
-        try:
-            row = _row_for(this)
-            items = row.container.blueprint.items
-            if items is None or not items.still_there(row.key):
-                return _UIA_E_INVALIDOPERATION
-            items.show(row.key)
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        items = row.container.blueprint.items
+        if items is None or not items.still_there(row.key):
+            return _UIA_E_INVALIDOPERATION
+        items.show(row.key)
+        return _S_OK
 
     def _row_expand(self, this: int) -> int:
         return self._branch_turned(this, lambda items, key: items.open(key))
@@ -993,77 +925,64 @@ class _ComLayer:
         return self._branch_turned(this, lambda items, key: items.close(key))
 
     def _branch_turned(self, this: int, turn: Any) -> int:
-        try:
-            row = _row_for(this)
-            items = row.container.blueprint.items
-            if (
-                items is None
-                or not items.still_there(row.key)
-                or items.first_child(row.key) is None
-            ):
-                return _UIA_E_INVALIDOPERATION
-            turn(items, row.key)
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        items = row.container.blueprint.items
+        if (
+            items is None
+            or not items.still_there(row.key)
+            or items.first_child(row.key) is None
+        ):
+            return _UIA_E_INVALIDOPERATION
+        turn(items, row.key)
+        return _S_OK
 
     def _row_expand_state(self, this: int, out: int) -> int:
-        try:
-            row = _row_for(this)
-            items = row.container.blueprint.items
-            if items is None or items.first_child(row.key) is None:
-                state = _ExpandCollapseState_LeafNode
-            elif items.is_open(row.key):
-                state = _ExpandCollapseState_Expanded
-            else:
-                state = _ExpandCollapseState_Collapsed
-            ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = state
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+        row = _row_for(this)
+        items = row.container.blueprint.items
+        if items is None or items.first_child(row.key) is None:
+            state = _ExpandCollapseState_LeafNode
+        elif items.is_open(row.key):
+            state = _ExpandCollapseState_Expanded
+        else:
+            state = _ExpandCollapseState_Collapsed
+        _write_int(out, state)
+        return _S_OK
 
-    def _act(self, this: int, pattern: Pattern, act: Any) -> int:
-        try:
-            answers = _hosted_for(this).blueprint.patterns.get(pattern)
-            if answers is None:
-                return _UIA_E_INVALIDOPERATION
-            act(answers)
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+    def _with_the_answers_for(self, this: int, pattern: Pattern, use: Any) -> int:
+        answers = _hosted_for(this).blueprint.patterns.get(pattern)
+        if answers is None:
+            return _UIA_E_INVALIDOPERATION
+        use(answers)
+        return _S_OK
 
-    def _tell(self, this: int, pattern: Pattern, tell: Any) -> int:
-        try:
-            answers = _hosted_for(this).blueprint.patterns.get(pattern)
-            if answers is None:
-                return _UIA_E_INVALIDOPERATION
-            tell(answers)
-            return _S_OK
-        except Exception:  # noqa: BLE001 - a COM callback must never raise
-            return _E_FAIL
+    def _tell_a_truth(self, this: int, pattern: Pattern, out: int, read: Any) -> int:
+        return self._with_the_answers_for(
+            this, pattern, lambda answers: _write_int(out, 1 if read(answers) else 0)
+        )
 
     def _tell_a_number(self, this: int, out: int, read: Any) -> int:
-        try:
-            answers = _hosted_for(this).blueprint.patterns.get(Pattern.RANGE_VALUE)
-            if answers is None:
-                return _UIA_E_INVALIDOPERATION
+        def answer(answers: Any) -> None:
             ctypes.cast(out, ctypes.POINTER(ctypes.c_double))[0] = float(read(answers))
-            return _S_OK
+
+        return self._with_the_answers_for(this, Pattern.RANGE_VALUE, answer)
+
+
+def _never_raising(implementation: Callable[..., int]) -> Callable[..., int]:
+    """Wrap an HRESULT slot so a raise becomes E_FAIL instead of crossing into COM."""
+
+    def answer(*args: Any) -> int:
+        try:
+            return implementation(*args)
         except Exception:  # noqa: BLE001 - a COM callback must never raise
             return _E_FAIL
+
+    return answer
 
 
 def _a_vtable(slots: tuple[Any, ...]) -> Any:
     fields = [(f"slot{index}", type(bound)) for index, bound in enumerate(slots)]
     vtable_type = type("Vtable", (ctypes.Structure,), {"_fields_": fields})
     return vtable_type(*slots)
-
-
-def _the_pattern_with_id(pattern_id: int) -> Pattern | None:
-    try:
-        return Pattern(pattern_id)
-    except ValueError:
-        return None
 
 
 def _guid_bytes(text: str) -> bytes:
