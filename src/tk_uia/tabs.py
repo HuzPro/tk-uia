@@ -9,7 +9,7 @@ module is platform-specific.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -266,10 +266,6 @@ class TabHandles:
     def on(self, path: str) -> tuple[Tab, ...]:
         """The tabs this has given handles to, for a report to say so."""
         return tuple(handled.tab for handled in self._handled.get(path, ()))
-
-    def every_handle(self) -> Iterator[int]:
-        for handled in self._handled.values():
-            yield from (one.hwnd for one in handled)
 
     def _given_a_handle(
         self, path: str, parent: int, tab: Tab, wire: WiresATab | None

@@ -43,6 +43,7 @@ CAPTIONS_THAT_SAY_NOTHING_ON_THEIR_OWN = frozenset(
 )
 
 _NO_WORDS_AT_ALL = ""
+_NO_VARIABLE_AT_ALL = ""
 
 # Reads as "Browse... for Export Folder".
 _WHAT_A_GENERIC_CAPTION_ACTS_ON = "{caption} for {subject}"
@@ -212,7 +213,7 @@ def _what_it_is_called_now(
 
 
 def _shows_a_variable(widget: TkWidget) -> bool:
-    return variable_the_widget_declares(widget) != _NO_WORDS_AT_ALL
+    return variable_the_widget_declares(widget) != _NO_VARIABLE_AT_ALL
 
 
 def _the_words(widget: TkWidget) -> str:

@@ -21,7 +21,13 @@ from tk_uia.describe import Description, Gap, WidgetDescription
 from tk_uia.describe import describe as _describe
 from tk_uia.layout import NamedByTheLayout
 from tk_uia.layout import infer_names_from_layout as _names_the_layout_implies
-from tk_uia.provide import Pattern, ProviderRefused, Providers, Trouble
+from tk_uia.provide import (
+    Pattern,
+    ProvidedTabs,
+    ProviderRefused,
+    Providers,
+    Trouble,
+)
 from tk_uia.roles import ROLE_FOR_TK_CLASS, Role
 from tk_uia.tkversion import Strategy
 
@@ -100,11 +106,8 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
     from tk_uia._subclass import WindowSubclasses
     from tk_uia._tkwiring import wiring_for
     from tk_uia._uiacore import ComProviderPlatform
-    from tk_uia.provide import Providers
 
     global _providers
-    from tk_uia.provide import ProvidedTabs
-
     platform = ComProviderPlatform(WindowSubclasses(_trouble.note), _trouble.note)
     providers = Providers(
         platform, wiring_for, roles, said=_WhateverTheInstallationChose()
@@ -123,7 +126,7 @@ def enable(root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None) -> St
 def annotate_only(
     root: tkinter.Misc, *, roles: Mapping[str, Role] | None = None
 ) -> Strategy:
-    """Annotate without installing native providers, which is everything 0.6 did.
+    """Annotate without installing native providers.
 
     The escape hatch: one line here returns an application to the proxy-only
     behaviour while keeping every annotation and every binding.

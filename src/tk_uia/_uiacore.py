@@ -503,8 +503,6 @@ class _ComLayer:
 
         return bind
 
-    # -- IUnknown --
-
     def _query_interface(self, this: int, riid: int, out: int) -> int:
         try:
             hosted = _hosted_for(this)
@@ -537,8 +535,6 @@ class _ComLayer:
         # lifetime, so a transient walk can never leave a husk behind.
         hosted.refcount = max(hosted.refcount - 1, 0)
         return hosted.refcount
-
-    # -- IRawElementProviderSimple --
 
     def _provider_options(self, this: int, out: int) -> int:
         ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = (
@@ -608,12 +604,8 @@ class _ComLayer:
         except Exception:  # noqa: BLE001 - a COM callback must never raise
             return _E_FAIL
 
-    # -- IInvokeProvider --
-
     def _invoke(self, this: int) -> int:
         return self._act(this, Pattern.INVOKE, lambda answers: answers.press())
-
-    # -- IToggleProvider --
 
     def _toggle(self, this: int) -> int:
         return self._act(this, Pattern.TOGGLE, lambda answers: answers.flip())
@@ -626,8 +618,6 @@ class _ComLayer:
                 out, ctypes.byref(ctypes.c_int(1 if answers.is_on() else 0)), 4
             ),
         )
-
-    # -- IValueProvider --
 
     def _set_value(self, this: int, text: str | None) -> int:
         try:
@@ -677,8 +667,6 @@ class _ComLayer:
             ),
         )
 
-    # -- IRangeValueProvider --
-
     def _set_range_value(self, this: int, value: float) -> int:
         try:
             answers = _hosted_for(this).blueprint.patterns.get(Pattern.RANGE_VALUE)
@@ -716,8 +704,6 @@ class _ComLayer:
     def _range_small_change(self, this: int, out: int) -> int:
         return self._tell_a_number(this, out, lambda answers: answers.step() or 0.0)
 
-    # -- ISelectionItemProvider --
-
     def _select(self, this: int) -> int:
         return self._act(this, Pattern.SELECTION_ITEM, lambda answers: answers.select())
 
@@ -742,8 +728,6 @@ class _ComLayer:
     def _selection_container(self, this: int, out: int) -> int:
         _write_pointer(out, None)
         return _S_OK
-
-    # -- IRawElementProviderFragment, on a container with rows --
 
     def _navigate(self, this: int, direction: int, out: int) -> int:
         try:
@@ -791,8 +775,6 @@ class _ComLayer:
         except Exception:  # noqa: BLE001 - a COM callback must never raise
             return _E_FAIL
 
-    # -- IRawElementProviderFragmentRoot --
-
     def _element_from_point(self, this: int, x: float, y: float, out: int) -> int:
         # Nothing chosen: UIA falls back to the container itself.
         _write_pointer(out, None)
@@ -801,8 +783,6 @@ class _ComLayer:
     def _focused_element(self, this: int, out: int) -> int:
         _write_pointer(out, None)
         return _S_OK
-
-    # -- the same interfaces again, answered by a row for itself --
 
     def _row_query_interface(self, this: int, riid: int, out: int) -> int:
         try:
@@ -1041,8 +1021,6 @@ class _ComLayer:
             return _S_OK
         except Exception:  # noqa: BLE001 - a COM callback must never raise
             return _E_FAIL
-
-    # -- the two shapes every pattern slot reduces to --
 
     def _act(self, this: int, pattern: Pattern, act: Any) -> int:
         try:

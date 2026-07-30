@@ -33,7 +33,6 @@ def wiring_for(widget: TkWidget) -> WidgetWiring:
 
 class _APress:
     def __init__(self, widget: TkWidget) -> None:
-        self._widget = widget
         self.press = widget.invoke
         self.offered = _guarded(
             lambda: str(widget.cget("command")) != _NO_COMMAND, nothing=False
@@ -42,14 +41,12 @@ class _APress:
 
 class _AFlip:
     def __init__(self, widget: TkWidget) -> None:
-        self._widget = widget
         self.flip = widget.invoke
         self.is_on = _guarded(lambda: _holds_its_on_value(widget), nothing=False)
 
 
 class _AChoice:
     def __init__(self, widget: TkWidget) -> None:
-        self._widget = widget
         self.select = widget.invoke
         self.is_selected = _guarded(lambda: _holds_its_own_value(widget), nothing=False)
 
@@ -122,9 +119,13 @@ class _TheNumberOfAProgressbar:
 
     def __init__(self, widget: TkWidget) -> None:
         self.now = _guarded(lambda: float(str(widget.cget("value"))), nothing=0.0)
-        self.low = _guarded(lambda: 0.0, nothing=0.0)
         self.high = _guarded(lambda: float(str(widget.cget("maximum"))), nothing=0.0)
-        self.step = _guarded(lambda: None)
+
+    def low(self) -> float:
+        return 0.0
+
+    def step(self) -> float | None:
+        return None
 
     def is_read_only(self) -> bool:
         return True
