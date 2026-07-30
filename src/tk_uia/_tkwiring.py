@@ -21,13 +21,17 @@ _NO_COMMAND = ""
 
 
 def wiring_for(widget: TkWidget) -> WidgetWiring:
-    build = _THE_PATTERNS_OF_EACH_CLASS.get(widget.winfo_class(), _nothing_more)
+    named = _THE_PATTERN_OF_EACH_CLASS.get(widget.winfo_class())
+    drives: dict[str, object] = {}
+    if named is not None:
+        slot, drive = named
+        drives[slot] = drive(widget)
     return WidgetWiring(
         words=_guarded(lambda: words_the_widget_shows(widget)),
         is_enabled=_guarded(lambda: _is_enabled(widget), nothing=True),
         post=widget.after_idle,
         still_there=_guarded(widget.winfo_exists, nothing=False),
-        **build(widget),
+        **drives,
     )
 
 
@@ -140,10 +144,10 @@ class _TheRowsOfAListbox:
 
     def __init__(self, widget: TkWidget) -> None:
         self._widget = widget
+        self._how_many = _guarded(lambda: int(widget.size()), nothing=0)
 
     def roots(self) -> tuple[str, ...]:
-        count = _guarded(lambda: int(self._widget.size()), nothing=0)()
-        return tuple(str(index) for index in range(count))
+        return tuple(str(index) for index in range(self._how_many()))
 
     def children(self, key: str) -> tuple[str, ...]:
         return ()
@@ -154,11 +158,10 @@ class _TheRowsOfAListbox:
     def exists(self, key: str) -> bool:
         # By arithmetic, never by building the whole run: a client walking a
         # large listbox asks this before every single answer.
-        count = _guarded(lambda: int(self._widget.size()), nothing=0)()
-        return key.isdigit() and int(key) < count
+        return key.isdigit() and int(key) < self._how_many()
 
     def words(self, key: str) -> str | None:
-        return _guarded(lambda: str(self._widget.get(int(key))))()
+        return _or_nothing(lambda: str(self._widget.get(int(key))))
 
     def select(self, key: str) -> None:
         widget = self._widget
@@ -169,16 +172,18 @@ class _TheRowsOfAListbox:
 
     def is_selected(self, key: str) -> bool:
         return bool(
-            _guarded(lambda: self._widget.selection_includes(int(key)), nothing=False)()
+            _or_nothing(
+                lambda: self._widget.selection_includes(int(key)), nothing=False
+            )
         )
 
     def show(self, key: str) -> None:
         self._widget.see(int(key))
 
     def rectangle(self, key: str) -> tuple[int, int, int, int] | None:
-        return _guarded(
+        return _or_nothing(
             lambda: _painted_at(self._widget, self._widget.bbox(int(key)))
-        )()
+        )
 
     def is_open(self, key: str) -> bool:
         return False
@@ -189,12 +194,12 @@ class _TheRowsOfAListbox:
 
     def takes_more_than_one(self) -> bool:
         return bool(
-            _guarded(
+            _or_nothing(
                 lambda: (
                     str(self._widget.cget("selectmode")) in ("multiple", "extended")
                 ),
                 nothing=False,
-            )()
+            )
         )
 
     def add_to_selection(self, key: str) -> None:
@@ -228,38 +233,38 @@ class _TheItemsOfATreeview:
         return self.children("")
 
     def children(self, key: str) -> tuple[str, ...]:
-        held = _guarded(lambda: self._widget.get_children(key), nothing=())()
+        held = _or_nothing(lambda: self._widget.get_children(key), nothing=())
         return tuple(str(child) for child in held)
 
     def parent(self, key: str) -> str | None:
-        holder = _guarded(lambda: str(self._widget.parent(key)))()
+        holder = _or_nothing(lambda: str(self._widget.parent(key)))
         return holder or None
 
     def exists(self, key: str) -> bool:
-        return bool(_guarded(lambda: self._widget.exists(key), nothing=False)())
+        return bool(_or_nothing(lambda: self._widget.exists(key), nothing=False))
 
     def words(self, key: str) -> str | None:
-        return _guarded(lambda: str(self._widget.item(key, "text")))() or None
+        return _or_nothing(lambda: str(self._widget.item(key, "text"))) or None
 
     def select(self, key: str) -> None:
         self._widget.selection_set(key)
         self._widget.focus(key)
 
     def is_selected(self, key: str) -> bool:
-        return bool(_guarded(lambda: key in self._widget.selection(), nothing=False)())
+        return bool(_or_nothing(lambda: key in self._widget.selection(), nothing=False))
 
     def show(self, key: str) -> None:
         self._widget.see(key)
 
     def rectangle(self, key: str) -> tuple[int, int, int, int] | None:
         # An item scrolled or folded out of view answers an empty bbox.
-        return _guarded(
+        return _or_nothing(
             lambda: _painted_at(self._widget, self._widget.bbox(key) or None)
-        )()
+        )
 
     def is_open(self, key: str) -> bool:
         return bool(
-            _guarded(lambda: str(self._widget.item(key, "open")) in ("1", "True"))()
+            _or_nothing(lambda: str(self._widget.item(key, "open")) in ("1", "True"))
         )
 
     def open(self, key: str) -> None:
@@ -270,10 +275,10 @@ class _TheItemsOfATreeview:
 
     def takes_more_than_one(self) -> bool:
         return bool(
-            _guarded(
+            _or_nothing(
                 lambda: str(self._widget.cget("selectmode")) == "extended",
                 nothing=False,
-            )()
+            )
         )
 
     def add_to_selection(self, key: str) -> None:
@@ -299,68 +304,26 @@ def _painted_at(
     return (widget.winfo_rootx() + x, widget.winfo_rooty() + y, width, height)
 
 
-def _a_press(widget: TkWidget) -> dict[str, object]:
-    return {"invoke": _APress(widget)}
-
-
-def _a_flip(widget: TkWidget) -> dict[str, object]:
-    return {"toggle": _AFlip(widget)}
-
-
-def _a_choice(widget: TkWidget) -> dict[str, object]:
-    return {"selection": _AChoice(widget)}
-
-
-def _entry_text(widget: TkWidget) -> dict[str, object]:
-    return {"value": _TheTextOfAnEntry(widget)}
-
-
-def _combobox_text(widget: TkWidget) -> dict[str, object]:
-    return {"value": _TheTextOfACombobox(widget)}
-
-
-def _text_text(widget: TkWidget) -> dict[str, object]:
-    return {"value": _TheTextOfAText(widget)}
-
-
-def _scale_number(widget: TkWidget) -> dict[str, object]:
-    return {"range_value": _TheNumberOfAScale(widget)}
-
-
-def _progressbar_number(widget: TkWidget) -> dict[str, object]:
-    return {"range_value": _TheNumberOfAProgressbar(widget)}
-
-
-def _listbox_rows(widget: TkWidget) -> dict[str, object]:
-    return {"items": _TheRowsOfAListbox(widget)}
-
-
-def _treeview_items(widget: TkWidget) -> dict[str, object]:
-    return {"items": _TheItemsOfATreeview(widget)}
-
-
-def _nothing_more(widget: TkWidget) -> dict[str, object]:
-    return {}
-
-
-_THE_PATTERNS_OF_EACH_CLASS: dict[str, Callable[[TkWidget], dict[str, object]]] = {
-    "Button": _a_press,
-    "TButton": _a_press,
-    "Checkbutton": _a_flip,
-    "TCheckbutton": _a_flip,
-    "Radiobutton": _a_choice,
-    "TRadiobutton": _a_choice,
-    "Entry": _entry_text,
-    "TEntry": _entry_text,
-    "Spinbox": _entry_text,
-    "TSpinbox": _entry_text,
-    "TCombobox": _combobox_text,
-    "Text": _text_text,
-    "Listbox": _listbox_rows,
-    "Treeview": _treeview_items,
-    "Scale": _scale_number,
-    "TScale": _scale_number,
-    "TProgressbar": _progressbar_number,
+# Which `WidgetWiring` slot each class fills, and what fills it. A class absent
+# here carries no pattern, and a provider offers it none.
+_THE_PATTERN_OF_EACH_CLASS: dict[str, tuple[str, Callable[[TkWidget], object]]] = {
+    "Button": ("invoke", _APress),
+    "TButton": ("invoke", _APress),
+    "Checkbutton": ("toggle", _AFlip),
+    "TCheckbutton": ("toggle", _AFlip),
+    "Radiobutton": ("selection", _AChoice),
+    "TRadiobutton": ("selection", _AChoice),
+    "Entry": ("value", _TheTextOfAnEntry),
+    "TEntry": ("value", _TheTextOfAnEntry),
+    "Spinbox": ("value", _TheTextOfAnEntry),
+    "TSpinbox": ("value", _TheTextOfAnEntry),
+    "TCombobox": ("value", _TheTextOfACombobox),
+    "Text": ("value", _TheTextOfAText),
+    "Listbox": ("items", _TheRowsOfAListbox),
+    "Treeview": ("items", _TheItemsOfATreeview),
+    "Scale": ("range_value", _TheNumberOfAScale),
+    "TScale": ("range_value", _TheNumberOfAScale),
+    "TProgressbar": ("range_value", _TheNumberOfAProgressbar),
 }
 
 
@@ -368,12 +331,25 @@ def _guarded(read, nothing=None):
     return answers_nothing_once_the_widget_is_gone(read, TclError, nothing)
 
 
+def _or_nothing(read, nothing=None):
+    """`_guarded`, for a read answered once rather than kept as a callable."""
+    try:
+        return read()
+    except TclError:
+        return nothing
+
+
+def _ttk_state_of(widget: TkWidget):
+    """How a ttk widget answers its state; None for a classic Tk widget, which has no `instate`."""
+    return getattr(widget, "instate", None)
+
+
 def _is_enabled(widget: TkWidget) -> bool:
     return not _is_disabled(widget)
 
 
 def _is_disabled(widget: TkWidget) -> bool:
-    instate = getattr(widget, "instate", None)
+    instate = _ttk_state_of(widget)
     if instate is not None:
         return bool(instate(["disabled"]))
     if "state" not in widget.keys():  # noqa: SIM118 - Tk options, not a dict
@@ -382,14 +358,14 @@ def _is_disabled(widget: TkWidget) -> bool:
 
 
 def _cannot_be_typed_in(widget: TkWidget) -> bool:
-    instate = getattr(widget, "instate", None)
+    instate = _ttk_state_of(widget)
     if instate is not None:
         return bool(instate(["disabled"])) or bool(instate(["readonly"]))
     return str(widget.cget("state")) in ("disabled", "readonly")
 
 
 def _selects_rather_than_types(widget: TkWidget) -> bool:
-    instate = getattr(widget, "instate", None)
+    instate = _ttk_state_of(widget)
     return bool(instate(["readonly"])) if instate is not None else False
 
 
@@ -400,27 +376,29 @@ def _the_values_it_offers(widget: TkWidget) -> tuple[str, ...]:
     return tuple(str(value) for value in widget.tk.splitlist(values))
 
 
-def _holds_its_on_value(widget: TkWidget) -> bool:
+def _holds(widget: TkWidget, wanted: str) -> bool | None:
+    """Whether the widget's `-variable` holds its `wanted` option, None if it declares none."""
     variable = str(widget.cget("variable"))
-    if variable:
-        try:
-            return str(widget.getvar(variable)) == str(widget.cget("onvalue"))
-        except TclError:
-            # An inline variable nobody held gets collected and unset, which
-            # a checkbutton displays as off.
-            return False
-    instate = getattr(widget, "instate", None)
+    if not variable:
+        return None
+    try:
+        return str(widget.getvar(variable)) == str(widget.cget(wanted))
+    except TclError:
+        # An inline variable nobody held gets collected and unset, which
+        # a checkbutton displays as off.
+        return False
+
+
+def _holds_its_on_value(widget: TkWidget) -> bool:
+    held = _holds(widget, "onvalue")
+    if held is not None:
+        return held
+    instate = _ttk_state_of(widget)
     return bool(instate(["selected"])) if instate is not None else False
 
 
 def _holds_its_own_value(widget: TkWidget) -> bool:
-    variable = str(widget.cget("variable"))
-    if not variable:
-        return False
-    try:
-        return str(widget.getvar(variable)) == str(widget.cget("value"))
-    except TclError:
-        return False
+    return bool(_holds(widget, "value"))
 
 
 def _the_ends_of(widget: TkWidget) -> tuple[float, float]:
