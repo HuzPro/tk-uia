@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from tk_uia.annotate import (
+    AnswersForItself,
     Installation,
     Ledger,
     PropId,
@@ -25,6 +26,7 @@ from tk_uia.annotate import (
     is_a_window,
     words_the_widget_shows,
 )
+from tk_uia.provide import Pattern
 from tk_uia.roles import Role
 from tk_uia.tkversion import Strategy
 
@@ -140,7 +142,7 @@ class WidgetDescription:
     # nothing to walk to.
     tabs: tuple[str, ...] = ()
     is_window: bool = False
-    patterns: tuple[object, ...] = ()
+    patterns: tuple[Pattern, ...] = ()
     answers_rows: bool = False
 
 
@@ -186,15 +188,15 @@ def describe(root: TkWidget, installation: Installation) -> Description:
 
 
 def _with_what_the_provider_answers(
-    widget: WidgetDescription, answers: object
+    widget: WidgetDescription, answers: AnswersForItself
 ) -> WidgetDescription:
     """Fold what the provider layer says about a path into its row."""
     patterns = tuple(answers.patterns_on(widget.path))
     gaps = widget.gaps
-    if any(getattr(pattern, "name", "") == "INVOKE" for pattern in patterns):
+    if Pattern.INVOKE in patterns:
         # The widget genuinely presses now; the proxy's dead Invoke is history.
         gaps = tuple(gap for gap in gaps if gap is not Gap.CANNOT_BE_PRESSED)
-    if any(getattr(pattern, "name", "") == "VALUE" for pattern in patterns):
+    if Pattern.VALUE in patterns:
         # The value is pulled live, so the confident-empty answer is gone too.
         gaps = tuple(gap for gap in gaps if gap is not Gap.NO_VALUE)
     rows = answers.answers_rows_on(widget.path)
@@ -471,8 +473,7 @@ def _the_cells_of(widget: WidgetDescription) -> tuple[str, ...]:
 def _whatever_the_row_had_no_room_for(widget: WidgetDescription) -> Iterator[str]:
     if widget.patterns:
         working = ", ".join(
-            getattr(pattern, "name", str(pattern)).replace("_", " ").title()
-            for pattern in widget.patterns
+            pattern.name.replace("_", " ").title() for pattern in widget.patterns
         )
         yield f"{_UNDER_THE_ROW}answers UIA itself, with working: {working}"
     if widget.answers_rows:
