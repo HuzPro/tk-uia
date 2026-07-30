@@ -10,7 +10,11 @@ from tkinter import TclError
 from typing import TYPE_CHECKING
 
 from tk_uia.annotate import words_the_widget_shows
-from tk_uia.provide import WidgetWiring, answers_nothing_once_the_widget_is_gone
+from tk_uia.provide import (
+    WidgetWiring,
+    answered_unless_the_widget_is_gone,
+    answers_nothing_once_the_widget_is_gone,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -330,11 +334,7 @@ def _guarded(read, nothing=None):
 
 
 def _or_nothing(read, nothing=None):
-    """What this read answers, or `nothing` once the widget has gone."""
-    try:
-        return read()
-    except TclError:
-        return nothing
+    return answered_unless_the_widget_is_gone(read, TclError, nothing)
 
 
 def _ttk_state_of(widget: TkWidget) -> Callable[[list[str]], bool] | None:

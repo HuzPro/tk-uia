@@ -59,6 +59,9 @@ class Win32Overlays:
         _user32().DestroyWindow(ctypes.c_void_p(hwnd))
 
 
+_USER32: Any = None
+
+
 def _user32() -> Any:
     # Built on first use rather than at import: `ctypes.WinDLL` cannot be built
     # off Windows, and this module still has to import there.
@@ -93,6 +96,3 @@ def _user32() -> Any:
         user32.DestroyWindow.argtypes = (ctypes.c_void_p,)
         _USER32 = user32
     return _USER32
-
-
-_USER32: Any = None

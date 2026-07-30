@@ -107,7 +107,7 @@ def test_a_widget_whose_class_has_no_items_answers_that_it_has_none() -> None:
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
 
     # When it is attached and a client asks after its items
-    blueprint = attached(button, RecordingPlatform())
+    blueprint = attached(button)
 
     # Then the honest answer is that there are none, not an empty something
     assert blueprint.items is None, (
@@ -119,7 +119,7 @@ def test_a_rows_words_are_read_from_the_widget_at_the_moment_a_client_asks() -> 
     # Given a listbox holding three rows, whose application then renames one
     rows = ARunOfRows("Alpha", "Beta", "Gamma")
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    blueprint = attached(listbox, RecordingPlatform(), items=rows)
+    blueprint = attached(listbox, items=rows)
 
     # When a row's words change and a client asks
     rows.rows[1] = "Beta, renamed"
@@ -133,7 +133,7 @@ def test_a_rows_words_are_read_from_the_widget_at_the_moment_a_client_asks() -> 
 def test_an_empty_container_has_no_first_or_last_row() -> None:
     # Given a listbox holding nothing
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    blueprint = attached(listbox, RecordingPlatform(), items=ARunOfRows())
+    blueprint = attached(listbox, items=ARunOfRows())
 
     # When a client asks where a walk into it would land
     # Then there is nowhere to land
@@ -144,9 +144,7 @@ def test_an_empty_container_has_no_first_or_last_row() -> None:
 def test_a_client_walks_the_rows_in_order_and_the_walk_ends_at_both_edges() -> None:
     # Given a listbox holding three rows
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(
-        listbox, RecordingPlatform(), items=ARunOfRows("Alpha", "Beta", "Gamma")
-    ).items
+    items = attached(listbox, items=ARunOfRows("Alpha", "Beta", "Gamma")).items
 
     # When a client walks forward from the first row and back from the last
     # Then it visits every row once, in order, and each edge answers nothing
@@ -163,7 +161,7 @@ def test_a_client_walks_the_rows_in_order_and_the_walk_ends_at_both_edges() -> N
 def test_a_branchs_rows_hang_beneath_it_and_name_it_as_their_holder() -> None:
     # Given a tree with two branches, the first holding two rows
     tree = FakeWidget("Treeview", _A_TREE_HANDLE)
-    items = attached(tree, RecordingPlatform(), items=ATreeOfRows()).items
+    items = attached(tree, items=ATreeOfRows()).items
 
     # When a client walks into the first branch and back out of it
     # Then the rows are there, in order, and each names the branch it hangs on
@@ -188,7 +186,7 @@ def test_a_branch_opens_and_closes_through_the_poster_and_reads_back_openness() 
     rows = ATreeOfRows()
     poster = HeldPoster()
     tree = FakeWidget("Treeview", _A_TREE_HANDLE)
-    items = attached(tree, RecordingPlatform(), items=rows, post=poster).items
+    items = attached(tree, items=rows, post=poster).items
     assert items.is_open("chores") is False, "a closed branch read back as open"
 
     # When a client opens it
@@ -212,7 +210,7 @@ def test_a_row_the_container_no_longer_holds_answers_nothing_rather_than_raising
     # deletes two, as a refresh does
     rows = ARunOfRows("Alpha", "Beta", "Gamma")
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(listbox, RecordingPlatform(), items=rows).items
+    items = attached(listbox, items=rows).items
     del rows.rows[1:]
 
     # When the client asks after the row it still holds
@@ -231,7 +229,7 @@ def test_selecting_a_row_answers_first_and_reaches_the_widget_through_the_poster
     rows = ARunOfRows("Alpha", "Beta")
     poster = HeldPoster()
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(listbox, RecordingPlatform(), items=rows, post=poster).items
+    items = attached(listbox, items=rows, post=poster).items
 
     # When a client selects a row
     items.select("1")
@@ -250,7 +248,7 @@ def test_a_select_posted_for_a_row_deleted_before_it_ran_does_nothing() -> None:
     rows = ARunOfRows("Alpha", "Beta")
     poster = HeldPoster()
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(listbox, RecordingPlatform(), items=rows, post=poster).items
+    items = attached(listbox, items=rows, post=poster).items
     items.select("1")
     del rows.rows[1:]
 
@@ -268,7 +266,7 @@ def test_scrolling_a_row_into_view_answers_first_and_is_skipped_once_stale() -> 
     rows = ARunOfRows("Alpha", "Beta")
     poster = HeldPoster()
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(listbox, RecordingPlatform(), items=rows, post=poster).items
+    items = attached(listbox, items=rows, post=poster).items
 
     # When it asks for a living row and a stale one
     items.show("1")
@@ -288,7 +286,7 @@ def test_joining_and_leaving_a_selection_take_the_posted_road_and_skip_the_stale
     rows.selected = {"0"}
     poster = HeldPoster()
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(listbox, RecordingPlatform(), items=rows, post=poster).items
+    items = attached(listbox, items=rows, post=poster).items
 
     # When a client adds a living row, adds a stale one, and removes the first
     items.add_to_selection("2")
@@ -304,7 +302,7 @@ def test_joining_and_leaving_a_selection_take_the_posted_road_and_skip_the_stale
 def test_whether_more_than_one_row_may_be_selected_is_the_widgets_own_answer() -> None:
     # Given a container whose wiring takes more than one
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(listbox, RecordingPlatform(), items=ARunOfRows("Alpha")).items
+    items = attached(listbox, items=ARunOfRows("Alpha")).items
 
     # When a client asks
     # Then the answer is the wiring's, read at ask time
@@ -337,9 +335,7 @@ def test_a_row_vanishing_mid_walk_answers_no_sibling_rather_than_raising() -> No
             return True
 
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)
-    items = attached(
-        listbox, RecordingPlatform(), items=RowsThatVanishMidWalk("Alpha")
-    ).items
+    items = attached(listbox, items=RowsThatVanishMidWalk("Alpha")).items
 
     # When the walk asks after the vanished row's neighbours
     # Then the answer is nothing, in both directions, never a raise into a

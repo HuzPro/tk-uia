@@ -58,10 +58,18 @@ _UIA_CONTROL_TYPE_FOR_ROLE: Mapping[Role, int] = {
     Role.MENU_BUTTON: 50000,
 }
 
+_A_TAB_ITEM = _UIA_CONTROL_TYPE_FOR_ROLE[Role.PAGE_TAB]
+
 _A_LIST_ITEM = 50007
 _A_TREE_ITEM = 50024
 
-_UIA_CONTROL_TYPE_FOR_A_ROW_OF: Mapping[Role, int] = {Role.OUTLINE: _A_TREE_ITEM}
+
+def _the_control_type_of_a_row_of(role: Role) -> int:
+    return _A_TREE_ITEM if role is Role.OUTLINE else _A_LIST_ITEM
+
+
+def _a_row_is_a_list_item() -> int:
+    return _A_LIST_ITEM
 
 
 class InvokeWiring(Protocol):
@@ -236,15 +244,10 @@ class ItemsAnswers:
         wiring: ItemsWiring,
         post: Poster,
         widget_still_there: Callable[[], bool],
-        row_control_type: Callable[[], int],
     ) -> None:
         self._wiring = wiring
         self._post = post
         self._widget_still_there = widget_still_there
-        self._row_control_type = row_control_type
-
-    def row_control_type(self) -> int:
-        return self._row_control_type()
 
     def still_there(self, key: str) -> bool:
         return self._widget_still_there() and self._wiring.exists(key)
@@ -393,6 +396,8 @@ class Blueprint:
     value_the_application_said: Callable[[], str | None] = _nobody_said_a_value
     # The rows a container answers for, None for a class that has no rows.
     items: ItemsAnswers | None = None
+    # What kind of element each of those rows is, read only where there are rows.
+    row_control_type: Callable[[], int] = _a_row_is_a_list_item
 
     @property
     def is_keyboard_focusable(self) -> bool:
@@ -431,6 +436,18 @@ def answers_nothing_once_the_widget_is_gone(
             return nothing
 
     return guarded
+
+
+def answered_unless_the_widget_is_gone(
+    read: Callable[[], object],
+    gone: type[BaseException],
+    nothing: object = None,
+) -> object:
+    """The same rule answered once, for a read that is not kept as a callable."""
+    try:
+        return read()
+    except gone:
+        return nothing
 
 
 def a_press_that_returns_before_it_runs(
@@ -604,16 +621,12 @@ class Providers:
             patterns=patterns,
             value_the_application_said=lambda: self._chosen_text(hwnd, PropId.VALUE),
             items=(
-                ItemsAnswers(
-                    wiring.items,
-                    wiring.post,
-                    wiring.still_there,
-                    lambda: _UIA_CONTROL_TYPE_FOR_A_ROW_OF.get(
-                        self._role_in_force(hwnd, role), _A_LIST_ITEM
-                    ),
-                )
+                ItemsAnswers(wiring.items, wiring.post, wiring.still_there)
                 if wiring.items is not None
                 else None
+            ),
+            row_control_type=lambda: _the_control_type_of_a_row_of(
+                self._role_in_force(hwnd, role)
             ),
         )
 
@@ -641,7 +654,7 @@ class ProvidedTabs:
         self._platform.host(
             hwnd,
             Blueprint(
-                control_type=lambda: _UIA_CONTROL_TYPE_FOR_ROLE[Role.PAGE_TAB],
+                control_type=lambda: _A_TAB_ITEM,
                 name=wiring.text,
                 help_text=lambda: None,
                 description=lambda: None,

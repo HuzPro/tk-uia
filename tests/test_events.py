@@ -9,6 +9,7 @@ from tests.doubles import (
     RecordingStore,
     VariablesByName,
 )
+from tk_uia import _AnnouncesThroughTheProvider
 from tk_uia.annotate import Annotator, PropId
 
 _AN_ENTRY_HANDLE = 0x000907E2
@@ -71,4 +72,38 @@ def test_a_name_the_application_sets_by_hand_is_announced_as_changed() -> None:
     # Then the change is heard
     assert (_A_BUTTON_HANDLE, PropId.NAME, "Create a task") in notifier.heard, (
         f"set_acc_name went unannounced; the notifier heard {notifier.heard}"
+    )
+
+
+def test_only_a_property_uia_has_an_event_for_is_carried_to_the_tk_thread() -> None:
+    # Given the notifier `enable()` installs, over a platform and a root that
+    # record what each was asked
+    posted: list[object] = []
+    asked: list[PropId] = []
+
+    class ThePlatformTheProviderLayerGives:
+        def announces(self, prop: PropId) -> bool:
+            asked.append(prop)
+            return prop in (PropId.NAME, PropId.VALUE)
+
+        def announce_change(self, hwnd: int, prop: PropId, now: object) -> None: ...
+
+    class ARootThatRecordsWhatWasPosted:
+        def after_idle(self, action: object) -> None:
+            posted.append(action)
+
+    notifier = _AnnouncesThroughTheProvider(
+        ARootThatRecordsWhatWasPosted(), ThePlatformTheProviderLayerGives()
+    )
+
+    # When a role and a name both change, as they do for every widget at <Map>
+    notifier.changed(_A_BUTTON_HANDLE, PropId.ROLE, 43)
+    notifier.changed(_A_BUTTON_HANDLE, PropId.NAME, "New Task")
+
+    # Then only the name reached the Tk thread: a role has no property-changed
+    # event, so posting one would cost every widget an idle callback for nothing
+    assert asked == [PropId.ROLE, PropId.NAME], f"the platform was asked {asked}"
+    assert len(posted) == 1, (
+        f"posted {len(posted)} actions for two changes, one of which UIA has no "
+        "event for"
     )

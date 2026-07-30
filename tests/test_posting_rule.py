@@ -11,7 +11,7 @@ from tests.doubles import (
     HeldPoster,
     attached,
 )
-from tk_uia.provide import Pattern
+from tk_uia.patterns import Pattern
 
 _A_BUTTON_HANDLE = 0x000807D2
 _A_CHECK_HANDLE = 0x000807D3

@@ -21,8 +21,8 @@ from tk_uia.describe import Description, Gap, WidgetDescription
 from tk_uia.describe import describe as _describe
 from tk_uia.layout import NamedByTheLayout
 from tk_uia.layout import infer_names_from_layout as _names_the_layout_implies
+from tk_uia.patterns import Pattern
 from tk_uia.provide import (
-    Pattern,
     ProvidedTabs,
     ProviderRefused,
     Providers,

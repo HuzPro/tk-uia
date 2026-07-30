@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
+from types import MappingProxyType
 
 
 class Pattern(Enum):
@@ -13,3 +15,9 @@ class Pattern(Enum):
     RANGE_VALUE = 10003
     SELECTION_ITEM = 10010
     TOGGLE = 10015
+
+
+# A table because `Pattern(10099)` raises for an id no member carries.
+THE_PATTERN_WITH_EACH_ID: Mapping[int, Pattern] = MappingProxyType(
+    {pattern.value: pattern for pattern in Pattern}
+)

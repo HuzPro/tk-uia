@@ -7,11 +7,10 @@ from tests.doubles import (
     ASelection,
     AToggle,
     FakeWidget,
-    RecordingPlatform,
     attached,
 )
 from tk_uia.annotate import Ledger, PropId, Wrote
-from tk_uia.provide import Pattern
+from tk_uia.patterns import Pattern
 from tk_uia.roles import Role
 
 _A_BUTTON_HANDLE = 0x000707C2
@@ -50,7 +49,7 @@ def test_a_name_the_application_chose_outranks_the_words_the_widget_shows() -> N
     said = Ledger()
     said.record(_A_BUTTON_HANDLE, PropId.NAME, "Create a task", Wrote.SAID_ONCE)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = attached(button, RecordingPlatform(), said, words=lambda: "New Task")
+    blueprint = attached(button, said=said, words=lambda: "New Task")
 
     # When a client asks for its name
     # Then the application's word wins
@@ -67,7 +66,7 @@ def test_a_name_the_package_only_inferred_never_outranks_what_the_widget_shows_n
     said = Ledger()
     said.record(_A_BUTTON_HANDLE, PropId.NAME, "New Task", Wrote.INFERRED)
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="Save Task")
-    blueprint = attached(button, RecordingPlatform(), said, words=lambda: "Save Task")
+    blueprint = attached(button, said=said, words=lambda: "Save Task")
 
     # When a client asks
     # Then it hears what the widget shows now, not the stale echo of map time
@@ -82,9 +81,7 @@ def test_a_name_nobody_chose_is_read_off_the_widget_at_the_moment_a_client_asks(
 ):
     # Given a button nobody named, whose words keep changing
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="Step 1")
-    blueprint = attached(
-        button, RecordingPlatform(), Ledger(), words=lambda: str(button.cget("text"))
-    )
+    blueprint = attached(button, words=lambda: str(button.cget("text")))
 
     # When the words change and a client asks again
     button.says_something_else("Step 2")
@@ -102,7 +99,7 @@ def test_a_role_the_application_chose_decides_the_control_type_a_client_is_told(
     said = Ledger()
     said.record(_AN_ENTRY_HANDLE, PropId.ROLE, Role.PUSH_BUTTON.value, Wrote.SAID_ONCE)
     entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
-    blueprint = attached(entry, RecordingPlatform(), said)
+    blueprint = attached(entry, said=said)
 
     # When a client asks what kind of control it is
     # Then the chosen role decides, through the same table as the class role
@@ -116,7 +113,7 @@ def test_a_widget_with_no_name_anywhere_answers_no_name_rather_than_an_invented_
 ):
     # Given an entry with no name from anyone
     entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
-    blueprint = attached(entry, RecordingPlatform(), Ledger())
+    blueprint = attached(entry)
 
     # When a client asks
     # Then the honest answer is nothing
@@ -128,9 +125,7 @@ def test_is_enabled_is_read_from_the_widget_at_the_moment_a_client_asks() -> Non
     # Given a button that gets disabled after it was attached
     truth = {"enabled": True}
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = attached(
-        button, RecordingPlatform(), Ledger(), is_enabled=lambda: truth["enabled"]
-    )
+    blueprint = attached(button, is_enabled=lambda: truth["enabled"])
 
     # When the application disables it and a client asks
     truth["enabled"] = False
@@ -149,7 +144,7 @@ def test_help_and_description_the_application_set_are_answered_to_a_client() -> 
         _A_BUTTON_HANDLE, PropId.DESCRIPTION, "the description", Wrote.SAID_ONCE
     )
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = attached(button, RecordingPlatform(), said)
+    blueprint = attached(button, said=said)
 
     # When a client asks
     # Then both writes still reach it in provider mode
@@ -165,7 +160,7 @@ def test_toggle_state_is_read_from_the_variable_behind_the_widget() -> None:
     # Given a checkbutton whose application flips its own variable
     toggle = AToggle()
     check = FakeWidget("Checkbutton", _A_CHECK_HANDLE, text="Notify")
-    blueprint = attached(check, RecordingPlatform(), Ledger(), toggle=toggle)
+    blueprint = attached(check, toggle=toggle)
 
     # When the application flips it and a client asks
     toggle.flip()
@@ -179,7 +174,7 @@ def test_toggle_state_is_read_from_the_variable_behind_the_widget() -> None:
 def test_a_radiobutton_answers_selection_item_and_never_toggle() -> None:
     # Given a radio, which can be selected but never cycled off
     radio = FakeWidget("Radiobutton", _A_RADIO_HANDLE, text="High")
-    blueprint = attached(radio, RecordingPlatform(), Ledger(), selection=ASelection())
+    blueprint = attached(radio, selection=ASelection())
 
     # When a client asks what it can do
     # Then it hears SelectionItem alone; Toggle on a radio promises an
@@ -192,9 +187,7 @@ def test_a_radiobutton_answers_selection_item_and_never_toggle() -> None:
 def test_a_progressbar_refuses_a_range_write_and_says_it_is_read_only() -> None:
     # Given a progressbar, whose numbers a client may read and never set
     bar = FakeWidget("TProgressbar", _A_BAR_HANDLE)
-    blueprint = attached(
-        bar, RecordingPlatform(), Ledger(), range_value=AReadOnlyRange()
-    )
+    blueprint = attached(bar, range_value=AReadOnlyRange())
 
     # When a client asks
     answers = blueprint.patterns[Pattern.RANGE_VALUE]
@@ -212,7 +205,7 @@ def test_the_invoke_on_offer_follows_the_command_the_widget_has_right_now() -> N
     # Given a button whose command the application later takes away
     invoke = AnInvoke("something to run")
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = attached(button, RecordingPlatform(), Ledger(), invoke=invoke)
+    blueprint = attached(button, invoke=invoke)
 
     # When the command is emptied and a client asks
     invoke.command = ""
@@ -244,7 +237,7 @@ def test_a_value_the_application_said_is_carried_for_a_class_with_no_live_value(
     # Given a listbox, whose class has no value wiring of its own
     said = Ledger()
     listbox = FakeWidget("Listbox", _A_BAR_HANDLE)
-    blueprint = attached(listbox, RecordingPlatform(), said)
+    blueprint = attached(listbox, said=said)
 
     # Then before the application says anything, there is no value to serve
     assert blueprint.value_the_application_said() is None, (

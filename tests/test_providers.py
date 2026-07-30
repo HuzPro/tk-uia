@@ -11,7 +11,8 @@ from tests.doubles import (
 )
 from tests.threads import the_failure_raised_on_another_thread
 from tk_uia.annotate import AnnotationRefused
-from tk_uia.provide import Pattern, Providers, WidgetWiring
+from tk_uia.patterns import Pattern
+from tk_uia.provide import Providers, WidgetWiring
 
 _A_BUTTON_HANDLE = 0x000607B2
 _A_LABEL_HANDLE = 0x000607B3

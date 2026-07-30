@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from tests.doubles import (
+    AnInvoke,
     FakeInterpreter,
     FakeRoot,
     FakeVariable,
     FakeWidget,
+    RecordingPlatform,
     RecordingStore,
     VariablesByName,
+    a_wiring_with,
 )
 from tests.threads import the_failure_raised_on_another_thread
 from tk_uia import __version__
@@ -26,9 +29,11 @@ from tk_uia.describe import (
     WidgetDescription,
     describe,
 )
+from tk_uia.provide import Providers
 from tk_uia.roles import Role
 from tk_uia.tkversion import Strategy
 
+_NO_COMMAND = ""
 _A_BUTTON_HANDLE = 0x000407A2
 _A_CANVAS_HANDLE = 0x000407A4
 _A_MENU_HANDLE = 0x000407B7
@@ -1132,19 +1137,8 @@ def _what_the_description_says_about(
 
 
 def _an_installation_with_providers(root, wiring_for=None):
-    from tests.doubles import HeldPoster, RecordingPlatform
-    from tk_uia.provide import Providers, WidgetWiring
-
-    def _bare_wiring(widget):
-        return WidgetWiring(
-            words=lambda: None,
-            is_enabled=lambda: True,
-            post=HeldPoster(),
-            still_there=widget.winfo_exists,
-        )
-
     providers = Providers(
-        RecordingPlatform(), wiring_for if wiring_for is not None else _bare_wiring
+        RecordingPlatform(), wiring_for if wiring_for is not None else a_wiring_with
     )
     installation = install(root, RecordingStore(), providers=providers)
     return installation, providers
@@ -1152,22 +1146,9 @@ def _an_installation_with_providers(root, wiring_for=None):
 
 def test_the_report_says_which_patterns_each_widget_answers_for_itself() -> None:
     # Given a button answering UIA itself with a working Invoke
-    from tests.doubles import HeldPoster, RecordingPlatform
-    from tk_uia.provide import Providers, WidgetWiring
-
-    class AnInvoke:
-        def press(self) -> None: ...
-
-        def offered(self) -> bool:
-            return True
-
     def wiring(widget):
-        return WidgetWiring(
-            words=lambda: None,
-            is_enabled=lambda: True,
-            post=HeldPoster(),
-            still_there=widget.winfo_exists,
-            invoke=AnInvoke() if widget.winfo_class() == "Button" else None,
+        return a_wiring_with(
+            widget, invoke=AnInvoke() if widget.winfo_class() == "Button" else None
         )
 
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -1186,22 +1167,10 @@ def test_the_report_says_which_patterns_each_widget_answers_for_itself() -> None
 
 def test_a_button_with_nothing_to_run_is_not_reported_as_pressing() -> None:
     # Given a button with no command, whose provider will refuse the pattern
-    from tests.doubles import HeldPoster, RecordingPlatform
-    from tk_uia.provide import Providers, WidgetWiring
-
-    class AnUnwiredInvoke:
-        def press(self) -> None: ...
-
-        def offered(self) -> bool:
-            return False
-
     def wiring(widget):
-        return WidgetWiring(
-            words=lambda: None,
-            is_enabled=lambda: True,
-            post=HeldPoster(),
-            still_there=widget.winfo_exists,
-            invoke=AnUnwiredInvoke() if widget.winfo_class() == "Button" else None,
+        return a_wiring_with(
+            widget,
+            invoke=AnInvoke(_NO_COMMAND) if widget.winfo_class() == "Button" else None,
         )
 
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
@@ -1226,9 +1195,6 @@ def test_a_button_with_nothing_to_run_is_not_reported_as_pressing() -> None:
 
 def test_a_listbox_whose_rows_answer_for_themselves_is_not_reported_hollow() -> None:
     # Given a listbox whose provider answers rows of its own
-    from tests.doubles import HeldPoster, RecordingPlatform
-    from tk_uia.provide import Providers, WidgetWiring
-
     class SomeRows:
         def count(self) -> int:
             return 2
@@ -1249,12 +1215,8 @@ def test_a_listbox_whose_rows_answer_for_themselves_is_not_reported_hollow() -> 
         def announce_selection_to(self, say) -> None: ...
 
     def wiring(widget):
-        return WidgetWiring(
-            words=lambda: None,
-            is_enabled=lambda: True,
-            post=HeldPoster(),
-            still_there=widget.winfo_exists,
-            items=SomeRows() if widget.winfo_class() == "Listbox" else None,
+        return a_wiring_with(
+            widget, items=SomeRows() if widget.winfo_class() == "Listbox" else None
         )
 
     listbox = FakeWidget("Listbox", _A_LISTBOX_HANDLE)

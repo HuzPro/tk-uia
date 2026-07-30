@@ -26,7 +26,7 @@ from tk_uia.annotate import (
     is_a_window,
     words_the_widget_shows,
 )
-from tk_uia.provide import Pattern
+from tk_uia.patterns import Pattern
 from tk_uia.roles import Role
 from tk_uia.tkversion import Strategy
 
@@ -204,7 +204,7 @@ def _with_what_the_provider_answers(
 
 def _whatever_answering_for_itself_cures(
     patterns: tuple[Pattern, ...], answers_rows: bool
-) -> frozenset[Gap]:
+) -> set[Gap]:
     """The gaps a real provider closes: a live pattern outranks the proxy's dead one."""
     cured = {
         _THE_GAP_EACH_PATTERN_CURES[pattern]
@@ -213,7 +213,7 @@ def _whatever_answering_for_itself_cures(
     }
     if answers_rows:
         cured.add(Gap.ITEMS_NOT_IN_THE_TREE)
-    return frozenset(cured)
+    return cured
 
 
 def _and_whichever_of_them_a_client_cannot_tell_apart(

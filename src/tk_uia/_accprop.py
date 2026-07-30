@@ -119,7 +119,7 @@ class AccPropServicesStore:
 
     def set_string(self, hwnd: int, prop: PropId, value: str) -> None:
         services = self._reached()
-        call = self._the_call_in(_SLOT_SET_HWND_PROP_STR, _set_hwnd_prop_str)
+        call = self._the_call_in(services, _SLOT_SET_HWND_PROP_STR, _set_hwnd_prop_str)
         _checked(
             call(
                 services,
@@ -137,7 +137,7 @@ class AccPropServicesStore:
         holder.vt = _VT_I4
         holder.value = value
         services = self._reached()
-        call = self._the_call_in(_SLOT_SET_HWND_PROP, _set_hwnd_prop)
+        call = self._the_call_in(services, _SLOT_SET_HWND_PROP, _set_hwnd_prop)
         _checked(
             call(
                 services,
@@ -158,7 +158,7 @@ class AccPropServicesStore:
 
     def clear(self, hwnd: int) -> None:
         services = self._reached()
-        call = self._the_call_in(_SLOT_CLEAR_HWND_PROPS, _clear_hwnd_props)
+        call = self._the_call_in(services, _SLOT_CLEAR_HWND_PROPS, _clear_hwnd_props)
         _checked(
             call(
                 services,
@@ -176,10 +176,12 @@ class AccPropServicesStore:
             self._services = _acc_prop_services()
         return self._services
 
-    def _the_call_in(self, slot: int, prototype: Callable[[], Any]) -> Any:
+    def _the_call_in(
+        self, services: ctypes.c_void_p, slot: int, prototype: Callable[[], Any]
+    ) -> Any:
         call = self._calls.get(slot)
         if call is None:
-            call = _method(self._reached(), slot, prototype())
+            call = _method(services, slot, prototype())
             self._calls[slot] = call
         return call
 

@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 from tk_uia._subclass import WindowSubclasses
 from tk_uia.annotate import PropId
+from tk_uia.patterns import THE_PATTERN_WITH_EACH_ID, Pattern
 from tk_uia.provide import (
-    Pattern,
     SelectionChange,
     ValueAnswers,
     the_selection_changes_between,
@@ -102,39 +102,46 @@ _THE_SHELL_FOR_EACH_PATTERN = {
     Pattern.SELECTION_ITEM: "selection",
 }
 
-# A table because `Pattern(10099)` raises for an id no member carries.
-_THE_PATTERN_WITH_EACH_ID: Mapping[int, Pattern] = {
-    pattern.value: pattern for pattern in Pattern
-}
-
 _THE_SHELL_A_ROW_OFFERS_FOR_EACH_PATTERN_ID: Mapping[int, str] = {
     Pattern.SELECTION_ITEM.value: "selection",
     _UIA_ScrollItemPatternId: "scroll",
 }
 
 
+class _VariantPayload(ctypes.Union):
+    """VARIANT's 16-byte union, of which this package writes the first three shapes."""
+
+    _fields_ = (
+        ("number", ctypes.c_int),
+        ("truth", ctypes.c_short),
+        ("pointer", ctypes.c_void_p),
+        # Never written; it is what holds the union to the 16 bytes the header
+        # gives it, so the struct around it stays 24.
+        ("whole", ctypes.c_ubyte * 16),
+    )
+
+
 class _Variant(ctypes.Structure):
+    _anonymous_ = ("payload",)
     _fields_ = (
         ("vt", ctypes.c_ushort),
         ("reserved1", ctypes.c_ushort),
         ("reserved2", ctypes.c_ushort),
         ("reserved3", ctypes.c_ushort),
-        ("data", ctypes.c_ubyte * 16),
+        ("payload", _VariantPayload),
     )
 
     def hold_number(self, value: int) -> None:
         self.vt = _VT_I4
-        ctypes.cast(self.data, ctypes.POINTER(ctypes.c_int))[0] = value
+        self.number = value
 
     def hold_truth(self, value: bool) -> None:
         self.vt = _VT_BOOL
-        ctypes.cast(self.data, ctypes.POINTER(ctypes.c_short))[0] = -1 if value else 0
+        self.truth = -1 if value else 0
 
     def hold_words(self, value: str) -> None:
         self.vt = _VT_BSTR
-        ctypes.cast(self.data, ctypes.POINTER(ctypes.c_void_p))[0] = (
-            _oleaut32().SysAllocString(value)
-        )
+        self.pointer = _oleaut32().SysAllocString(value)
 
 
 class _UiaRect(ctypes.Structure):
@@ -181,6 +188,10 @@ class _HostedRow:
         # memory until the container goes.
         self.refcount = 1
         self.shells: dict[str, _Shell] = {}
+
+    @property
+    def blueprint(self) -> Blueprint:
+        return self.container.blueprint
 
     @property
     def items(self) -> ItemsAnswers | None:
@@ -323,12 +334,31 @@ def _the_value_said_for(hosted: _Hosted) -> str | None:
     return hosted.blueprint.value_the_application_said()
 
 
+# `from_address` rather than `ctypes.cast`: the same store into the caller's out
+# parameter, without building a pointer type and an instance on every request.
+_AN_INT_AT = ctypes.c_int.from_address
+_A_DOUBLE_AT = ctypes.c_double.from_address
+_A_POINTER_AT = ctypes.c_void_p.from_address
+_A_VARIANT_AT = _Variant.from_address
+_A_RECTANGLE_AT = _UiaRect.from_address
+
+
 def _write_pointer(out: int, address: int | None) -> None:
-    ctypes.cast(out, ctypes.POINTER(ctypes.c_void_p))[0] = address
+    _A_POINTER_AT(out).value = address
 
 
 def _write_int(out: int, value: int) -> None:
-    ctypes.cast(out, ctypes.POINTER(ctypes.c_int))[0] = value
+    _AN_INT_AT(out).value = value
+
+
+def _write_rectangle(
+    out: int, left: float, top: float, width: float, height: float
+) -> None:
+    rectangle = _A_RECTANGLE_AT(out)
+    rectangle.left = left
+    rectangle.top = top
+    rectangle.width = width
+    rectangle.height = height
 
 
 def _hand_out_a_row(container: _Hosted, key: str, out: int) -> None:
@@ -384,72 +414,71 @@ class _ComLayer:
         self.row_vtables = self._the_row_vtables()
 
     def _the_vtables(self) -> dict[str, Any]:
-        hresult = _HRESULT
         this = ctypes.c_void_p
         out = ctypes.c_void_p
 
         unknown = (
-            self._slot(hresult, this, out, out)(self._query_interface),
+            self._slot(_HRESULT, this, out, out)(self._query_interface),
             self._slot(ctypes.c_ulong, this)(self._add_reference),
             self._slot(ctypes.c_ulong, this)(self._release),
         )
         simple = (
             *unknown,
-            self._slot(hresult, this, out)(self._provider_options),
-            self._slot(hresult, this, ctypes.c_int, out)(self._pattern_provider),
-            self._slot(hresult, this, ctypes.c_int, out)(self._property_value),
-            self._slot(hresult, this, out)(self._host_provider),
+            self._slot(_HRESULT, this, out)(self._provider_options),
+            self._slot(_HRESULT, this, ctypes.c_int, out)(self._pattern_provider),
+            self._slot(_HRESULT, this, ctypes.c_int, out)(self._property_value),
+            self._slot(_HRESULT, this, out)(self._host_provider),
         )
-        invoke = (*unknown, self._slot(hresult, this)(self._invoke))
+        invoke = (*unknown, self._slot(_HRESULT, this)(self._invoke))
         toggle = (
             *unknown,
-            self._slot(hresult, this)(self._toggle),
-            self._slot(hresult, this, out)(self._toggle_state),
+            self._slot(_HRESULT, this)(self._toggle),
+            self._slot(_HRESULT, this, out)(self._toggle_state),
         )
         value = (
             *unknown,
-            self._slot(hresult, this, ctypes.c_wchar_p)(self._set_value),
-            self._slot(hresult, this, out)(self._value),
-            self._slot(hresult, this, out)(self._value_read_only),
+            self._slot(_HRESULT, this, ctypes.c_wchar_p)(self._set_value),
+            self._slot(_HRESULT, this, out)(self._value),
+            self._slot(_HRESULT, this, out)(self._value_read_only),
         )
         # Vtable order from UIAutomationCore.h: Value, IsReadOnly, Maximum,
         # Minimum, LargeChange, SmallChange.
         range_value = (
             *unknown,
-            self._slot(hresult, this, ctypes.c_double)(self._set_range_value),
-            self._slot(hresult, this, out)(self._range_value),
-            self._slot(hresult, this, out)(self._range_read_only),
-            self._slot(hresult, this, out)(self._range_maximum),
-            self._slot(hresult, this, out)(self._range_minimum),
-            self._slot(hresult, this, out)(self._range_large_change),
-            self._slot(hresult, this, out)(self._range_small_change),
+            self._slot(_HRESULT, this, ctypes.c_double)(self._set_range_value),
+            self._slot(_HRESULT, this, out)(self._range_value),
+            self._slot(_HRESULT, this, out)(self._range_read_only),
+            self._slot(_HRESULT, this, out)(self._range_maximum),
+            self._slot(_HRESULT, this, out)(self._range_minimum),
+            self._slot(_HRESULT, this, out)(self._range_large_change),
+            self._slot(_HRESULT, this, out)(self._range_small_change),
         )
         selection = (
             *unknown,
-            self._slot(hresult, this)(self._select),
-            self._slot(hresult, this)(self._add_to_selection),
-            self._slot(hresult, this)(self._remove_from_selection),
-            self._slot(hresult, this, out)(self._is_selected),
-            self._slot(hresult, this, out)(self._selection_container),
+            self._slot(_HRESULT, this)(self._select),
+            self._slot(_HRESULT, this)(self._add_to_selection),
+            self._slot(_HRESULT, this)(self._remove_from_selection),
+            self._slot(_HRESULT, this, out)(self._is_selected),
+            self._slot(_HRESULT, this, out)(self._selection_container),
         )
         # Vtable order from UIAutomationCore.h: Navigate, GetRuntimeId,
         # get_BoundingRectangle, GetEmbeddedFragmentRoots, SetFocus,
         # get_FragmentRoot.
         fragment = (
             *unknown,
-            self._slot(hresult, this, ctypes.c_int, out)(self._navigate),
-            self._slot(hresult, this, out)(self._runtime_id),
-            self._slot(hresult, this, out)(self._bounding_rectangle),
-            self._slot(hresult, this, out)(self._embedded_fragment_roots),
-            self._slot(hresult, this)(self._set_focus),
-            self._slot(hresult, this, out)(self._fragment_root),
+            self._slot(_HRESULT, this, ctypes.c_int, out)(self._navigate),
+            self._slot(_HRESULT, this, out)(self._runtime_id),
+            self._slot(_HRESULT, this, out)(self._bounding_rectangle),
+            self._slot(_HRESULT, this, out)(self._embedded_fragment_roots),
+            self._slot(_HRESULT, this)(self._set_focus),
+            self._slot(_HRESULT, this, out)(self._fragment_root),
         )
         fragment_root = (
             *unknown,
-            self._slot(hresult, this, ctypes.c_double, ctypes.c_double, out)(
+            self._slot(_HRESULT, this, ctypes.c_double, ctypes.c_double, out)(
                 self._element_from_point
             ),
-            self._slot(hresult, this, out)(self._focused_element),
+            self._slot(_HRESULT, this, out)(self._focused_element),
         )
         return {
             "simple": _a_vtable(simple),
@@ -463,50 +492,49 @@ class _ComLayer:
         }
 
     def _the_row_vtables(self) -> dict[str, Any]:
-        hresult = _HRESULT
         this = ctypes.c_void_p
         out = ctypes.c_void_p
 
         unknown = (
-            self._slot(hresult, this, out, out)(self._row_query_interface),
+            self._slot(_HRESULT, this, out, out)(self._row_query_interface),
             self._slot(ctypes.c_ulong, this)(self._row_add_reference),
             self._slot(ctypes.c_ulong, this)(self._row_release),
         )
         simple = (
             *unknown,
-            self._slot(hresult, this, out)(self._provider_options),
-            self._slot(hresult, this, ctypes.c_int, out)(self._row_pattern_provider),
-            self._slot(hresult, this, ctypes.c_int, out)(self._row_property_value),
-            self._slot(hresult, this, out)(self._row_host_provider),
+            self._slot(_HRESULT, this, out)(self._provider_options),
+            self._slot(_HRESULT, this, ctypes.c_int, out)(self._row_pattern_provider),
+            self._slot(_HRESULT, this, ctypes.c_int, out)(self._row_property_value),
+            self._slot(_HRESULT, this, out)(self._row_host_provider),
         )
         fragment = (
             *unknown,
-            self._slot(hresult, this, ctypes.c_int, out)(self._row_navigate),
-            self._slot(hresult, this, out)(self._row_runtime_id),
-            self._slot(hresult, this, out)(self._row_bounding_rectangle),
-            self._slot(hresult, this, out)(self._embedded_fragment_roots),
-            self._slot(hresult, this)(self._set_focus),
-            self._slot(hresult, this, out)(self._row_fragment_root),
+            self._slot(_HRESULT, this, ctypes.c_int, out)(self._row_navigate),
+            self._slot(_HRESULT, this, out)(self._row_runtime_id),
+            self._slot(_HRESULT, this, out)(self._row_bounding_rectangle),
+            self._slot(_HRESULT, this, out)(self._embedded_fragment_roots),
+            self._slot(_HRESULT, this)(self._set_focus),
+            self._slot(_HRESULT, this, out)(self._row_fragment_root),
         )
         selection = (
             *unknown,
-            self._slot(hresult, this)(self._row_select),
-            self._slot(hresult, this)(self._row_add_to_selection),
-            self._slot(hresult, this)(self._row_remove_from_selection),
-            self._slot(hresult, this, out)(self._row_is_selected),
-            self._slot(hresult, this, out)(self._row_selection_container),
+            self._slot(_HRESULT, this)(self._row_select),
+            self._slot(_HRESULT, this)(self._row_add_to_selection),
+            self._slot(_HRESULT, this)(self._row_remove_from_selection),
+            self._slot(_HRESULT, this, out)(self._row_is_selected),
+            self._slot(_HRESULT, this, out)(self._row_selection_container),
         )
         scroll = (
             *unknown,
-            self._slot(hresult, this)(self._row_scroll_into_view),
+            self._slot(_HRESULT, this)(self._row_scroll_into_view),
         )
         # Vtable order from UIAutomationCore.h: Expand, Collapse,
         # get_ExpandCollapseState.
         expand = (
             *unknown,
-            self._slot(hresult, this)(self._row_expand),
-            self._slot(hresult, this)(self._row_collapse),
-            self._slot(hresult, this, out)(self._row_expand_state),
+            self._slot(_HRESULT, this)(self._row_expand),
+            self._slot(_HRESULT, this)(self._row_collapse),
+            self._slot(_HRESULT, this, out)(self._row_expand_state),
         )
         return {
             "simple": _a_vtable(simple),
@@ -567,7 +595,7 @@ class _ComLayer:
     def _pattern_provider(self, this: int, pattern_id: int, out: int) -> int:
         hosted = _hosted_for(this)
         _write_pointer(out, None)
-        asked = _THE_PATTERN_WITH_EACH_ID.get(pattern_id)
+        asked = THE_PATTERN_WITH_EACH_ID.get(pattern_id)
         if asked is None:
             return _S_OK
         answers = hosted.blueprint.patterns.get(asked)
@@ -587,7 +615,7 @@ class _ComLayer:
 
     def _property_value(self, this: int, property_id: int, out: int) -> int:
         hosted = _hosted_for(this)
-        variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
+        variant = _A_VARIANT_AT(out)
         blueprint = hosted.blueprint
         if property_id == _UIA_NamePropertyId:
             name = blueprint.name()
@@ -739,7 +767,7 @@ class _ComLayer:
         return _S_OK
 
     def _bounding_rectangle(self, this: int, out: int) -> int:
-        ctypes.cast(out, ctypes.POINTER(_UiaRect))[0] = _UiaRect(0.0, 0.0, 0.0, 0.0)
+        _write_rectangle(out, 0.0, 0.0, 0.0, 0.0)
         return _S_OK
 
     def _embedded_fragment_roots(self, this: int, out: int) -> int:
@@ -807,7 +835,7 @@ class _ComLayer:
 
     def _row_property_value(self, this: int, property_id: int, out: int) -> int:
         row = _row_for(this)
-        variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
+        variant = _A_VARIANT_AT(out)
         items = row.items
         if items is None:
             return _S_OK
@@ -816,9 +844,9 @@ class _ComLayer:
             if words:
                 variant.hold_words(words)
         elif property_id == _UIA_ControlTypePropertyId:
-            variant.hold_number(items.row_control_type())
+            variant.hold_number(row.blueprint.row_control_type())
         elif property_id == _UIA_IsEnabledPropertyId:
-            variant.hold_truth(bool(row.container.blueprint.is_enabled()))
+            variant.hold_truth(bool(row.blueprint.is_enabled()))
         elif property_id == _UIA_IsOffscreenPropertyId:
             # A row scrolled out of view has no rectangle, and says so.
             variant.hold_truth(items.rectangle(row.key) is None)
@@ -862,9 +890,7 @@ class _ComLayer:
         items = row.items
         painted = items.rectangle(row.key) if items is not None else None
         left, top, width, height = painted if painted is not None else (0, 0, 0, 0)
-        ctypes.cast(out, ctypes.POINTER(_UiaRect))[0] = _UiaRect(
-            float(left), float(top), float(width), float(height)
-        )
+        _write_rectangle(out, float(left), float(top), float(width), float(height))
         return _S_OK
 
     def _row_fragment_root(self, this: int, out: int) -> int:
@@ -964,15 +990,20 @@ class _ComLayer:
         return _S_OK
 
     def _tell_a_truth(self, this: int, pattern: Pattern, out: int, read: Any) -> int:
-        return self._with_the_answers_for(
-            this, pattern, lambda answers: _write_int(out, 1 if read(answers) else 0)
-        )
+        # Its own lookup rather than `_with_the_answers_for`: property reads are
+        # the hot half of this file, and delegating costs a closure apiece.
+        answers = _hosted_for(this).blueprint.patterns.get(pattern)
+        if answers is None:
+            return _UIA_E_INVALIDOPERATION
+        _write_int(out, 1 if read(answers) else 0)
+        return _S_OK
 
     def _tell_a_number(self, this: int, out: int, read: Any) -> int:
-        def answer(answers: Any) -> None:
-            ctypes.cast(out, ctypes.POINTER(ctypes.c_double))[0] = float(read(answers))
-
-        return self._with_the_answers_for(this, Pattern.RANGE_VALUE, answer)
+        answers = _hosted_for(this).blueprint.patterns.get(Pattern.RANGE_VALUE)
+        if answers is None:
+            return _UIA_E_INVALIDOPERATION
+        _A_DOUBLE_AT(out).value = float(read(answers))
+        return _S_OK
 
 
 def _never_raising(implementation: Callable[..., int]) -> Callable[..., int]:

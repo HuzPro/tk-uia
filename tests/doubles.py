@@ -458,23 +458,25 @@ class ASelection:
         return self.selected
 
 
-def a_wiring_with(widget, post=None, **fields) -> WidgetWiring:
+def a_wiring_with(
+    widget, *, words=None, is_enabled=None, post=None, **patterns
+) -> WidgetWiring:
     """One widget's wiring: the four every class carries, plus the patterns named."""
     return WidgetWiring(
-        words=fields.pop("words", lambda: None),
-        is_enabled=fields.pop("is_enabled", lambda: True),
+        words=words if words is not None else lambda: None,
+        is_enabled=is_enabled if is_enabled is not None else lambda: True,
         post=post if post is not None else HeldPoster(),
-        still_there=fields.pop("still_there", widget.winfo_exists),
-        **fields,
+        still_there=widget.winfo_exists,
+        **patterns,
     )
 
 
-def attached(widget, platform=None, said=None, post=None, **fields):
+def attached(widget, platform=None, said=None, **wiring):
     """Attach one widget through a Providers, and hand back the blueprint hosted for it."""
     platform = platform if platform is not None else RecordingPlatform()
     providers = Providers(
         platform,
-        lambda _each: a_wiring_with(widget, post=post, **fields),
+        lambda _each: a_wiring_with(widget, **wiring),
         said=said if said is not None else Ledger(),
     )
     providers.attach(widget)
