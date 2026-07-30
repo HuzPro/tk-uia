@@ -70,7 +70,6 @@ _UIA_CONTROL_TYPE_FOR_ROLE: Mapping[Role, int] = {
 _A_LIST_ITEM = 50007
 _A_TREE_ITEM = 50024
 
-# A tree's rows are tree items; every other container's are list items.
 _UIA_CONTROL_TYPE_FOR_A_ROW_OF: Mapping[Role, int] = {Role.OUTLINE: _A_TREE_ITEM}
 
 
@@ -254,7 +253,6 @@ class ItemsAnswers:
         self._row_control_type = row_control_type
 
     def row_control_type(self) -> int:
-        """What kind of element a client should see each of these rows as."""
         return self._row_control_type()
 
     def still_there(self, key: str) -> bool:

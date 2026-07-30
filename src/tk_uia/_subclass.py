@@ -18,7 +18,7 @@ Responder = Callable[[int, int, int], int | None]
 
 @dataclass(frozen=True)
 class _WhoAnswersFor:
-    """One window's two callbacks, so neither can be registered without the other."""
+    """Who answers for one window, and who hears that it has gone."""
 
     respond: Responder
     gone: Callable[[int], None]

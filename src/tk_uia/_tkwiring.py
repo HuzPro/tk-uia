@@ -304,8 +304,6 @@ def _painted_at(
     return (widget.winfo_rootx() + x, widget.winfo_rooty() + y, width, height)
 
 
-# Which `WidgetWiring` slot each class fills, and what fills it. A class absent
-# here carries no pattern, and a provider offers it none.
 _THE_PATTERN_OF_EACH_CLASS: dict[str, tuple[str, Callable[[TkWidget], object]]] = {
     "Button": ("invoke", _APress),
     "TButton": ("invoke", _APress),
@@ -332,15 +330,15 @@ def _guarded(read, nothing=None):
 
 
 def _or_nothing(read, nothing=None):
-    """`_guarded`, for a read answered once rather than kept as a callable."""
+    """What this read answers, or `nothing` once the widget has gone."""
     try:
         return read()
     except TclError:
         return nothing
 
 
-def _ttk_state_of(widget: TkWidget):
-    """How a ttk widget answers its state; None for a classic Tk widget, which has no `instate`."""
+def _ttk_state_of(widget: TkWidget) -> Callable[[list[str]], bool] | None:
+    """How a ttk widget answers its state, which a classic Tk widget cannot."""
     return getattr(widget, "instate", None)
 
 
@@ -377,7 +375,7 @@ def _the_values_it_offers(widget: TkWidget) -> tuple[str, ...]:
 
 
 def _holds(widget: TkWidget, wanted: str) -> bool | None:
-    """Whether the widget's `-variable` holds its `wanted` option, None if it declares none."""
+    """Whether the widget's `-variable` holds whatever its `wanted` option says."""
     variable = str(widget.cget("variable"))
     if not variable:
         return None

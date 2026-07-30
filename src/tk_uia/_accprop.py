@@ -105,8 +105,6 @@ _GUID_FOR_PROP = {
     ),
 }
 
-# Every annotation this package can write, as `ClearHwndProps` wants them. Built
-# once: `clear` runs per widget destroyed, and the set never changes.
 _EVERY_PROP_GUID = (_Guid * len(_GUID_FOR_PROP))(*_GUID_FOR_PROP.values())
 
 
@@ -179,7 +177,6 @@ class AccPropServicesStore:
         return self._services
 
     def _the_call_in(self, slot: int, prototype: Callable[[], Any]) -> Any:
-        """The bound vtable entry, cast once rather than per annotation written."""
         call = self._calls.get(slot)
         if call is None:
             call = _method(self._reached(), slot, prototype())

@@ -59,8 +59,8 @@ _UIA_IsOffscreenPropertyId = 30022
 _UIA_ValueValuePropertyId = 30045
 _UIA_FullDescriptionPropertyId = 30159
 
-# The properties a change is worth raising an event for; anything absent here
-# is written to MSAA and read back on demand, never announced.
+# Anything absent is still written to MSAA and read back on demand, just never
+# announced.
 _THE_UIA_PROPERTY_FOR_EACH_PROP: Mapping[PropId, int] = {
     PropId.NAME: _UIA_NamePropertyId,
     PropId.VALUE: _UIA_ValueValuePropertyId,
@@ -102,7 +102,7 @@ _THE_SHELL_FOR_EACH_PATTERN = {
     Pattern.SELECTION_ITEM: "selection",
 }
 
-# A table because `Pattern(10099)` raises for the many ids a client probes.
+# A table because `Pattern(10099)` raises for an id no member carries.
 _THE_PATTERN_WITH_EACH_ID: Mapping[int, Pattern] = {
     pattern.value: pattern for pattern in Pattern
 }
@@ -972,8 +972,6 @@ class _ComLayer:
 
 
 def _never_raising(implementation: Callable[..., int]) -> Callable[..., int]:
-    """Wrap an HRESULT slot so a raise becomes E_FAIL instead of crossing into COM."""
-
     def answer(*args: Any) -> int:
         try:
             return implementation(*args)
