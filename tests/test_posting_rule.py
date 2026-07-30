@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from tests.doubles import FakeWidget, HeldPoster, RecordingPlatform
-from tk_uia.annotate import Ledger
-from tk_uia.provide import Pattern, Providers, WidgetWiring
+from tests.doubles import (
+    AnInvoke,
+    ASelection,
+    AToggle,
+    AValue,
+    FakeWidget,
+    HeldPoster,
+    attached,
+)
+from tk_uia.provide import Pattern
 
 _A_BUTTON_HANDLE = 0x000807D2
 _A_CHECK_HANDLE = 0x000807D3
@@ -12,73 +19,12 @@ _A_RADIO_HANDLE = 0x000807D4
 _AN_ENTRY_HANDLE = 0x000807D5
 
 
-class AnInvoke:
-    def __init__(self) -> None:
-        self.pressed = 0
-
-    def press(self) -> None:
-        self.pressed += 1
-
-    def offered(self) -> bool:
-        return True
-
-
-class AToggle:
-    def __init__(self) -> None:
-        self.on = False
-
-    def flip(self) -> None:
-        self.on = not self.on
-
-    def is_on(self) -> bool:
-        return self.on
-
-
-class ASelection:
-    def __init__(self) -> None:
-        self.selected = False
-
-    def select(self) -> None:
-        self.selected = True
-
-    def is_selected(self) -> bool:
-        return self.selected
-
-
-class AValue:
-    def __init__(self) -> None:
-        self.text = ""
-
-    def read(self) -> str:
-        return self.text
-
-    def write(self, text: str) -> None:
-        self.text = text
-
-    def is_read_only(self) -> bool:
-        return False
-
-
-def _blueprint_for(widget, poster, **wiring_fields):
-    platform = RecordingPlatform()
-    fields = {
-        "words": lambda: None,
-        "is_enabled": lambda: True,
-        "post": poster,
-        "still_there": widget.winfo_exists,
-    }
-    fields.update(wiring_fields)
-    providers = Providers(platform, lambda _: WidgetWiring(**fields), said=Ledger())
-    providers.attach(widget)
-    return platform.hosted[widget.winfo_id()]
-
-
 def test_invoke_answers_before_the_command_it_posted_has_run() -> None:
     # Given a button whose command could open anything, a modal dialog included
     poster = HeldPoster()
     invoke = AnInvoke()
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = _blueprint_for(button, poster, invoke=invoke)
+    blueprint = attached(button, post=poster, invoke=invoke)
 
     # When a client presses through the pattern
     blueprint.patterns[Pattern.INVOKE].press()
@@ -100,7 +46,7 @@ def test_toggle_answers_before_the_flip_it_posted_has_run() -> None:
     poster = HeldPoster()
     toggle = AToggle()
     check = FakeWidget("Checkbutton", _A_CHECK_HANDLE, text="Notify")
-    blueprint = _blueprint_for(check, poster, toggle=toggle)
+    blueprint = attached(check, post=poster, toggle=toggle)
 
     # When a client toggles
     blueprint.patterns[Pattern.TOGGLE].flip()
@@ -116,7 +62,7 @@ def test_selecting_a_radio_answers_before_the_selection_it_posted_has_run() -> N
     poster = HeldPoster()
     selection = ASelection()
     radio = FakeWidget("Radiobutton", _A_RADIO_HANDLE, text="High")
-    blueprint = _blueprint_for(radio, poster, selection=selection)
+    blueprint = attached(radio, post=poster, selection=selection)
 
     # When a client selects it
     blueprint.patterns[Pattern.SELECTION_ITEM].select()
@@ -132,7 +78,7 @@ def test_set_value_writes_before_it_answers_so_a_read_back_sees_the_new_text() -
     poster = HeldPoster()
     value = AValue()
     entry = FakeWidget("Entry", _AN_ENTRY_HANDLE)
-    blueprint = _blueprint_for(entry, poster, value=value)
+    blueprint = attached(entry, post=poster, value=value)
 
     # When a client writes and reads straight back
     answers = blueprint.patterns[Pattern.VALUE]
@@ -149,7 +95,7 @@ def test_a_posted_press_is_skipped_when_the_widget_has_gone_in_the_meantime() ->
     poster = HeldPoster()
     invoke = AnInvoke()
     button = FakeWidget("Button", _A_BUTTON_HANDLE, text="New Task")
-    blueprint = _blueprint_for(button, poster, invoke=invoke)
+    blueprint = attached(button, post=poster, invoke=invoke)
     blueprint.patterns[Pattern.INVOKE].press()
     button.destroy()
 

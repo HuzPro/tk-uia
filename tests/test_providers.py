@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from tests.doubles import FakeWidget, HeldPoster, RecordingPlatform
+from tests.doubles import (
+    AnInvoke,
+    FakeWidget,
+    HeldPoster,
+    RecordingPlatform,
+    a_wiring_with,
+)
 from tests.threads import the_failure_raised_on_another_thread
 from tk_uia.annotate import AnnotationRefused
 from tk_uia.provide import Pattern, Providers, WidgetWiring
@@ -14,31 +20,12 @@ _A_ROOT_HANDLE = 0x000607B0
 _A_REBUILT_HANDLE = 0x000708C1
 
 
-class AnInvoke:
-    """A raw invoke wiring, counting what pressed it."""
-
-    def __init__(self) -> None:
-        self.pressed = 0
-        self.command = "the command the application wired"
-
-    def press(self) -> None:
-        self.pressed += 1
-
-    def offered(self) -> bool:
-        return bool(self.command)
-
-
 def a_wiring_for(poster: HeldPoster, invokes: dict[str, AnInvoke] | None = None):
     """A stand-in for the tkinter wiring layer, building from the fake widget."""
 
     def wiring(widget: FakeWidget) -> WidgetWiring:
-        invoke = (invokes or {}).get(str(widget))
-        return WidgetWiring(
-            words=lambda: None,
-            is_enabled=lambda: True,
-            post=poster,
-            still_there=widget.winfo_exists,
-            invoke=invoke,
+        return a_wiring_with(
+            widget, post=poster, invoke=(invokes or {}).get(str(widget))
         )
 
     return wiring

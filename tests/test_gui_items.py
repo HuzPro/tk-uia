@@ -6,9 +6,7 @@ input, no foreground, and the machine's own mouse never moves.
 
 from __future__ import annotations
 
-import time
-
-from tests.conftest import RunningApp
+from tests.conftest import RunningApp, eventually
 from tests.fixture_apps.provided_app import (
     REFRESH_THE_RESULTS,
     RESULT_ROWS,
@@ -22,17 +20,7 @@ from tests.fixture_apps.provided_app import (
     picked_in_tree,
 )
 
-_A_FEW_TRIES = 10
-
 _AN_EMPTY_RECTANGLE = 0
-
-
-def _eventually(read, expected, why: str) -> None:
-    for _ in range(_A_FEW_TRIES):
-        if read() == expected:
-            return
-        time.sleep(0.3)
-    raise AssertionError(f"{why}: still {read()!r}, wanted {expected!r}")
 
 
 def test_a_listboxes_rows_are_elements_a_client_can_walk_and_read(
@@ -68,12 +56,12 @@ def test_a_row_is_selected_for_real_through_its_selection_item_pattern(
 
     # Then the row is selected, and the application heard the same
     # <<ListboxSelect>> a user's own choice would have fired
-    _eventually(
+    eventually(
         lambda: row.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         True,
         "Select() returned cleanly and the row never took the selection",
     )
-    _eventually(
+    eventually(
         _what_the_list_heard(provided_app.window),
         picked(RESULT_ROWS[1]),
         "the selection landed without the application hearing <<ListboxSelect>>",
@@ -95,7 +83,7 @@ def test_an_offscreen_row_says_so_and_scroll_into_view_gives_it_a_place(
     row.GetPattern(auto.PatternId.ScrollItemPattern).ScrollIntoView()
 
     # Then the listbox scrolled and the row has a rectangle
-    _eventually(
+    eventually(
         lambda: row.BoundingRectangle.width() > _AN_EMPTY_RECTANGLE,
         True,
         "ScrollIntoView returned cleanly and the row never got a place",
@@ -113,7 +101,7 @@ def test_the_rows_a_client_walks_follow_the_applications_own_edits(
 
     # When a client walks in again
     # Then it gets the rows the widget holds now, never an echo of map time
-    _eventually(
+    eventually(
         lambda: [row.Name for row in listbox.GetChildren()],
         [*RESULT_ROWS[1:], THE_ROW_A_REFRESH_BRINGS],
         "the walk kept serving rows the application no longer holds",
@@ -129,7 +117,7 @@ def test_rows_join_and_leave_a_selection_where_the_widget_takes_more_than_one(
     first = _the_row_named(provided_app, RESULT_ROWS[0])
     second = _the_row_named(provided_app, RESULT_ROWS[1])
     first.GetPattern(auto.PatternId.SelectionItemPattern).Select()
-    _eventually(
+    eventually(
         lambda: first.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         True,
         "the opening Select never landed",
@@ -139,7 +127,7 @@ def test_rows_join_and_leave_a_selection_where_the_widget_takes_more_than_one(
     second.GetPattern(auto.PatternId.SelectionItemPattern).AddToSelection()
 
     # Then both rows are selected, and the application heard both
-    _eventually(
+    eventually(
         lambda: second.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         True,
         "AddToSelection returned cleanly and the row never joined",
@@ -147,7 +135,7 @@ def test_rows_join_and_leave_a_selection_where_the_widget_takes_more_than_one(
     assert first.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected is True, (
         "adding a second row silently dropped the first, which is Select, not Add"
     )
-    _eventually(
+    eventually(
         _what_the_list_heard(provided_app.window),
         picked(RESULT_ROWS[0], RESULT_ROWS[1]),
         "the join landed without the application hearing <<ListboxSelect>>",
@@ -157,7 +145,7 @@ def test_rows_join_and_leave_a_selection_where_the_widget_takes_more_than_one(
     first.GetPattern(auto.PatternId.SelectionItemPattern).RemoveFromSelection()
 
     # Then only the second remains
-    _eventually(
+    eventually(
         lambda: first.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         False,
         "RemoveFromSelection returned cleanly and the row never left",
@@ -181,7 +169,7 @@ def test_a_tree_takes_a_second_row_into_its_selection(
     second.GetPattern(auto.PatternId.SelectionItemPattern).AddToSelection()
 
     # Then both are selected
-    _eventually(
+    eventually(
         lambda: second.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         True,
         "AddToSelection returned cleanly and the branch never joined",
@@ -234,14 +222,14 @@ def test_a_closed_branch_opens_for_real_through_its_expand_collapse_pattern(
     pattern.Expand()
 
     # Then the branch genuinely opened: it says so, and its row has a place
-    _eventually(
+    eventually(
         lambda: (
             branch.GetPattern(auto.PatternId.ExpandCollapsePattern).ExpandCollapseState
         ),
         auto.ExpandCollapseState.Expanded,
         "Expand() returned cleanly and the branch never opened",
     )
-    _eventually(
+    eventually(
         lambda: row.BoundingRectangle.width() > _AN_EMPTY_RECTANGLE,
         True,
         "the branch opened and its row still has no place on screen",
@@ -262,12 +250,12 @@ def test_a_tree_row_is_selected_for_real_and_the_application_hears_it(
 
     # Then it is selected, and the application heard the same
     # <<TreeviewSelect>> a user's own choice would have fired
-    _eventually(
+    eventually(
         lambda: row.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         True,
         "Select() returned cleanly and the row never took the selection",
     )
-    _eventually(
+    eventually(
         _what_the_tree_heard(provided_app.window),
         picked_in_tree(TREE_SECOND_BRANCH),
         "the selection landed without the application hearing <<TreeviewSelect>>",

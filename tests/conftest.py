@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -24,6 +25,10 @@ collect_ignore_glob = [] if sys.platform == "win32" else ["test_gui_*.py"]
 _READY_TIMEOUT_SECONDS = 20.0
 _HOW_OFTEN_TO_LOOK_FOR_THE_WINDOW = 0.2
 
+# An action a gui spec drives is posted, so the window settles a moment later.
+_A_FEW_TRIES = 10
+_HOW_LONG_BETWEEN_TRIES = 0.3
+
 _TOP_LEVEL_WINDOWS = 1
 
 _SHUTDOWN_GRACE_SECONDS = 10.0
@@ -35,6 +40,15 @@ _THE_TK_CONTAINER = "TkChild"
 # In a venv this is a launcher whose pid owns no window: hence the tree kill
 # at teardown, and windows found by unique title rather than by pid.
 _INTERPRETER = sys.executable
+
+
+def eventually(read, expected, why: str) -> None:
+    """Wait for the window to settle on `expected`, then say what it settled on instead."""
+    for _ in range(_A_FEW_TRIES):
+        if read() == expected:
+            return
+        time.sleep(_HOW_LONG_BETWEEN_TRIES)
+    raise AssertionError(f"{why}: still {read()!r}, wanted {expected!r}")
 
 
 @dataclass(frozen=True)

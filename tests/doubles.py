@@ -5,7 +5,8 @@ from __future__ import annotations
 import threading
 from collections.abc import Mapping, Sequence
 
-from tk_uia.annotate import PropId
+from tk_uia.annotate import Ledger, PropId
+from tk_uia.provide import Providers, WidgetWiring
 
 
 class RecordingStore:
@@ -405,3 +406,76 @@ class RecordingProvidedWidgets:
 
     def forget(self, path: str) -> None:
         self.forgotten.append(path)
+
+
+class AnInvoke:
+    """An invoke wiring, counting presses and answering for the command it has now."""
+
+    def __init__(self, command: str = "the command the application wired") -> None:
+        self.command = command
+        self.pressed = 0
+
+    def press(self) -> None:
+        self.pressed += 1
+
+    def offered(self) -> bool:
+        return bool(self.command)
+
+
+class AToggle:
+    def __init__(self) -> None:
+        self.on = False
+
+    def flip(self) -> None:
+        self.on = not self.on
+
+    def is_on(self) -> bool:
+        return self.on
+
+
+class AValue:
+    def __init__(self, text: str = "") -> None:
+        self.text = text
+
+    def read(self) -> str:
+        return self.text
+
+    def write(self, text: str) -> None:
+        self.text = text
+
+    def is_read_only(self) -> bool:
+        return False
+
+
+class ASelection:
+    def __init__(self) -> None:
+        self.selected = False
+
+    def select(self) -> None:
+        self.selected = True
+
+    def is_selected(self) -> bool:
+        return self.selected
+
+
+def a_wiring_with(widget, post=None, **fields) -> WidgetWiring:
+    """One widget's wiring: the four every class carries, plus the patterns named."""
+    return WidgetWiring(
+        words=fields.pop("words", lambda: None),
+        is_enabled=fields.pop("is_enabled", lambda: True),
+        post=post if post is not None else HeldPoster(),
+        still_there=fields.pop("still_there", widget.winfo_exists),
+        **fields,
+    )
+
+
+def attached(widget, platform=None, said=None, post=None, **fields):
+    """Attach one widget through a Providers, and hand back the blueprint hosted for it."""
+    platform = platform if platform is not None else RecordingPlatform()
+    providers = Providers(
+        platform,
+        lambda _each: a_wiring_with(widget, post=post, **fields),
+        said=said if said is not None else Ledger(),
+    )
+    providers.attach(widget)
+    return platform.hosted[widget.winfo_id()]

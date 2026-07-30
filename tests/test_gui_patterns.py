@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from tests.conftest import RunningApp
+from tests.conftest import RunningApp, eventually
 from tests.fixture_apps.provided_app import (
     A_COLOUR_NOBODY_OFFERED,
     ADVANCED_TAB,
@@ -38,18 +38,9 @@ from tests.fixture_apps.provided_app import (
 
 _LONG_ENOUGH_FOR_A_POSTED_PRESS_SECONDS = 1.0
 _LONG_ENOUGH_FOR_A_REACTION_THAT_WILL_NOT_COME_SECONDS = 2.0
-_A_FEW_TRIES = 10
 
 _ONCE = 1
 _NEVER = 0
-
-
-def _eventually(read, expected, why: str) -> None:
-    for _ in range(_A_FEW_TRIES):
-        if read() == expected:
-            return
-        time.sleep(0.3)
-    raise AssertionError(f"{why}: still {read()!r}, wanted {expected!r}")
 
 
 def _the_tally(window, kind: str):
@@ -76,7 +67,7 @@ def test_a_button_is_pressed_for_real_through_its_invoke_pattern(
     button.GetPattern(auto.PatternId.InvokePattern).Invoke()
 
     # Then the command genuinely ran
-    _eventually(
+    eventually(
         tally,
         presses(PRESSES, _ONCE),
         "InvokePattern.Invoke() returned cleanly and pressed nothing",
@@ -130,7 +121,7 @@ def test_a_ttk_button_is_typed_named_and_pressable(provided_app: RunningApp) -> 
     button.GetPattern(auto.PatternId.InvokePattern).Invoke()
 
     # Then it pressed
-    _eventually(
+    eventually(
         tally,
         presses(TTK_PRESSES, _ONCE),
         "a ttk button advertised Invoke and pressed nothing",
@@ -189,7 +180,7 @@ def test_a_checkbutton_toggles_its_variable_through_the_toggle_pattern(
     checkbox.GetPattern(auto.PatternId.TogglePattern).Toggle()
 
     # Then the state genuinely flipped
-    _eventually(
+    eventually(
         lambda: checkbox.GetPattern(auto.PatternId.TogglePattern).ToggleState,
         1,
         "Toggle() returned cleanly and the variable never moved",
@@ -209,7 +200,7 @@ def test_a_radiobutton_selects_through_selection_item_and_reports_selected(
     radio.GetPattern(auto.PatternId.SelectionItemPattern).Select()
 
     # Then it is selected, and says so
-    _eventually(
+    eventually(
         lambda: radio.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         True,
         "Select() returned cleanly and the radio never took the selection",
@@ -232,7 +223,7 @@ def test_a_scale_moves_through_range_value_and_reads_back_where_it_went(
     pattern.SetValue(7)
 
     # Then it moved
-    _eventually(
+    eventually(
         lambda: slider.GetPattern(auto.PatternId.RangeValuePattern).Value,
         7.0,
         "RangeValue.SetValue returned cleanly and the scale never moved",
@@ -297,7 +288,7 @@ def test_a_readonly_combobox_takes_a_value_a_user_could_have_chosen(
 
     # Then the choice lands, and the app hears the same event a dropdown
     # choice would have fired
-    _eventually(
+    eventually(
         lambda: combobox.GetPattern(auto.PatternId.ValuePattern).Value,
         GREEN,
         "SetValue on a readonly combobox never landed",
@@ -305,7 +296,7 @@ def test_a_readonly_combobox_takes_a_value_a_user_could_have_chosen(
     heard = auto.TextControl(
         searchFromControl=provided_app.window, SubName="the app heard"
     )
-    _eventually(
+    eventually(
         lambda: heard.Name,
         chose(GREEN),
         "the app never heard <<ComboboxSelected>> for a choice made through UIA",
@@ -352,7 +343,7 @@ def test_a_notebook_tab_is_selected_through_its_provider_without_a_click(
     tab.GetPattern(auto.PatternId.SelectionItemPattern).Select()
 
     # Then the notebook switched pages, with no click anywhere
-    _eventually(
+    eventually(
         lambda: tab.GetPattern(auto.PatternId.SelectionItemPattern).IsSelected,
         True,
         "Select() returned cleanly and the notebook never switched",
