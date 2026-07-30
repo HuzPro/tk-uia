@@ -192,22 +192,28 @@ def _with_what_the_provider_answers(
 ) -> WidgetDescription:
     """Fold what the provider layer says about a path into its row."""
     patterns = tuple(answers.patterns_on(widget.path))
-    gaps = widget.gaps
-    if Pattern.INVOKE in patterns:
-        # The widget genuinely presses now; the proxy's dead Invoke is history.
-        gaps = tuple(gap for gap in gaps if gap is not Gap.CANNOT_BE_PRESSED)
-    if Pattern.VALUE in patterns:
-        # The value is pulled live, so the confident-empty answer is gone too.
-        gaps = tuple(gap for gap in gaps if gap is not Gap.NO_VALUE)
     rows = answers.answers_rows_on(widget.path)
-    if rows:
-        # The provider answers real rows now, so the widget is not hollow.
-        gaps = tuple(gap for gap in gaps if gap is not Gap.ITEMS_NOT_IN_THE_TREE)
+    cured = _whatever_answering_for_itself_cures(patterns, rows)
+    gaps = tuple(gap for gap in widget.gaps if gap not in cured)
     if answers.is_left_to_the_proxy(widget.path):
         gaps = (*gaps, Gap.LEFT_TO_THE_PROXY)
     if patterns == widget.patterns and gaps == widget.gaps and not rows:
         return widget
     return replace(widget, patterns=patterns, gaps=gaps, answers_rows=rows)
+
+
+def _whatever_answering_for_itself_cures(
+    patterns: tuple[Pattern, ...], answers_rows: bool
+) -> frozenset[Gap]:
+    """The gaps a real provider closes: a live pattern outranks the proxy's dead one."""
+    cured = {
+        _THE_GAP_EACH_PATTERN_CURES[pattern]
+        for pattern in patterns
+        if pattern in _THE_GAP_EACH_PATTERN_CURES
+    }
+    if answers_rows:
+        cured.add(Gap.ITEMS_NOT_IN_THE_TREE)
+    return frozenset(cured)
 
 
 def _and_whichever_of_them_a_client_cannot_tell_apart(
@@ -698,6 +704,13 @@ _ROLES_A_CLIENT_WILL_ASK_THE_VALUE_OF = frozenset(
 # Rows and items have no window handle of their own; they would need MSAA's
 # child-id model, which annotation on handles cannot reach.
 _ROLES_WHOSE_CONTENTS_ARE_A_WIDGET_OF_THEIR_OWN = frozenset({Role.LIST, Role.OUTLINE})
+
+# Each gap asserted from the role table alone, and the working pattern that
+# takes it back. `_what_is_missing_from` reads the role; this reads the provider.
+_THE_GAP_EACH_PATTERN_CURES: Mapping[Pattern, Gap] = {
+    Pattern.INVOKE: Gap.CANNOT_BE_PRESSED,
+    Pattern.VALUE: Gap.NO_VALUE,
+}
 
 
 def _why_nothing_was_written(

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Protocol
 
+from tk_uia.patterns import Pattern
 from tk_uia.roles import ROLE_FOR_TK_CLASS, THE_ROLE_EACH_NUMBER_MEANS, Role
 from tk_uia.tkversion import Strategy, TkInterpreter, strategy_for
 
@@ -207,7 +208,7 @@ class SaysNothing:
 class AnswersForItself(Protocol):
     """What the provider layer records per path, as the report reads it."""
 
-    def patterns_on(self, path: str) -> tuple[object, ...]: ...
+    def patterns_on(self, path: str) -> tuple[Pattern, ...]: ...
 
     def answers_rows_on(self, path: str) -> bool: ...
 
@@ -215,7 +216,7 @@ class AnswersForItself(Protocol):
 
 
 class _NothingAnswersForItself:
-    def patterns_on(self, path: str) -> tuple[object, ...]:
+    def patterns_on(self, path: str) -> tuple[Pattern, ...]:
         return ()
 
     def answers_rows_on(self, path: str) -> bool:
@@ -849,8 +850,9 @@ def install(
     notebooks = tabs if tabs is not None else NoTabs()
     provided = providers if providers is not None else NoProviders()
     annotator = Annotator(store, roles, owner, variables, notifier)
-    _follow_every_widget_tk_maps_or_destroys(root, annotator, notebooks, provided)
-    _annotate_everything_already_on_screen(root, annotator, notebooks, provided)
+    announced_to = _EverythingAWidgetIsAnnouncedTo(annotator, notebooks, provided)
+    _follow_every_widget_tk_maps_or_destroys(root, announced_to)
+    _annotate_everything_already_on_screen(root, announced_to)
     reported = Strategy.PROVIDED if providers is not None else Strategy.ANNOTATED
     return Installation(
         reported,
@@ -863,46 +865,71 @@ def install(
     )
 
 
+class _EverythingAWidgetIsAnnouncedTo:
+    """The three layers a widget's arrival and departure reach, driven as one."""
+
+    def __init__(
+        self,
+        annotator: Annotator,
+        notebooks: TabbedWidgets,
+        provided: ProvidedWidgets,
+    ) -> None:
+        self._annotator = annotator
+        self._notebooks = notebooks
+        self._provided = provided
+
+    def arrived(self, widget: TkWidget | str) -> None:
+        if isinstance(widget, str):
+            # Tk passes the path rather than the object when it can no longer
+            # resolve one.
+            return
+        self._annotator.add(widget)
+        self._notebooks.refresh(widget)
+        self._provided.attach(widget)
+
+    def left(self, widget: TkWidget | str) -> None:
+        self._annotator.forget(widget)
+        # By path, not by widget: `<Destroy>` is the one event that routinely
+        # carries a path whose widget object has already gone.
+        self._notebooks.forget(str(widget))
+        self._provided.forget(str(widget))
+
+    def tabs_changed(self, widget: TkWidget | str) -> None:
+        if isinstance(widget, str):
+            return
+        self._notebooks.refresh(widget)
+
+
 def _follow_every_widget_tk_maps_or_destroys(
-    root: TkApplication,
-    annotator: Annotator,
-    notebooks: TabbedWidgets,
-    provided: ProvidedWidgets,
+    root: TkApplication, announced_to: _EverythingAWidgetIsAnnouncedTo
 ) -> None:
     root.bind_all(
         _A_WIDGET_APPEARED,
-        lambda event: _annotate_if_there_is_still_a_widget(
-            annotator, notebooks, provided, event.widget
-        ),
+        lambda event: announced_to.arrived(event.widget),
         add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
     )
     root.bind_all(
         _A_WIDGET_DIED,
-        lambda event: _let_go_of(annotator, notebooks, provided, event.widget),
+        lambda event: announced_to.left(event.widget),
         add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
     )
     # A notebook's tabs are not widgets and never map, so `<Map>` says nothing
     # about one being added, removed or renamed.
     root.bind_all(
         _THE_TABS_CHANGED,
-        lambda event: _refresh_if_there_is_still_a_widget(notebooks, event.widget),
+        lambda event: announced_to.tabs_changed(event.widget),
         add=_ALONGSIDE_WHAT_IS_ALREADY_BOUND,
     )
 
 
 def _annotate_everything_already_on_screen(
-    root: TkApplication,
-    annotator: Annotator,
-    notebooks: TabbedWidgets,
-    provided: ProvidedWidgets,
+    root: TkApplication, announced_to: _EverythingAWidgetIsAnnouncedTo
 ) -> None:
     # `<Map>` fires once, on the way up: every widget already showing has had
     # its and will not get another.
     for widget in every_widget_under(root):
         if widget.winfo_ismapped():
-            annotator.add(widget)
-            notebooks.refresh(widget)
-            provided.attach(widget)
+            announced_to.arrived(widget)
 
 
 def every_widget_under(widget: TkWidget) -> Iterator[TkWidget]:
@@ -919,42 +946,6 @@ def _every_widget_under(widget: TkWidget, seen: set[str]) -> Iterator[TkWidget]:
         seen.add(path)
         yield child
         yield from _every_widget_under(child, seen)
-
-
-def _annotate_if_there_is_still_a_widget(
-    annotator: Annotator,
-    notebooks: TabbedWidgets,
-    provided: ProvidedWidgets,
-    widget: TkWidget | str,
-) -> None:
-    if isinstance(widget, str):
-        # Tk passes the path rather than the object when it can no longer
-        # resolve one.
-        return
-    annotator.add(widget)
-    notebooks.refresh(widget)
-    provided.attach(widget)
-
-
-def _refresh_if_there_is_still_a_widget(
-    notebooks: TabbedWidgets, widget: TkWidget | str
-) -> None:
-    if isinstance(widget, str):
-        return
-    notebooks.refresh(widget)
-
-
-def _let_go_of(
-    annotator: Annotator,
-    notebooks: TabbedWidgets,
-    provided: ProvidedWidgets,
-    widget: TkWidget | str,
-) -> None:
-    annotator.forget(widget)
-    # By path, not by widget: `<Destroy>` is the one event that routinely
-    # carries a path whose widget object has already gone.
-    notebooks.forget(str(widget))
-    provided.forget(str(widget))
 
 
 def _whatever_the_variable_holds(variable: TkVariable) -> str:

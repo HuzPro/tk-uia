@@ -23,21 +23,12 @@ from tk_uia.annotate import (
     a_widget_this_package_speaks_for,
     roles_in_force,
 )
+from tk_uia.patterns import Pattern
 from tk_uia.roles import THE_ROLE_EACH_NUMBER_MEANS, Role
 
 
 class ProviderRefused(AnnotationRefused):
     """The provider layer would not do what it was asked, and says why."""
-
-
-class Pattern(Enum):
-    """The UIA patterns a provider can honestly offer, by their pattern ids."""
-
-    INVOKE = 10000
-    VALUE = 10002
-    RANGE_VALUE = 10003
-    SELECTION_ITEM = 10010
-    TOGGLE = 10015
 
 
 # Transcribed from UIAutomationClient.h; total over Role so a chosen role
@@ -459,11 +450,20 @@ def a_press_that_returns_before_it_runs(
     return press
 
 
+@dataclass(frozen=True)
+class _WhatAPathAnswersWith:
+    """The handle answering for one path, and what it answers with."""
+
+    hwnd: int
+    patterns: tuple[Pattern, ...]
+    answers_rows: bool
+
+
 class ProviderLedger:
     """Which paths answer for themselves with what, and which asked not to."""
 
     def __init__(self) -> None:
-        self._hosting: dict[str, tuple[int, tuple[Pattern, ...], bool]] = {}
+        self._hosting: dict[str, _WhatAPathAnswersWith] = {}
         self._with_the_proxy: set[str] = set()
 
     def hosted(
@@ -474,22 +474,22 @@ class ProviderLedger:
         *,
         rows: bool = False,
     ) -> None:
-        self._hosting[path] = (hwnd, patterns, rows)
+        self._hosting[path] = _WhatAPathAnswersWith(hwnd, patterns, rows)
 
     def gone_from(self, path: str) -> None:
         self._hosting.pop(path, None)
 
     def hwnd_of(self, path: str) -> int | None:
         standing = self._hosting.get(path)
-        return standing[0] if standing is not None else None
+        return standing.hwnd if standing is not None else None
 
     def patterns_on(self, path: str) -> tuple[Pattern, ...]:
         standing = self._hosting.get(path)
-        return standing[1] if standing is not None else ()
+        return standing.patterns if standing is not None else ()
 
     def answers_rows_on(self, path: str) -> bool:
         standing = self._hosting.get(path)
-        return standing[2] if standing is not None else False
+        return standing.answers_rows if standing is not None else False
 
     def left_to_the_proxy(self, path: str) -> None:
         self._with_the_proxy.add(path)

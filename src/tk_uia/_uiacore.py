@@ -24,7 +24,7 @@ from tk_uia.provide import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from tk_uia.provide import Blueprint
+    from tk_uia.provide import Blueprint, ItemsAnswers
 
 UiaRootObjectId = -25
 _UiaAppendRuntimeId = 3
@@ -181,6 +181,10 @@ class _HostedRow:
         # memory until the container goes.
         self.refcount = 1
         self.shells: dict[str, _Shell] = {}
+
+    @property
+    def items(self) -> ItemsAnswers | None:
+        return self.container.blueprint.items
 
 
 _BY_ADDRESS: dict[int, _Hosted] = {}
@@ -793,7 +797,7 @@ class _ComLayer:
         offered = _THE_SHELL_A_ROW_OFFERS_FOR_EACH_PATTERN_ID.get(pattern_id)
         if pattern_id == _UIA_ExpandCollapsePatternId:
             # Only a row with branches beneath it promises to open.
-            items = row.container.blueprint.items
+            items = row.items
             if items is not None and items.first_child(row.key) is not None:
                 offered = "expand"
         if offered is not None:
@@ -804,7 +808,7 @@ class _ComLayer:
     def _row_property_value(self, this: int, property_id: int, out: int) -> int:
         row = _row_for(this)
         variant = ctypes.cast(out, ctypes.POINTER(_Variant))[0]
-        items = row.container.blueprint.items
+        items = row.items
         if items is None:
             return _S_OK
         if property_id == _UIA_NamePropertyId:
@@ -828,7 +832,7 @@ class _ComLayer:
     def _row_navigate(self, this: int, direction: int, out: int) -> int:
         row = _row_for(this)
         _write_pointer(out, None)
-        items = row.container.blueprint.items
+        items = row.items
         if items is None or not items.still_there(row.key):
             return _S_OK
         if direction == _NavigateDirection_Parent:
@@ -855,7 +859,7 @@ class _ComLayer:
 
     def _row_bounding_rectangle(self, this: int, out: int) -> int:
         row = _row_for(this)
-        items = row.container.blueprint.items
+        items = row.items
         painted = items.rectangle(row.key) if items is not None else None
         left, top, width, height = painted if painted is not None else (0, 0, 0, 0)
         ctypes.cast(out, ctypes.POINTER(_UiaRect))[0] = _UiaRect(
@@ -871,7 +875,7 @@ class _ComLayer:
 
     def _row_select(self, this: int) -> int:
         row = _row_for(this)
-        items = row.container.blueprint.items
+        items = row.items
         if items is None or not items.still_there(row.key):
             return _UIA_E_INVALIDOPERATION
         items.select(row.key)
@@ -889,7 +893,7 @@ class _ComLayer:
 
     def _selection_move(self, this: int, move: Any) -> int:
         row = _row_for(this)
-        items = row.container.blueprint.items
+        items = row.items
         if (
             items is None
             or not items.still_there(row.key)
@@ -903,7 +907,7 @@ class _ComLayer:
 
     def _row_is_selected(self, this: int, out: int) -> int:
         row = _row_for(this)
-        items = row.container.blueprint.items
+        items = row.items
         selected = items.is_selected(row.key) if items is not None else False
         _write_int(out, 1 if selected else 0)
         return _S_OK
@@ -916,7 +920,7 @@ class _ComLayer:
 
     def _row_scroll_into_view(self, this: int) -> int:
         row = _row_for(this)
-        items = row.container.blueprint.items
+        items = row.items
         if items is None or not items.still_there(row.key):
             return _UIA_E_INVALIDOPERATION
         items.show(row.key)
@@ -930,7 +934,7 @@ class _ComLayer:
 
     def _branch_turned(self, this: int, turn: Any) -> int:
         row = _row_for(this)
-        items = row.container.blueprint.items
+        items = row.items
         if (
             items is None
             or not items.still_there(row.key)
@@ -942,7 +946,7 @@ class _ComLayer:
 
     def _row_expand_state(self, this: int, out: int) -> int:
         row = _row_for(this)
-        items = row.container.blueprint.items
+        items = row.items
         if items is None or items.first_child(row.key) is None:
             state = _ExpandCollapseState_LeafNode
         elif items.is_open(row.key):
